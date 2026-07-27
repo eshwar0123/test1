@@ -154,10 +154,65 @@
     const niftiContainerRef = useRef(null);
 
   // AFTER
+  // A WebView (e.g. the mobile app) loads this route as a fresh browser tab — there is no
+  // in-app react-router navigation history to carry `location.state`, so fall back to the
+  // same 15-field contract passed as URL query params. seriesFiles is JSON-encoded since
+  // it's the one non-primitive field. See repository_1.js's openViewer() for the state
+  // shape this mirrors.
+  const hasRouterState = location.state && Object.keys(location.state).length > 0;
+  const queryState = React.useMemo(() => {
+    if (hasRouterState) return null;
+    const qp = new URLSearchParams(location.search);
+    if (!qp.has("caseId")) return null;
+    let seriesFiles = null;
+    const seriesFilesRaw = qp.get("seriesFiles");
+    if (seriesFilesRaw) {
+      try {
+        seriesFiles = JSON.parse(seriesFilesRaw);
+      } catch {
+        seriesFiles = null;
+      }
+    }
+    return {
+      fileUrl: qp.get("fileUrl") || undefined,
+      filename: qp.get("filename") || undefined,
+      seriesFiles,
+      patientName: qp.get("patientName") || undefined,
+      patientAge: qp.get("patientAge") || undefined,
+      patientSex: qp.get("patientSex") || undefined,
+      caseId: qp.get("caseId") || undefined,
+      clientId: qp.get("clientId") || undefined,
+      priority: qp.get("priority") || undefined,
+      status: qp.get("status") || undefined,
+      study: qp.get("study") || undefined,
+      modality: qp.get("modality") || undefined,
+      referredBy: qp.get("referredBy") || undefined,
+      location: qp.get("caseLocation") || undefined,
+      waitMins: qp.get("waitMins") || undefined,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search, hasRouterState]);
+
+  // Seed localStorage's "auth" blob from a `token`/`userId` query param before anything
+  // below reads it — every report/annotation/chat/MedSAM call in this file authenticates
+  // off localStorage("auth"), which a fresh WebView tab otherwise has no way to populate.
+  if (!hasRouterState && typeof window !== "undefined") {
+    const qp = new URLSearchParams(location.search);
+    const qpToken = qp.get("token");
+    const qpUserId = qp.get("userId");
+    if (qpToken && qpUserId && !window.localStorage.getItem("auth")) {
+      window.localStorage.setItem(
+        "auth",
+        JSON.stringify({ isLoggedIn: true, token: qpToken, userId: qpUserId })
+      );
+      window.localStorage.setItem("user_id", qpUserId);
+    }
+  }
+
   const {
     fileUrl, filename, seriesFiles, patientName, patientAge, patientSex, caseId, clientId,
     priority, status, study, modality: caseModality, referredBy, location: caseLocation, waitMins,
-  } = location.state || {};
+  } = hasRouterState ? location.state : (queryState || {});
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);

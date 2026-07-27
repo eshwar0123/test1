@@ -1,5 +1,6 @@
 # radiology/router.py
 import os
+from collections import OrderedDict
 import re
 import json
 import base64
@@ -524,6 +525,143 @@ async def upload_scan(
         resp["mode"] = "local-cache"
         resp["warning"] = "Database unavailable. Scan saved in local cache."
     return resp
+
+
+# In-memory cache of (decoded pixel array, DICOM header metadata) tuples, keyed by
+# s3_key — the S3 fetch+decode is the dominant cost (~3.3s for an 18MB uncompressed DICOM
+# vs ~20ms to decode and <1s to encode), so caching means re-opening an image, toggling
+# Invert/Sharpen/W-L, or fetching its metadata only re-does cheap work. Nothing written to
+# disk or the database — this dies with the process, which is fine, it's just a speed-up.
+_scan_preview_cache: "OrderedDict[str, Any]" = OrderedDict()
+_SCAN_PREVIEW_CACHE_MAX = 20
+
+
+def _extract_dicom_meta(ds) -> dict:
+    """Header tags for the viewer's burn-in overlay. Patient ID/name/age/sex/body-part
+    already come from rad_scans via /scans — this is only the fields that exist solely
+    inside the DICOM file itself."""
+
+    def g(tag):
+        try:
+            v = getattr(ds, tag, None)
+            return str(v) if v is not None else None
+        except Exception:
+            return None
+
+    return {
+        "modality": g("Modality"),
+        "series_number": g("SeriesNumber"),
+        "study_description": g("StudyDescription"),
+        "body_part": g("BodyPartExamined"),
+        "view_position": g("ViewPosition"),
+        "study_date": g("StudyDate"),
+        "study_time": g("StudyTime"),
+        "institution_name": g("InstitutionName"),
+        "institution_address": g("InstitutionAddress"),
+        "kvp": g("KVP"),
+        "tube_current": g("XRayTubeCurrent"),
+        "exposure_time": g("ExposureTime"),
+        "exposure_index": g("ExposureIndex"),
+        "number_of_frames": g("NumberOfFrames"),
+    }
+
+
+def _get_cached_scan(s3_key: str):
+    """Returns (arr, meta) for s3_key, fetching+decoding from S3 (and populating the
+    cache) if not already cached. Shared by scan_preview and scan_metadata so both stay in
+    sync and only pay the S3/decode cost once per file."""
+    import io
+    import tempfile
+    from s3_storage import s3, S3_BUCKET
+
+    cached = _scan_preview_cache.get(s3_key)
+    if cached is not None:
+        _scan_preview_cache.move_to_end(s3_key)
+        return cached
+
+    try:
+        obj = s3.get_object(Bucket=S3_BUCKET, Key=s3_key)
+        raw_bytes = obj["Body"].read()
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Could not fetch S3 object: {e}")
+
+    lower_key = s3_key.lower()
+    meta: dict = {}
+    try:
+        if lower_key.endswith(".nii") or lower_key.endswith(".nii.gz"):
+            suffix = ".nii.gz" if lower_key.endswith(".nii.gz") else ".nii"
+            with tempfile.NamedTemporaryFile(suffix=suffix) as tmp:
+                tmp.write(raw_bytes)
+                tmp.flush()
+                nii_img = nib.load(tmp.name)
+                data = nii_img.get_fdata()
+            if data.ndim >= 3:
+                mid = data.shape[2] // 2
+                arr = data[:, :, mid]
+            else:
+                arr = data
+        else:
+            ds = pydicom.dcmread(io.BytesIO(raw_bytes))
+            arr = ds.pixel_array
+            meta = _extract_dicom_meta(ds)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Could not decode pixel data: {e}")
+
+    arr = np.asarray(arr).astype(np.float32)
+    _scan_preview_cache[s3_key] = (arr, meta)
+    _scan_preview_cache.move_to_end(s3_key)
+    if len(_scan_preview_cache) > _SCAN_PREVIEW_CACHE_MAX:
+        _scan_preview_cache.popitem(last=False)
+    return arr, meta
+
+
+@router.get("/scan-metadata")
+def scan_metadata(s3_key: str):
+    """Real DICOM header tags (series/study/institution/exposure) for the mobile viewer's
+    burn-in overlay — stateless, same cache as scan_preview, nothing persisted."""
+    _arr, meta = _get_cached_scan(s3_key)
+    return {"success": True, "data": meta}
+
+
+@router.get("/scan-preview")
+def scan_preview(s3_key: str, invert: bool = False, sharpen: bool = False, wl: str = "default"):
+    """Fetch an S3-stored DICOM/NIfTI file (or reuse the cached decode), normalize its
+    pixel data, and return a PNG directly. wl="bone" applies a narrower, upper-percentile
+    window to emphasize high-density structures; invert/sharpen are applied
+    client-request-driven, not baked into the cache."""
+    import io
+
+    arr, _meta = _get_cached_scan(s3_key)
+
+    if wl == "bone":
+        # np.percentile over the full multi-million-pixel array is the slow part of a
+        # preset switch — a deterministic strided sample (every 37th pixel, prime stride
+        # to avoid any row/column periodicity artifacts) gives a statistically equivalent
+        # result in a fraction of the time.
+        sample = arr.flat[::37]
+        lo, hi = float(np.percentile(sample, 50)), float(np.percentile(sample, 99.5))
+    else:
+        lo, hi = float(np.min(arr)), float(np.max(arr))
+    norm = (
+        np.zeros_like(arr, dtype=np.uint8)
+        if hi - lo == 0
+        else np.clip((arr - lo) / (hi - lo) * 255, 0, 255).astype(np.uint8)
+    )
+    if invert:
+        norm = 255 - norm
+
+    png_img = Image.fromarray(norm)
+    # Mobile only ever displays this in a ~320px box — encoding/transferring full native
+    # resolution (often 3000px+) wastes time on both ends. Downscale before encoding;
+    # thumbnail() only shrinks, never upscales, and preserves aspect ratio.
+    png_img.thumbnail((1000, 1000), Image.LANCZOS)
+    if sharpen:
+        from PIL import ImageFilter
+
+        png_img = png_img.filter(ImageFilter.SHARPEN)
+    buf = io.BytesIO()
+    png_img.save(buf, format="PNG")
+    return Response(content=buf.getvalue(), media_type="image/png")
 
 
 @router.get("/scans")
