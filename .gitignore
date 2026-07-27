@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+
+# Environment
+.env
+
+# Keys
+*.pem
+
+# Backup files
+*.bak
+*.bak*
+
+# NIfTI
+*.nii
+
+# Cache
+backend/radiologist/uploads/series_cache/
+
+# Uploaded files
+backend/uploads/
+backend/radiologist/uploads/profile/
+backend/radiologist/uploads/signature/
+
+# Website build
+website/
+
+# Test folder
+test/
