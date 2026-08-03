@@ -377,7 +377,6 @@
 
     const lastAnatomyMsRef = useRef(0); // debounce pointer-mode clicks
     const pointerDownPosRef = useRef({ x: 0, y: 0 }); // drag-distance tracking
-    const [dicomZoomMode, setDicomZoomMode] = useState(false);
     const [dicomTool, setDicomTool] = useState("none");
     const [dicomSliceBySlot, setDicomSliceBySlot] = useState({
       0: { current: 1, total: 1 },
@@ -915,35 +914,100 @@
 
     const getActiveDicomAnnotation = () => getSlotAnnotation(activeDicomSlot);
 
+    // History stack for the DICOM toolbar's Undo button — covers window/level
+    // presets, flip H/V, and rotate, which are otherwise applied straight to
+    // cornerstone viewport state with nothing to revert to.
+    const dicomHistoryRef = useRef([]);
+    const [dicomCanUndo, setDicomCanUndo] = useState(false);
+
+    const pushDicomHistory = (entry) => {
+      dicomHistoryRef.current.push(entry);
+      if (dicomHistoryRef.current.length > 50) dicomHistoryRef.current.shift();
+      setDicomCanUndo(true);
+    };
+
     const applyDicomWindowPreset = (preset) => {
       const lower = preset.center - preset.width / 2;
       const upper = preset.center + preset.width / 2;
+      const prevVoiRanges = {};
       getVisibleDicomSlots().forEach((slot) => {
         const vp = renderingEngineRef.current?.getViewport?.(getDicomViewportIdForSlot(slot));
-        if (vp) { vp.setProperties({ voiRange: { lower, upper } }); vp.render(); }
+        if (vp) {
+          prevVoiRanges[slot] = vp.getProperties?.()?.voiRange || null;
+          vp.setProperties({ voiRange: { lower, upper } });
+          vp.render();
+        }
       });
+      pushDicomHistory({ type: "voi", voiRanges: prevVoiRanges });
     };
 
     const flipDicomH = () => {
+      const prevValue = dicomFlipH;
       setDicomFlipH((prev) => {
         const next = !prev;
         getVisibleDicomSlots().forEach((slot) => {
           const vp = renderingEngineRef.current?.getViewport?.(getDicomViewportIdForSlot(slot));
-          if (vp) { const cam = vp.getCamera(); vp.setCamera({ ...cam, flipHorizontal: next }); vp.render(); }
+          if (vp) { vp.setCamera({ flipHorizontal: next }); vp.render(); }
         });
         return next;
       });
+      pushDicomHistory({ type: "flipH", value: prevValue });
     };
 
     const flipDicomV = () => {
+      const prevValue = dicomFlipV;
       setDicomFlipV((prev) => {
         const next = !prev;
         getVisibleDicomSlots().forEach((slot) => {
           const vp = renderingEngineRef.current?.getViewport?.(getDicomViewportIdForSlot(slot));
-          if (vp) { const cam = vp.getCamera(); vp.setCamera({ ...cam, flipVertical: next }); vp.render(); }
+          if (vp) { vp.setCamera({ flipVertical: next }); vp.render(); }
         });
         return next;
       });
+      pushDicomHistory({ type: "flipV", value: prevValue });
+    };
+
+    const rotateDicomWithHistory = (deltaDeg) => {
+      const vp = getActiveDicomViewport();
+      const prevRotation = vp?.getViewPresentation?.()?.rotation ?? null;
+      rotateCornerstoneDicom(deltaDeg);
+      pushDicomHistory({ type: "rotate", slot: activeDicomSlot, value: prevRotation });
+    };
+
+    const undoDicomAction = () => {
+      const entry = dicomHistoryRef.current.pop();
+      if (dicomHistoryRef.current.length === 0) setDicomCanUndo(false);
+      if (!entry) return;
+      if (entry.type === "voi") {
+        Object.entries(entry.voiRanges).forEach(([slot, voiRange]) => {
+          if (!voiRange) return;
+          const vp = renderingEngineRef.current?.getViewport?.(getDicomViewportIdForSlot(Number(slot)));
+          if (vp) { vp.setProperties({ voiRange }); vp.render(); }
+        });
+      } else if (entry.type === "flipH") {
+        setDicomFlipH(entry.value);
+        getVisibleDicomSlots().forEach((slot) => {
+          const vp = renderingEngineRef.current?.getViewport?.(getDicomViewportIdForSlot(slot));
+          if (vp) { vp.setCamera({ flipHorizontal: entry.value }); vp.render(); }
+        });
+      } else if (entry.type === "flipV") {
+        setDicomFlipV(entry.value);
+        getVisibleDicomSlots().forEach((slot) => {
+          const vp = renderingEngineRef.current?.getViewport?.(getDicomViewportIdForSlot(slot));
+          if (vp) { vp.setCamera({ flipVertical: entry.value }); vp.render(); }
+        });
+      } else if (entry.type === "rotate") {
+        const vp = renderingEngineRef.current?.getViewport?.(getDicomViewportIdForSlot(entry.slot));
+        if (vp?.getViewPresentation && vp?.setViewPresentation && entry.value != null) {
+          const present = vp.getViewPresentation() || {};
+          vp.setViewPresentation({ ...present, rotation: entry.value });
+          vp.render();
+        }
+      } else if (entry.type === "measurement") {
+        csAnnotation.state.removeAnnotation(entry.uid);
+        const vp = renderingEngineRef.current?.getViewport?.(getDicomViewportIdForSlot(entry.slot));
+        vp?.render?.();
+      }
     };
 
     const applyNiftiWindowPreset = (preset) => {
@@ -1979,6 +2043,7 @@
 
     useCornerstonePromptBlock({
       isCornerstoneNifti,
+      isCornerstoneDicom,
       promptBackupRef,
     });
 
@@ -2123,7 +2188,6 @@
       activeDicomSlot,
       refreshDicomSliceIndicators,
       setActiveDicomSlot,
-      dicomZoomMode,
       dicomTool,
       clamp,
       getActiveDicomViewport,
@@ -2920,6 +2984,9 @@
           )
         ) {
           transientMeasureUidRef.current.add(uid);
+          if (dicomMeasureModeActive && measurementToolNames.has(toolName)) {
+            pushDicomHistory({ type: "measurement", uid, slot: activeDicomSlot });
+          }
           return;
         }
         const fallbackType =
@@ -3405,8 +3472,11 @@
                   height: "100%",
                   /* Reserve room on the left for the absolute-positioned series
                     strip (134px wide + 10px inset). When strip is hidden, only
-                    reserve 28px for the reopen tab. */
-                  paddingLeft: showSeriesStrip ? 144 : 28,
+                    reserve 28px for the reopen tab. Zeroed out when the report
+                    panel is full-screen (grid track is 0px) — otherwise this
+                    reservation pokes through the card's black background as a
+                    stray vertical bar down the left edge. */
+                  paddingLeft: (showReport && reportViewerCollapsed) ? 0 : (showSeriesStrip ? 144 : 28),
                   boxSizing: "border-box",
                   /* Clip the toolbar/viewports when the column is collapsed to
                     zero width via the report panel's edge arrow. */
@@ -3436,12 +3506,10 @@
                     activeDicomSlot={activeDicomSlot}
                     dicomSlotPlanes={dicomSlotPlanes}
                     setDicomSlotPlanes={setDicomSlotPlanes}
-                    dicomZoomMode={dicomZoomMode}
-                    setDicomZoomMode={setDicomZoomMode}
                     dicomTool={dicomTool}
                     activateCornerstoneDicomTool={activateCornerstoneDicomTool}
                     scrollCornerstoneDicom={scrollCornerstoneDicom}
-                    rotateCornerstoneDicom={rotateCornerstoneDicom}
+                    rotateCornerstoneDicom={rotateDicomWithHistory}
                     saveSelectedViewportAsPng={saveSelectedViewportAsPng}
                     setIsPlaying={setIsPlaying}
                     isPlaying={isPlaying}
@@ -3452,6 +3520,8 @@
                     isFlipV={dicomFlipV}
                     onFlipH={flipDicomH}
                     onFlipV={flipDicomV}
+                    canUndo={dicomCanUndo}
+                    onUndo={undoDicomAction}
                     /* ─ Slab projection: MIP / MinIP / Average ─ */
                     projectionMode={projectionMode}
                     onProjectionModeChange={handleProjectionModeChange}

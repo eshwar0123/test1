@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import './repository_1.css';
 import { storeFile } from './fileStore';
 import { generateThumbnail } from './thumbnailGenerator';
@@ -544,6 +544,7 @@ function CaseCard({ item, selected, onSelect }) {
 /* ─── Main Component ─────────────────────────────────────────── */
 export default function Repository1() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [modalityFilter, setModalityFilter] = useState('all');
@@ -665,6 +666,15 @@ export default function Repository1() {
       })
       .catch(() => { setCases([]); });
   }, [staticCaseMap]);
+
+  // Auto-open a case when arriving from a notification click
+  // (navigate("/radiologist/repository1", { state: { openCaseId } })).
+  useEffect(() => {
+    const wantId = location.state?.openCaseId;
+    if (!wantId || cases.length === 0) return;
+    const match = cases.find(c => c.id === wantId);
+    if (match) setSelectedCase(match);
+  }, [cases, location.state]);
 
   useEffect(() => {
     if (cases.length === 0) return;

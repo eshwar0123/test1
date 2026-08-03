@@ -962,7 +962,12 @@ def _build_case_row(sub: dict) -> dict:
         "review_status":  sub.get("review_status"),
         "final_status":   sub.get("final_status"),
         "qc_status":      sub.get("qc_status"),
-        "has_report":   bool(sub.get("report_path")),
+        # report_path is only set once the web editor's client-side PDF export
+        # step runs — mobile's submit flow never calls it, so a mobile-submitted
+        # completed report would otherwise show as "no report" here. completed_at
+        # is set by mark-completed regardless of platform, so treat either as proof
+        # a real report exists.
+        "has_report":   bool(sub.get("report_path")) or bool(sub.get("completed_at")),
     }
 
 

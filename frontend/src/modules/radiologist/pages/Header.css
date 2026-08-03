@@ -344,10 +344,11 @@
   flex-shrink: 0;
   margin-top: 5px;
 }
-.notif-dot.stat    { background: #dc2626; }
-.notif-dot.urgent  { background: #f59e0b; }
-.notif-dot.report  { background: #2563eb; }
-.notif-dot.system  { background: #64748b; }
+.notif-dot.stat           { background: #dc2626; }
+.notif-dot.urgent         { background: #f59e0b; }
+.notif-dot.report         { background: #2563eb; }
+.notif-dot.system         { background: #64748b; }
+.notif-dot.case_assigned  { background: #16a34a; }
 
 .notif-content {
   flex: 1;

@@ -35,7 +35,6 @@ export default function useCornerstoneDicomControls({
   activeDicomSlot,
   refreshDicomSliceIndicators,
   setActiveDicomSlot,
-  dicomZoomMode,
   dicomTool,
   clamp,
   getActiveDicomViewport,
@@ -177,7 +176,7 @@ export default function useCornerstoneDicomControls({
         }, 0);
       }
       refreshDicomSliceIndicators(slots);
-      activateCornerstoneDicomTool(dicomZoomMode ? "zoom" : dicomTool);
+      activateCornerstoneDicomTool(dicomTool);
       return;
     }
 
@@ -202,7 +201,7 @@ export default function useCornerstoneDicomControls({
       }, 0);
     }
     refreshDicomSliceIndicators([0]);
-    activateCornerstoneDicomTool(dicomZoomMode ? "zoom" : dicomTool);
+    activateCornerstoneDicomTool(dicomTool);
   };
 
   const scrollCornerstoneDicom = (delta) => {
@@ -233,7 +232,7 @@ export default function useCornerstoneDicomControls({
     if (!vp) return;
     setActiveDicomSlot(slot);
 
-    if (dicomZoomMode || dicomTool === "zoom") {
+    if (dicomTool === "zoom") {
       const cam = vp.getCamera?.();
       if (!cam?.parallelScale) return;
       const factor = e.deltaY > 0 ? 1.08 : 0.92;
@@ -317,7 +316,7 @@ export default function useCornerstoneDicomControls({
 
   const isScopedToolActive =
     isCornerstoneDicom &&
-    ((dicomTool !== "none" && dicomTool !== "crosshair") || dicomZoomMode || annTool !== "select");
+    ((dicomTool !== "none" && dicomTool !== "crosshair") || annTool !== "select");
 
   return {
     activateCornerstoneDicomTool,

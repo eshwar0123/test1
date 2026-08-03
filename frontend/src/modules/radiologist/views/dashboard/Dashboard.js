@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { getCurrentLang } from "../../../../shared/components/GoogleTranslateSwitcher";
+import { downloadReportPdfFromHtml } from "../../pages/DicomViewer/services/reportService";
 
 const GLOBAL_CSS = `
   @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap');
@@ -958,6 +959,81 @@ export default function Dashboard() {
           { headers: tok ? { Authorization: `Bearer ${tok}` } : {} },
         );
         if (!r.ok) {
+          // No exported PDF file on disk (report_path unset) — most commonly
+          // because the report was submitted from mobile, which never runs the
+          // web-only client-side PDF export step. Try the case_id-only ai-cache
+          // endpoint (no user_id filter, works "regardless of who saved it") for
+          // the report's real saved fields, and build a real-content PDF from
+          // those instead of erroring or falling back to placeholder stub text.
+          if (r.status === 404) {
+            try {
+              const cacheRes = await fetch(
+                `${API_BASE_DASH}/radiology/reports/${encodeURIComponent(caseItem.caseId)}/ai-cache`,
+              );
+              const cacheJson = await cacheRes.json().catch(() => null);
+              const rep = cacheJson?.data;
+              if (rep && (rep.technique || rep.findings || rep.impression || rep.opinions)) {
+                // ai-cache tells us which radiologist (user_id) actually submitted this
+                // report — chain into their profile for a real signature image instead
+                // of just a text line. profile/{user_id} has no ownership check (any
+                // valid id works), and signature_path's directory portion isn't
+                // reliable (same issue fixed elsewhere this session), so rebuild the
+                // URL from just the filename against the known-correct uploads layout.
+                let signatureImgHtml = "";
+                let qualification = "";
+                let designation = "";
+                if (rep.user_id) {
+                  try {
+                    const profRes = await fetch(`${API_BASE_DASH}/radiology/profile/${encodeURIComponent(rep.user_id)}`);
+                    const profJson = await profRes.json().catch(() => null);
+                    const prof = profJson?.data;
+                    qualification = prof?.qualification || "";
+                    designation = prof?.designation || "";
+                    if (prof?.signature_path) {
+                      const fname = String(prof.signature_path).split("/").pop();
+                      if (fname) {
+                        const sigUrl = `/uploads/radiologist/signature/${encodeURIComponent(fname)}`;
+                        signatureImgHtml = `<img src="${sigUrl}" style="max-height:52px; max-width:220px; display:block; margin-bottom:4px;" />`;
+                      }
+                    }
+                  } catch (_e) {
+                    // no signature image available — text-only sign-off below still renders
+                  }
+                }
+                const bodyHtml = `
+                  <div style="font-family:Arial, sans-serif; color:#111827;">
+                    <h2 style="margin:0 0 12px; font-size:16px;">Radiology Report</h2>
+                    <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                      <tr><td style="font-weight:700; width:150px; padding:3px 0;">Case ID</td><td>: ${caseItem.caseId}</td></tr>
+                      <tr><td style="font-weight:700; padding:3px 0;">Study Type</td><td>: ${caseItem.studyType}</td></tr>
+                      <tr><td style="font-weight:700; padding:3px 0;">Modality</td><td>: ${caseItem.modality}</td></tr>
+                      <tr><td style="font-weight:700; padding:3px 0;">Priority</td><td>: ${caseItem.priority}</td></tr>
+                      <tr><td style="font-weight:700; padding:3px 0;">Uploaded</td><td>: ${caseItem.uploadedAt}</td></tr>
+                      <tr><td style="font-weight:700; padding:3px 0;">Completed</td><td>: ${caseItem.completedAt}</td></tr>
+                      <tr><td style="font-weight:700; padding:3px 0;">Radiologist</td><td>: ${caseItem.assignedTo}</td></tr>
+                    </table>
+                    <div style="margin-top:16px; font-weight:700; background:#e8f2ff; border:1px solid #bfdbfe; padding:6px 8px; border-radius:6px; font-size:13px;">Technique</div>
+                    <p style="font-size:12px; line-height:1.5; white-space:pre-wrap;">${rep.technique || rep.ai_technique || "—"}</p>
+                    <div style="margin-top:10px; font-weight:700; background:#e8f2ff; border:1px solid #bfdbfe; padding:6px 8px; border-radius:6px; font-size:13px;">Findings</div>
+                    <p style="font-size:12px; line-height:1.5; white-space:pre-wrap;">${rep.findings || rep.ai_findings || "—"}</p>
+                    <div style="margin-top:10px; font-weight:700; background:#e8f2ff; border:1px solid #bfdbfe; padding:6px 8px; border-radius:6px; font-size:13px;">Impression</div>
+                    <p style="font-size:12px; line-height:1.5; white-space:pre-wrap;">${rep.impression || rep.ai_impression || "—"}</p>
+                    <div style="margin-top:10px; font-weight:700; background:#e8f2ff; border:1px solid #bfdbfe; padding:6px 8px; border-radius:6px; font-size:13px;">Opinions</div>
+                    <p style="font-size:12px; line-height:1.5; white-space:pre-wrap;">${rep.opinions || rep.ai_opinions || "—"}</p>
+                    <div style="margin-top:28px;">
+                      ${signatureImgHtml}
+                      <p style="font-size:12px; margin:0;">Electronically signed by ${caseItem.assignedTo}${qualification ? ` (${qualification})` : ""}${designation ? `, ${designation}` : ""}<br/>Completed: ${caseItem.completedAt}</p>
+                    </div>
+                  </div>
+                `;
+                await downloadReportPdfFromHtml({ bodyHtml, caseId: caseItem.caseId });
+                setDownloadingCase(null);
+                return;
+              }
+            } catch (_e) {
+              // fall through to the generic error below
+            }
+          }
           let msg = `Download failed (HTTP ${r.status})`;
           try { const j = await r.json(); if (j?.detail) msg = j.detail; } catch {}
           setDashToast({ kind: "error", text: msg });
@@ -984,38 +1060,39 @@ export default function Dashboard() {
       }
     }
 
-    // ── Fallback: build a text-stub for fresh orgs with no real reports yet ──
-    setTimeout(() => {
-      const reportText =
-        `RADIOLOGY REPORT\n` +
-        `================\n` +
-        `Case ID      : ${caseItem.caseId}\n` +
-        `Study Type   : ${caseItem.studyType}\n` +
-        `Modality     : ${caseItem.modality}\n` +
-        `Priority     : ${caseItem.priority}\n` +
-        `Uploaded     : ${caseItem.uploadedAt}\n` +
-        `Completed    : ${caseItem.completedAt}\n` +
-        `Radiologist  : ${caseItem.assignedTo}\n\n` +
-        `FINDINGS:\n` +
-        `Clinical indication and imaging findings for ${caseItem.studyType}.\n` +
-        `(Stub — actual radiologist report not yet attached on the backend.)\n\n` +
-        `IMPRESSION:\n` +
-        `1. Pending radiologist sign-off.\n` +
-        `2. Please correlate clinically.\n\n` +
-        `Electronically signed by ${caseItem.assignedTo}\n` +
-        `Completed: ${caseItem.completedAt}\n`;
+    // ── Fallback: letterheaded PDF stub for fresh orgs with no real report yet ──
+    // Same downloadReportPdfFromHtml() pipeline the DICOM viewer's report export
+    // uses (jsPDF + html2canvas + the org letterhead at /letterhead.png) instead
+    // of a bare .txt file, so a case with no report attached yet still downloads
+    // something that looks like an actual report.
+    const bodyHtml = `
+      <div style="font-family:Arial, sans-serif; color:#111827;">
+        <h2 style="margin:0 0 12px; font-size:16px;">Radiology Report</h2>
+        <table style="width:100%; border-collapse:collapse; font-size:12px;">
+          <tr><td style="font-weight:700; width:150px; padding:3px 0;">Case ID</td><td>: ${caseItem.caseId}</td></tr>
+          <tr><td style="font-weight:700; padding:3px 0;">Study Type</td><td>: ${caseItem.studyType}</td></tr>
+          <tr><td style="font-weight:700; padding:3px 0;">Modality</td><td>: ${caseItem.modality}</td></tr>
+          <tr><td style="font-weight:700; padding:3px 0;">Priority</td><td>: ${caseItem.priority}</td></tr>
+          <tr><td style="font-weight:700; padding:3px 0;">Uploaded</td><td>: ${caseItem.uploadedAt}</td></tr>
+          <tr><td style="font-weight:700; padding:3px 0;">Completed</td><td>: ${caseItem.completedAt}</td></tr>
+          <tr><td style="font-weight:700; padding:3px 0;">Radiologist</td><td>: ${caseItem.assignedTo}</td></tr>
+        </table>
+        <div style="margin-top:16px; font-weight:700; background:#e8f2ff; border:1px solid #bfdbfe; padding:6px 8px; border-radius:6px; font-size:13px;">Findings</div>
+        <p style="font-size:12px; line-height:1.5;">Clinical indication and imaging findings for ${caseItem.studyType}.<br/>(Stub — actual radiologist report not yet attached on the backend.)</p>
+        <div style="margin-top:10px; font-weight:700; background:#e8f2ff; border:1px solid #bfdbfe; padding:6px 8px; border-radius:6px; font-size:13px;">Impression</div>
+        <p style="font-size:12px; line-height:1.5;">1. Pending radiologist sign-off.<br/>2. Please correlate clinically.</p>
+        <p style="margin-top:28px; font-size:12px;">Electronically signed by ${caseItem.assignedTo}<br/>Completed: ${caseItem.completedAt}</p>
+      </div>
+    `;
 
-      const blob = new Blob([reportText], { type: "text/plain" });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `${caseItem.caseId}_report_stub.txt`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-      URL.revokeObjectURL(url);
+    try {
+      await downloadReportPdfFromHtml({ bodyHtml, caseId: caseItem.caseId });
+    } catch (e) {
+      setDashToast({ kind: "error", text: e?.message || "Could not generate report PDF" });
+      setTimeout(() => setDashToast(null), 4000);
+    } finally {
       setDownloadingCase(null);
-    }, 400);
+    }
   };
 
   // ── Theme detection ────────────────────────────────────────────────────────

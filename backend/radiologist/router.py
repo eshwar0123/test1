@@ -824,15 +824,26 @@ def assign_scan(case_id: str, payload: AssignScanIn):
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT 1 FROM radiology_schema.radiologists WHERE rad_id=%s",
+                "SELECT user_id FROM radiology_schema.radiologists WHERE rad_id=%s",
                 (rad_id,),
             )
-            if not cur.fetchone():
+            rad_row = cur.fetchone()
+            if not rad_row:
                 raise HTTPException(status_code=404, detail="rad_id not found")
+            rad_user_id = rad_row[0]
 
         result = crud.assign_scan(conn, case_id, rad_id)
         if result is None:
             raise HTTPException(status_code=404, detail="case_id not found")
+
+        with conn.cursor() as cur:
+            _create_notification(
+                cur, rad_user_id, case_id,
+                "New Case Assigned",
+                f"Case {case_id} has been assigned to you",
+            )
+            conn.commit()
+
         return {"success": True, "data": result}
     finally:
         conn.close()
@@ -929,7 +940,7 @@ def get_ai_cache(case_id: str):
                 """
                 SELECT ai_technique, ai_findings, ai_impression, ai_opinions,
                        technique,    findings,    impression,    opinions,
-                       status, case_id, updated_at
+                       status, case_id, updated_at, user_id
                 FROM radiology_schema.reports
                 WHERE case_id = %s
                   AND (ai_technique IS NOT NULL
@@ -950,7 +961,7 @@ def get_ai_cache(case_id: str):
             return {"success": True, "data": None}
 
         # Prefer ai_* fields when populated; fall back to main columns.
-        ai_t, ai_f, ai_i, ai_o, m_t, m_f, m_i, m_o, status, c_id, updated_at = row
+        ai_t, ai_f, ai_i, ai_o, m_t, m_f, m_i, m_o, status, c_id, updated_at, report_uid = row
         return {
             "success": True,
             "data": {
@@ -966,6 +977,11 @@ def get_ai_cache(case_id: str):
                 "status":        status,
                 "case_id":       c_id,
                 "updated_at":    updated_at.isoformat() if updated_at else None,
+                # Lets callers (e.g. the org dashboard's report-download fallback)
+                # chain into GET /profile/{user_id} for signature_path/qualification/
+                # designation — needed to render a real signature image, not just
+                # the "Electronically signed by <name>" text line.
+                "user_id":       str(report_uid) if report_uid else None,
             },
         }
     finally:
@@ -2771,7 +2787,7 @@ def create_availability(payload: AvailabilityIn):
 
 
 @router.delete("/availability/{availability_id}")
-def delete_availability(availability_id: int):
+def delete_availability(availability_id: str):
     conn = get_conn()
     cur = conn.cursor()
     try:
@@ -2790,6 +2806,135 @@ def delete_availability(availability_id: int):
     except Exception as e:
         conn.rollback()
         print(f"[radiology/availability DELETE] error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Notifications — fired when a case is assigned to a radiologist
+# ─────────────────────────────────────────────────────────────────────────────
+def _ensure_notifications_table(cur):
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS admin_schema.notifications (
+            notification_id BIGSERIAL PRIMARY KEY,
+            user_id UUID NOT NULL,
+            case_id TEXT,
+            type TEXT NOT NULL DEFAULT 'case_assigned',
+            title TEXT NOT NULL,
+            message TEXT,
+            is_read BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    """)
+
+
+def _create_notification(cur, user_id, case_id, title, message, ntype="case_assigned"):
+    """Best-effort notification insert — never raises, so it can't break the
+    assignment flow it's attached to."""
+    if not user_id:
+        return
+    try:
+        _ensure_notifications_table(cur)
+        cur.execute(
+            """
+            INSERT INTO admin_schema.notifications (user_id, case_id, type, title, message)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (str(user_id), case_id, ntype, title, message),
+        )
+    except Exception as e:
+        print(f"[notifications] failed to create notification: {e}")
+
+
+@router.get("/notifications")
+def list_notifications(user_id: str, limit: int = 50):
+    try:
+        uid = UUID(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user_id (must be UUID)")
+
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        _ensure_notifications_table(cur)
+        conn.commit()
+        cur.execute("""
+            SELECT notification_id, case_id, type, title, message, is_read, created_at::text
+            FROM admin_schema.notifications
+            WHERE user_id = %s
+            ORDER BY created_at DESC
+            LIMIT %s
+        """, (str(uid), limit))
+        rows = cur.fetchall()
+        data = [{
+            "notification_id": r[0],
+            "case_id":         r[1],
+            "type":            r[2],
+            "title":           r[3],
+            "message":         r[4],
+            "is_read":         r[5],
+            "created_at":      r[6],
+        } for r in rows]
+        unread_count = sum(1 for d in data if not d["is_read"])
+        return {"success": True, "data": data, "unread_count": unread_count}
+    except Exception as e:
+        conn.rollback()
+        print(f"[radiology/notifications GET] error: {e}")
+        return {"success": True, "data": [], "unread_count": 0}
+    finally:
+        cur.close()
+        conn.close()
+
+
+@router.post("/notifications/{notification_id}/read")
+def mark_notification_read(notification_id: int):
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            UPDATE admin_schema.notifications
+               SET is_read = TRUE
+             WHERE notification_id = %s
+            RETURNING notification_id
+        """, (notification_id,))
+        updated = cur.fetchone()
+        conn.commit()
+        if not updated:
+            raise HTTPException(status_code=404, detail="Notification not found")
+        return {"success": True}
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+
+@router.post("/notifications/read-all")
+def mark_all_notifications_read(payload: dict = Body(...)):
+    try:
+        uid = UUID((payload or {}).get("user_id") or "")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user_id (must be UUID)")
+
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        _ensure_notifications_table(cur)
+        cur.execute("""
+            UPDATE admin_schema.notifications
+               SET is_read = TRUE
+             WHERE user_id = %s AND is_read = FALSE
+        """, (str(uid),))
+        conn.commit()
+        return {"success": True}
+    except Exception as e:
+        conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()

@@ -662,10 +662,7 @@ export default function useViewerDataLoader({
           console.log("[DICOM] calling setStack with first image:", firstId[0]);
           console.log("[DICOM] viewport element size:", singleRef.current?.clientWidth, "x", singleRef.current?.clientHeight);
           try {
-            await Promise.race([
-              vp.setStack(firstId),
-              new Promise((_, rej) => setTimeout(() => rej(new Error("setStack timeout after 30s")), 30000)),
-            ]);
+            await vp.setStack(firstId);
           } catch (e) {
             console.error("[DICOM] setStack failed:", e);
             throw e;

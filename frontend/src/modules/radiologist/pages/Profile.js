@@ -132,11 +132,12 @@ const Profile = () => {
 
   const [savingUpload, setSavingUpload] = useState(false);
 
-  // Keep the /api prefix so the Vite dev proxy forwards uploads to FastAPI's
-  // StaticFiles mount. Stripping /api makes the URL hit Vite's SPA fallback
-  // (returns index.html, not the image), which is why the avatar fails to load.
+  // In production, nginx proxies /uploads/* straight to the backend's static
+  // mount — it is NOT behind /api (confirmed: https://onixai.in/uploads/...
+  // works, https://onixai.in/api/uploads/... 404s). api.defaults.baseURL ends
+  // in "/api", so that suffix has to come off before appending "/uploads/".
   const baseUploads = useMemo(() => {
-    const b = (api?.defaults?.baseURL || "").replace(/\/$/, "");
+    const b = (api?.defaults?.baseURL || "").replace(/\/$/, "").replace(/\/api$/i, "");
     if (!b) return `${window.location.origin}/uploads/`;
     return `${b}/uploads/`;
   }, []);
@@ -146,10 +147,18 @@ const Profile = () => {
   // anything uploaded since the move to S3) an already-absolute presigned
   // URL. Presigned URLs are unique per request (signed, short-lived), so
   // they don't need cache-busting the way the deterministic legacy paths do.
-  const resolveUploadUrl = (value) => {
+  //
+  // For the legacy relative case, the directory portion the DB stores doesn't
+  // reliably match the real /uploads/radiologist/{kind}/ layout on disk (some
+  // rows predate the current upload scheme) — every *current* upload saves
+  // into a known directory keyed by kind, so rebuilding the URL from just the
+  // filename is more reliable than trusting the stored path's directory.
+  const resolveUploadUrl = (kind, value) => {
     if (!value) return "";
     if (/^https?:\/\//i.test(value)) return value;
-    return `${baseUploads}${value}?v=${Date.now()}`;
+    const name = value.split("/").pop();
+    if (!name) return "";
+    return `${baseUploads}radiologist/${kind}/${encodeURIComponent(name)}?v=${Date.now()}`;
   };
 
   const showSuccess = (m) => {
@@ -180,7 +189,7 @@ const Profile = () => {
       const savedAvatar = localStorage.getItem("avatarUrl") || "";
 
       if (data?.profile_image_path) {
-        const url = resolveUploadUrl(data.profile_image_path);
+        const url = resolveUploadUrl("profile", data.profile_image_path);
         setPhotoPreview(url);
         localStorage.setItem("avatarUrl", url);
         notifyHeaderAvatar();
@@ -199,7 +208,7 @@ const Profile = () => {
       setDegreeName(data?.degree_path ? data.degree_path.split("/").pop() : "");
 
       // ----- Signature -----
-      setSignaturePreview(resolveUploadUrl(data?.signature_path));
+      setSignaturePreview(resolveUploadUrl("signature", data?.signature_path));
     } catch (e) {
       showError(e.response?.data?.detail || "Failed to load profile");
     } finally {
@@ -460,7 +469,7 @@ const Profile = () => {
                     <span className="file-name">{degreeName || "Not uploaded"}</span>
                     {profile?.degree_path && (
                       <a
-                        href={resolveUploadUrl(profile.degree_path)}
+                        href={resolveUploadUrl("degree", profile.degree_path)}
                         target="_blank"
                         rel="noreferrer"
                         style={{ marginLeft: 12, fontWeight: 700 }}

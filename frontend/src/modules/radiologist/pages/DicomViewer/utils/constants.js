@@ -1,18 +1,21 @@
 export const BACKEND_URL = "/api";
 
+// nginx proxies /uploads/* straight to the backend's static mount — it is NOT
+// behind /api (confirmed: https://onixai.in/uploads/... works, .../api/uploads/...
+// 404s). So unlike API calls, uploads URLs must NOT be prefixed with BACKEND_URL.
 const toPublicUrl = (path) => {
   if (!path) return "";
   const p = String(path).trim();
   if (p.startsWith("http://") || p.startsWith("https://")) return p;
 
   // "/uploads/organisation/kvg_logo.png"
-  if (p.startsWith("/uploads/")) return `${BACKEND_URL}${p}`;
+  if (p.startsWith("/uploads/")) return p;
 
   // "/signature/x.png"  -> serve under /uploads/signature/x.png
-  if (p.startsWith("/")) return `${BACKEND_URL}/uploads${p}`;
+  if (p.startsWith("/")) return `/uploads${p}`;
 
   // "signature/x.png"
-  return `${BACKEND_URL}/uploads/${p}`;
+  return `/uploads/${p}`;
 };
 
 // Strip a leading "Dr." / "DR." / "dr" prefix so the report template can safely

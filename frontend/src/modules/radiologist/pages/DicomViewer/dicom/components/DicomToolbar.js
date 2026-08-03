@@ -43,8 +43,6 @@ export default function DicomToolbar({
   activeDicomSlot,
   dicomSlotPlanes,
   setDicomSlotPlanes,
-  dicomZoomMode,
-  setDicomZoomMode,
   dicomTool,
   activateCornerstoneDicomTool,
   rotateCornerstoneDicom,
@@ -57,6 +55,8 @@ export default function DicomToolbar({
   isFlipV,
   onFlipH,
   onFlipV,
+  canUndo,
+  onUndo,
   // Slab projection (MIP / MinIP / Average) — volume MPR only.
   projectionMode = PROJECTION_MODES.NONE,
   onProjectionModeChange,
@@ -332,9 +332,9 @@ export default function DicomToolbar({
         {/* ── Interaction Tools ─────────────────────────────── */}
         <div style={toolItemStyle}>
           <button className="vtb-btn"
-            onClick={() => { const next = !dicomZoomMode; setDicomZoomMode(next); activateCornerstoneDicomTool(next ? "zoom" : "none"); }}
+            onClick={() => { activateCornerstoneDicomTool(dicomTool === "zoom" ? "none" : "zoom"); }}
             title="Zoom (scroll)" aria-label="Zoom"
-            style={{ background: "#1f2937", color: "#e5e7eb", border: dicomZoomMode ? "2px solid #3b82f6" : "1px solid #1e2a3a", borderRadius: 6, padding: "8px 10px", display: "flex", alignItems: "center", gap: 6 }}
+            style={{ background: "#1f2937", color: "#e5e7eb", border: dicomTool === "zoom" ? "2px solid #3b82f6" : "1px solid #1e2a3a", borderRadius: 6, padding: "8px 10px", display: "flex", alignItems: "center", gap: 6 }}
           >
             <svg width="18" height="18" viewBox="0 0 16 16" fill="none" style={{ display: "block" }}>
               <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.4" />
@@ -841,6 +841,22 @@ export default function DicomToolbar({
             )}
           </div>
           <span style={toolLabelStyle}>Measure</span>
+        </div>
+
+        {/* ── Undo — reverts the last preset / flip / rotate / measurement ── */}
+        <div style={toolItemStyle}>
+          <button className="vtb-btn"
+            onClick={() => onUndo?.()}
+            disabled={!canUndo}
+            title="Undo last change" aria-label="Undo"
+            style={{ background: "#1f2937", color: canUndo ? "#e5e7eb" : "#4b5563", border: "1px solid #1e2a3a", borderRadius: 6, padding: "8px 10px", display: "flex", alignItems: "center", cursor: canUndo ? "pointer" : "not-allowed", opacity: canUndo ? 1 : 0.5 }}
+          >
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M6 3L2.5 6.5 6 10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M2.5 6.5H9a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          <span style={toolLabelStyle}>Undo</span>
         </div>
 
       </div>

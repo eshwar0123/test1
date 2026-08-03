@@ -12,14 +12,28 @@ import CIcon from "@coreui/icons-react";
 import { cilUser, cilAccountLogout, cilBell, cilSpeedometer, cilFolder, cilSettings } from "@coreui/icons";
 import { useNavigate, NavLink } from "react-router-dom";
 import GoogleTranslateSwitcher from "../../../shared/components/GoogleTranslateSwitcher";
+import api from "../../../shared/api/axios";
 
-const DUMMY_NOTIFICATIONS = [
-  { id: 1, type: "stat",    title: "STAT Case Assigned",         desc: "CASE-20260326-1001 — Head CT assigned to you",                  time: "2 min ago",  unread: true },
-  { id: 2, type: "report",  title: "Report Approved",            desc: "CASE-20260325-0987 — Chest X-Ray report signed off by Dr. Rao", time: "18 min ago", unread: true },
-  { id: 3, type: "urgent",  title: "Urgent Addendum Requested",  desc: "CASE-20260325-0954 — MRI Brain: clinician requests addendum",   time: "45 min ago", unread: true },
-  { id: 4, type: "system",  title: "System Maintenance",         desc: "Scheduled downtime tonight 02:00–03:00 IST",                    time: "1 hr ago",   unread: false },
-  { id: 5, type: "report",  title: "Report Rejected",            desc: "CASE-20260325-0912 — CT Abdomen report returned for revision",  time: "2 hr ago",   unread: false },
-];
+const NOTIF_POLL_MS = 20000;
+
+function timeAgo(isoString) {
+  if (!isoString) return "";
+  // Postgres TIMESTAMPTZ::text looks like "2026-08-03 08:03:59.739342+00" —
+  // normalize to something Date can reliably parse cross-browser.
+  let s = isoString.trim().replace(" ", "T");
+  if (/[+-]\d{2}$/.test(s)) s += ":00";
+  else if (!/[zZ]$/.test(s) && !/[+-]\d{2}:\d{2}$/.test(s)) s += "Z";
+  const then = new Date(s);
+  const diffMs = Date.now() - then.getTime();
+  if (!Number.isFinite(diffMs) || diffMs < 0) return "";
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hr ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days} day${days > 1 ? "s" : ""} ago`;
+}
 
 const Header = ({ darkMode, toggleDarkMode, onViewerExit }) => {
   const navigate = useNavigate();
@@ -45,11 +59,50 @@ const Header = ({ darkMode, toggleDarkMode, onViewerExit }) => {
 
   const [avatarUrl, setAvatarUrl] = useState(localStorage.getItem("avatarUrl") || "");
   const [notifOpen, setNotifOpen] = useState(false);
-  const [notifications, setNotifications] = useState(DUMMY_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState([]);
   const notifRef = useRef(null);
 
-  const unreadCount = notifications.filter(n => n.unread).length;
-  const markAllRead = () => setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
+  const unreadCount = notifications.filter(n => !n.is_read).length;
+
+  const fetchNotifications = async () => {
+    if (!auth?.userId) return;
+    try {
+      const res = await api.get("/radiology/notifications", { params: { user_id: auth.userId } });
+      if (res.data?.success) setNotifications(res.data.data || []);
+    } catch (_) {}
+  };
+
+  // Case-assignment notifications — poll since there's no push/websocket
+  // channel for this yet.
+  useEffect(() => {
+    if (!auth?.userId) return;
+    fetchNotifications();
+    const id = setInterval(fetchNotifications, NOTIF_POLL_MS);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth?.userId]);
+
+  const markAllRead = async () => {
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+    try {
+      await api.post("/radiology/notifications/read-all", { user_id: auth?.userId });
+    } catch (_) {}
+  };
+
+  const handleNotificationClick = async (n) => {
+    setNotifOpen(false);
+    if (!n.is_read) {
+      setNotifications(prev => prev.map(x => x.notification_id === n.notification_id ? { ...x, is_read: true } : x));
+      api.post(`/radiology/notifications/${n.notification_id}/read`).catch(() => {});
+    }
+    if (n.case_id) {
+      // navTo handles the two-step exit when currently inside the DICOM
+      // viewer, but that path doesn't carry navigation state — falls back to
+      // landing on Repository without auto-opening the case in that case.
+      if (onViewerExit) navTo("/radiologist/repository1");
+      else navigate("/radiologist/repository1", { state: { openCaseId: n.case_id } });
+    }
+  };
 
   useEffect(() => {
     const handler = (e) => { if (notifRef.current && !notifRef.current.contains(e.target)) setNotifOpen(false); };
@@ -66,6 +119,33 @@ const Header = ({ darkMode, toggleDarkMode, onViewerExit }) => {
       window.removeEventListener("storage", refresh);
     };
   }, []);
+
+  // The Profile page is what normally fetches and caches the avatar URL
+  // (via localStorage["avatarUrl"] + an "avatar-updated" event) — so right
+  // after login, before the user ever visits Profile, there's nothing cached
+  // and this falls back to initials. Fetch it here too so the real photo
+  // shows up immediately instead of only after a Profile visit.
+  useEffect(() => {
+    if (avatarUrl || !auth?.userId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get(`/radiology/profile/${auth.userId}`);
+        const path = res.data?.data?.profile_image_path;
+        if (cancelled || !path) return;
+        const base = (api?.defaults?.baseURL || "").replace(/\/$/, "").replace(/\/api$/i, "")
+          || window.location.origin;
+        const name = path.startsWith("http") ? null : path.split("/").pop();
+        const url = path.startsWith("http")
+          ? path
+          : `${base}/uploads/radiologist/profile/${encodeURIComponent(name)}?v=${Date.now()}`;
+        localStorage.setItem("avatarUrl", url);
+        setAvatarUrl(url);
+      } catch (_) {}
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth?.userId]);
 
   const handleLogout = () => {
     localStorage.removeItem("auth");
@@ -141,13 +221,23 @@ const Header = ({ darkMode, toggleDarkMode, onViewerExit }) => {
                   )}
                 </div>
                 <div className="notif-dropdown-list">
+                  {notifications.length === 0 && (
+                    <div className="notif-empty" style={{ padding: "16px 12px", textAlign: "center", color: "#8b97ac", fontSize: 13 }}>
+                      No notifications yet
+                    </div>
+                  )}
                   {notifications.map(n => (
-                    <div key={n.id} className={`notif-item ${n.unread ? "unread" : ""}`}>
+                    <div
+                      key={n.notification_id}
+                      className={`notif-item ${!n.is_read ? "unread" : ""}`}
+                      onClick={() => handleNotificationClick(n)}
+                      style={{ cursor: n.case_id ? "pointer" : "default" }}
+                    >
                       <div className={`notif-dot ${n.type}`} />
                       <div className="notif-content">
                         <div className="notif-item-title">{n.title}</div>
-                        <div className="notif-item-desc">{n.desc}</div>
-                        <div className="notif-item-time">{n.time}</div>
+                        <div className="notif-item-desc">{n.message}</div>
+                        <div className="notif-item-time">{timeAgo(n.created_at)}</div>
                       </div>
                     </div>
                   ))}
@@ -222,3 +312,4 @@ const Header = ({ darkMode, toggleDarkMode, onViewerExit }) => {
 };
 
 export default Header;
+

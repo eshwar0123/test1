@@ -470,6 +470,37 @@ def insert_case_workflow_with_rad(
             src_row.get("uploaded_images_path"),
         ),
     )
+
+    if row and rad_user_id:
+        try:
+            _exec("""
+                CREATE TABLE IF NOT EXISTS admin_schema.notifications (
+                    notification_id BIGSERIAL PRIMARY KEY,
+                    user_id UUID NOT NULL,
+                    case_id TEXT,
+                    type TEXT NOT NULL DEFAULT 'case_assigned',
+                    title TEXT NOT NULL,
+                    message TEXT,
+                    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            """)
+            case_id = src_row.get("case_id")
+            _exec(
+                """
+                INSERT INTO admin_schema.notifications (user_id, case_id, type, title, message)
+                VALUES (%s, %s, 'case_assigned', %s, %s)
+                """,
+                (
+                    rad_user_id,
+                    case_id,
+                    "New Case Assigned",
+                    f"Case {case_id} has been assigned to you",
+                ),
+            )
+        except Exception as e:
+            print(f"[notifications] failed to create notification: {e}")
+
     return int(row["id"]) if row else None
 
 
