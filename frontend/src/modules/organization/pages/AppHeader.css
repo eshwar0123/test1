@@ -1,0 +1,444 @@
+/* =========================
+   HEADER
+========================= */
+.organization-app .header {
+  position: relative;
+  top: 0;
+  z-index: 9999;
+  background-image: url("/header.png") !important;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  border-bottom: 1.5px solid rgba(255,255,255,0.25);
+  box-shadow: 0 1px 8px rgba(0,0,0,0.12);
+}
+
+.radiology-app .header-inner,
+.header-inner {
+  height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-left: 20px;
+  padding-right: 20px;
+  gap: 12px;
+}
+
+/* LEFT */
+.radiology-app .header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  grid-column: 1;
+  min-width: 0;
+}
+
+/* Header nav links */
+.header-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.header-nav-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e3a5f;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+  letter-spacing: 0.2px;
+}
+
+.header-nav-link:hover {
+  background: rgba(30,58,95,0.10);
+  color: #1e3a5f;
+}
+
+.header-nav-link.active {
+  background: rgba(30,58,95,0.16);
+  color: #1e3a5f;
+  font-weight: 700;
+}
+
+[data-theme="dark"] .header-nav-link {
+  color: #e2e8f0;
+}
+[data-theme="dark"] .header-nav-link:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+[data-theme="dark"] .header-nav-link.active {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
+.radiology-app .header-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.radiology-app .header-brand-text {
+  font-weight: 800;
+  font-size: 18px;
+  color: #1f2937;
+  letter-spacing: 0.2px;
+}
+
+.radiology-app .header-toggler {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 8px 10px;
+  border-radius: 10px;
+  color: #475569 !important;
+}
+.radiology-app .header-toggler:hover {
+  background: #f1f5f9 !important;
+}
+.radiology-app .header-toggler svg,
+.radiology-app .header-toggler .icon {
+  color: #475569 !important;
+  fill: #475569 !important;
+  stroke: #475569 !important;
+  filter: none;
+}
+
+
+/* RIGHT */
+.radiology-app .header-right,
+.header-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  grid-column: 3;
+  height: 38px;
+}
+
+/* ── Icon buttons (theme + bell) ── */
+.hdr-icon-btn {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: none;
+  background: rgba(30,58,95,0.10);
+  color: #1e3a5f;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+.hdr-icon-btn:hover {
+  background: rgba(30,58,95,0.18);
+  color: #1e3a5f;
+}
+
+/* Notification badge */
+.hdr-notif-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* ── Notification dropdown ── */
+.hdr-notif-wrap { position: relative; }
+
+.hdr-notif-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 310px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.14);
+  z-index: 9999;
+  overflow: hidden;
+}
+
+.hdr-notif-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.hdr-notif-clear {
+  background: none;
+  border: none;
+  font-size: 12px;
+  color: #2563eb;
+  cursor: pointer;
+  font-weight: 600;
+}
+.hdr-notif-clear:hover { text-decoration: underline; }
+
+.hdr-notif-list { max-height: 280px; overflow-y: auto; }
+
+.hdr-notif-empty {
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.hdr-notif-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.hdr-notif-item:last-child { border-bottom: none; }
+.hdr-notif-item:hover { background: #f8faff; }
+.hdr-notif-item.unread { background: #eff6ff; }
+.hdr-notif-item.unread:hover { background: #dbeafe; }
+
+.hdr-notif-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2563eb;
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+.hdr-notif-dot.read { background: #cbd5e1; }
+
+.hdr-notif-content { flex: 1; min-width: 0; }
+.hdr-notif-title  { font-size: 13px; font-weight: 700; color: #1e293b; }
+.hdr-notif-desc   { font-size: 12px; color: #64748b; margin-top: 2px; line-height: 1.4; }
+.hdr-notif-time   { font-size: 11px; color: #94a3b8; margin-top: 4px; }
+
+/* ── Avatar ── */
+.hdr-avatar-wrap { position: relative; }
+
+.hdr-avatar-btn {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  margin: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: box-shadow 0.15s;
+}
+.hdr-avatar-btn:hover { box-shadow: 0 0 0 3px #dbeafe; }
+
+.hdr-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  overflow: hidden;
+  flex-shrink: 0;
+  pointer-events: none; /* clicks pass through to the button */
+}
+.hdr-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
+}
+.hdr-avatar--lg {
+  width: 44px;
+  height: 44px;
+  font-size: 16px;
+}
+
+.hdr-avatar-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 220px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.14);
+  z-index: 9999;
+  overflow: hidden;
+}
+
+.hdr-avatar-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.hdr-avatar-name  { font-size: 14px; font-weight: 700; color: #1e293b; }
+.hdr-avatar-email { font-size: 12px; color: #64748b; margin-top: 1px; }
+
+.hdr-avatar-menu { padding: 6px; }
+
+.hdr-avatar-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #1e293b;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+}
+.hdr-avatar-menu-item:hover { background: #f1f5f9; }
+.hdr-avatar-menu-item--danger { color: #dc2626; }
+.hdr-avatar-menu-item--danger:hover { background: #fff1f2; }
+
+.hdr-avatar-divider { height: 1px; background: #e2e8f0; margin: 4px 6px; }
+
+/* Legacy — keep for backward compat */
+.profile-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+}
+
+.profile-dropdown-item {
+  transition: all 0.2s ease;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.profile-dropdown-item:hover {
+  background: linear-gradient(90deg, #b9d7f33b, #0a368862) !important;
+  transform: translateX(3px);
+}
+.profile-dropdown-item:active {
+  background: linear-gradient(90deg, #bcd6f0, #0b3a92) !important;
+  color: white !important;
+}
+
+/* Neutralise any leftover CoreUI toggle sizing */
+.radiology-app .green-profile-toggle {
+  width: 38px !important;
+  height: 38px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+.radiology-app .green-profile-toggle:hover {
+  background: linear-gradient(90deg, #bcd6f0, #0b3a92) !important;
+}
+.radiology-app .green-profile-toggle .profile-avatar {
+  color: white !important;
+  font-weight: 700;
+  font-size: 13px;
+}
+.radiology-app .green-profile-toggle::after {
+  display: none !important;
+}
+
+/* Force all header-right direct children to share the same 38px height */
+.header-right > *,
+.radiology-app .header-right > * {
+  height: 38px !important;
+  box-sizing: border-box;
+}
+
+.header-right > .gt-lang-switcher,
+.radiology-app .header-right > .gt-lang-switcher {
+  height: 34px !important;
+}
+
+/* ═══════════════════════════════════
+   DARK THEME
+═══════════════════════════════════ */
+[data-theme="dark"] .organization-app .header {
+  background-image: linear-gradient(rgba(10,15,30,0.55), rgba(10,15,30,0.55)), url("/header.png") !important;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  border-bottom-color: rgba(255,255,255,0.10);
+}
+[data-theme="dark"] .hdr-icon-btn { color: #e2e8f0; background: rgba(255,255,255,0.10); }
+[data-theme="dark"] .hdr-icon-btn:hover { background: rgba(255,255,255,0.18); color: #ffffff; }
+[data-theme="dark"] .radiology-app .header-toggler {
+  background: rgba(255,255,255,0.12) !important;
+  color: #f1f5f9 !important;
+}
+[data-theme="dark"] .radiology-app .header-toggler svg,
+[data-theme="dark"] .radiology-app .header-toggler .icon {
+  color: #f1f5f9 !important;
+  fill: #f1f5f9 !important;
+  stroke: #f1f5f9 !important;
+  filter: none;
+}
+[data-theme="dark"] .hdr-notif-dropdown {
+  background: #1e293b;
+  border-color: rgba(255,255,255,0.10);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.40);
+}
+[data-theme="dark"] .hdr-notif-header { color: #f1f5f9; border-bottom-color: rgba(255,255,255,0.08); }
+[data-theme="dark"] .hdr-notif-clear { color: #60a5fa; }
+[data-theme="dark"] .hdr-notif-item { border-bottom-color: rgba(255,255,255,0.06); }
+[data-theme="dark"] .hdr-notif-item:hover { background: rgba(255,255,255,0.05); }
+[data-theme="dark"] .hdr-notif-item.unread { background: rgba(37,99,235,0.15); }
+[data-theme="dark"] .hdr-notif-item.unread:hover { background: rgba(37,99,235,0.22); }
+[data-theme="dark"] .hdr-notif-title { color: #f1f5f9; }
+[data-theme="dark"] .hdr-notif-desc  { color: #64748b; }
+[data-theme="dark"] .hdr-notif-time  { color: #475569; }
+[data-theme="dark"] .hdr-notif-empty { color: #475569; }
+[data-theme="dark"] .hdr-avatar-dropdown {
+  background: #1e293b;
+  border-color: rgba(255,255,255,0.10);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.40);
+}
+[data-theme="dark"] .hdr-avatar-profile { border-bottom-color: rgba(255,255,255,0.08); }
+[data-theme="dark"] .hdr-avatar-name  { color: #f1f5f9; }
+[data-theme="dark"] .hdr-avatar-email { color: #64748b; }
+[data-theme="dark"] .hdr-avatar-menu-item { color: #e2e8f0; }
+[data-theme="dark"] .hdr-avatar-menu-item:hover { background: rgba(255,255,255,0.07); }
+[data-theme="dark"] .hdr-avatar-menu-item--danger { color: #f87171; }
+[data-theme="dark"] .hdr-avatar-menu-item--danger:hover { background: rgba(239,68,68,0.12); }
+[data-theme="dark"] .hdr-avatar-divider { background: rgba(255,255,255,0.08); }
