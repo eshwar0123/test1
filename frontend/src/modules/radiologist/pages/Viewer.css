@@ -1,0 +1,221 @@
+/* Viewer.css */
+/* Add this at the very top of Viewer.css */
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 90%;
+}
+
+.viewer-container {
+  position: relative;
+  width: 50vw;
+  height: 80vh;
+  overflow: visible; 
+  background-color: #222;
+  /* Prevent browser pull-to-refresh on mobile while drawing */
+  touch-action: none; 
+
+}
+
+/* --- Primary Display Area --- */
+
+.osd-root {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 75%;
+  height: 100%;
+  z-index: 1; /* Base layer */
+}
+
+.svg-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 10; /* Above OSD */
+  pointer-events: all; /* Allow clicks to pass through to OSD/Buttons */
+}
+
+/* When drawing, capture mouse events but keep buttons clickable */
+.svg-overlay.drawing-active {
+  pointer-events: all; 
+  cursor: crosshair;
+}
+
+/* --- UI Controls Stack --- */
+
+/* Grouped common properties for all UI overlays */
+.main-toolbar, 
+.annotate-menu, 
+.viewer-controls, 
+.back-btn {
+  position: absolute;
+  z-index: 100; /* Higher than SVG/OSD */
+  background-color: rgba(30, 30, 30, 0.85); /* Slightly more opaque for readability */
+  backdrop-filter: blur(4px); /* Modern touch */
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  /* CRITICAL: Ensures buttons inside these divs work even when drawing-active is on */
+  pointer-events: auto; 
+}
+
+.back-btn {
+  top: 15px;
+  left: 15px;
+  padding: 8px 15px;
+  color: white;
+  cursor: pointer;
+}
+
+.main-toolbar {
+  top: 70px; /* Adjusted to not overlap back button */
+  left: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+}
+
+.annotate-menu {
+  top: 70px;
+  left: 75px; /* Offset from toolbar */
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+}
+
+.viewer-controls {
+  top: 50%;
+  right: 15px;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 10px;
+}
+
+/* --- Button & Input Styling --- */
+
+.main-toolbar button, 
+.annotate-menu button, 
+.viewer-controls button {
+  width: 42px;
+  height: 42px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  font-size: 1.2em;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.main-toolbar button:hover, 
+.annotate-menu button:hover, 
+.viewer-controls button:hover {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: white;
+}
+
+.main-toolbar button.active {
+  background: #3498db;
+  border-color: #3498db;
+  box-shadow: 0 0 10px rgba(52, 152, 219, 0.5);
+}
+
+/* Color picker cleanup */
+.main-toolbar input[type="color"] {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 2px solid #555;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  background: none;
+  overflow: hidden;
+}
+
+.main-toolbar input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+.main-toolbar input[type="color"]::-webkit-color-swatch { border: none; }
+/* Layout Wrapper */
+.viewer-layout-wrapper {
+  display: flex;
+  width: 80vw;
+  height: 90vh;
+  background-color: #111;
+}
+
+/* Viewer Container becomes flexible */
+.viewer-container {
+  position: relative;
+  top:0;
+  height: 100%;
+  width: 60vw;
+  height: 100vh;
+  touch-action: none;
+}
+
+/* OSD Root should fill its parent */
+.osd-root {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Main Toolbar adjustment */
+.main-toolbar {
+  position: absolute;
+  top: 70px;
+  left: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px;
+  background-color: rgba(30, 30, 30, 0.85);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  z-index: 100;
+}
+
+/* Annotation Menu should align next to the ✍️ button */
+.annotate-menu {
+  position: absolute;
+  top: 125px; /* Adjust this value to line up with the ✍️ button */
+  left: 75px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  background-color: rgba(30, 30, 30, 0.9);
+  border-radius: 8px;
+  z-index: 100;
+}
+
+.separator {
+  height: 1px;
+  margin: 0;
+  background: linear-gradient(
+    to right,
+    rgba(255,255,255,0.15),
+    rgba(255,255,255,0.95),
+    rgba(255,255,255,0.15)
+  );
+}
+
+.main-toolbar,
+.annotate-menu,
+.viewer-controls {
+  gap: 2px;
+}

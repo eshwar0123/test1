@@ -1,0 +1,425 @@
+/* =========================
+   HEADER (Sticky + Left Logo (only when sidebar closed) + Hamburger)
+========================= */
+
+/* ── Dark mode toggle button ── */
+.dm-toggle {
+  background: none;
+  border: 1px solid rgba(0,0,0,0.15);
+  border-radius: 99px;
+  width: 34px;
+  height: 34px;
+  font-size: 15px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #000000;
+  transition: background .15s, border-color .15s;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+.dm-toggle:hover { background: rgba(0,0,0,0.06); color: #0f172a; }
+
+/* Header — light blue gradient for light mode, dark navy for dark mode */
+.radiology-app .header {
+  position: sticky;
+  top: 0;
+  z-index: 9999;
+  background-color: #b8d2e6 !important;
+  background-image: url("/header.png") !important;
+  background-position: center !important;
+  background-size: 100% 100% !important;
+  background-repeat: no-repeat !important;
+  border-bottom: 1px solid rgba(100, 160, 210, 0.2);
+}
+
+/* Inner row */
+.radiology-app .header-inner {
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-left: 16px;
+  padding-right: 16px;
+  gap: 16px;
+}
+
+/* LEFT — Logo + Nav */
+.radiology-app .header-left {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+.header-logo-wrap {
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.header-logo-img {
+  height: 36px;
+  width: auto;
+  display: block;
+}
+
+/* Horizontal nav links */
+.header-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.header-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 18px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #000000;
+  text-decoration: none;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.header-nav-link:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #0f172a;
+  text-decoration: none;
+}
+.header-nav-link.active {
+  background: #1e40af;
+  color: #1e3a8a !important; /* dark blue */
+    box-shadow: 0 2px 8px rgba(30, 64, 175, 0.3);
+}
+
+
+.profile-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+}
+
+
+
+
+/* Brand text */
+.radiology-app .header-brand-text {
+  font-weight: 800;
+  font-size: 18px;
+  color: #1f2937;
+  letter-spacing: 0.2px;
+}
+
+/* Hamburger button */
+.radiology-app .header-toggler {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+
+/* RIGHT */
+.radiology-app .header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.radiology-app .header-right > .gt-lang-switcher {
+  height: 34px;
+  flex-shrink: 0;
+}
+
+
+/* =========================
+   PROFILE DROPDOWN STYLE
+========================= */
+
+/* =========================
+   PROFILE DROPDOWN STYLE
+========================= */
+
+.profile-dropdown-item {
+  transition: all 0.2s ease;
+  border-radius: 6px;
+  cursor: pointer;          /* ✅ pointer added */
+}
+
+/* Hover */
+.profile-dropdown-item:hover {
+  background: linear-gradient(90deg, #b9d7f33b, #0a368862) !important;
+  transform: translateX(3px);
+  cursor: pointer;          /* ✅ pointer on hover */
+}
+
+/* Active */
+.profile-dropdown-item:active {
+  background: linear-gradient(90deg, #bcd6f0, #0b3a92) !important;
+  color: white !important;
+}
+
+
+/* =========================
+   GREEN PROFILE TOGGLE (Like Search / Open Viewer)
+========================= */
+
+/* =========================
+   GREEN CIRCULAR PROFILE TOGGLE
+========================= */
+
+/* ✅ Profile button */
+.radiology-app .green-profile-toggle {
+  width: 36px !important;
+  height: 36px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border: 2px solid rgba(0,0,0,0.12) !important;
+  background: #1e40af !important;
+  color: #fff !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+}
+.radiology-app .green-profile-toggle:hover {
+  background: #1d4ed8 !important;
+}
+
+.radiology-app .green-profile-toggle .profile-avatar {
+  color: white !important;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+/* Remove default dropdown arrow */
+.radiology-app .green-profile-toggle::after {
+  display: none !important;
+}
+
+.header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+}
+
+.header-center {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  max-width: 900px;
+  width: 60%;
+}
+
+.demo-disclaimer {
+  font-size: 17px;
+  margin: 0;
+  color: #666;
+  font-weight: 500;
+}
+
+
+
+/* =========================
+   NOTIFICATION BELL
+========================= */
+.notif-wrapper {
+  position: relative;
+  margin-right: 10px;
+}
+
+.notif-bell {
+  background: none;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 50%;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #000000;
+  transition: background 0.15s, border-color 0.15s;
+  position: relative;
+}
+.notif-bell:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #0f172a;
+}
+
+.notif-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 99px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  line-height: 1;
+  border: 2px solid #a8cce8;
+}
+
+/* Dropdown panel */
+.notif-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 380px;
+  max-height: 420px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.08);
+  z-index: 10010;
+  overflow: hidden;
+  animation: notifSlideIn 0.15s ease;
+}
+@keyframes notifSlideIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.notif-dropdown-header {
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #e5e7eb;
+}
+.notif-dropdown-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+.notif-mark-read {
+  background: none;
+  border: none;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.notif-mark-read:hover {
+  text-decoration: underline;
+}
+
+.notif-dropdown-list {
+  overflow-y: auto;
+  max-height: 350px;
+}
+
+.notif-item {
+  display: flex;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  transition: background 0.12s;
+  cursor: pointer;
+}
+.notif-item:hover {
+  background: #f0f7ff;
+}
+.notif-item.unread {
+  background: #eff6ff;
+}
+
+.notif-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+.notif-dot.stat           { background: #dc2626; }
+.notif-dot.urgent         { background: #f59e0b; }
+.notif-dot.report         { background: #2563eb; }
+.notif-dot.system         { background: #64748b; }
+.notif-dot.case_assigned  { background: #16a34a; }
+
+.notif-content {
+  flex: 1;
+  min-width: 0;
+}
+.notif-item-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 2px;
+}
+.notif-item-desc {
+  font-size: 12px;
+  color: #475569;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.notif-item-time {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 3px;
+}
+
+/* Login button */
+.header-login-btn {
+  background: #2563eb !important;
+  border: none !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+  padding: 6px 18px !important;
+  border-radius: 6px !important;
+  font-size: 13px !important;
+  cursor: pointer !important;
+  transition: background 0.15s !important;
+}
+.header-login-btn:hover {
+  background: #1d4ed8 !important;
+}
+
+
+
+/* =========================
+   QUEUE DETAILS MODAL ABOVE HEADER + SOFTER BACKDROP
+========================= */
+.queue-details-modal,
+.queue-details-modal .modal-dialog,
+.queue-details-modal .modal-content {
+  z-index: 20030 !important;
+}
+
+.queue-details-modal.modal,
+.queue-details-modal.fade,
+.queue-details-modal.show {
+  z-index: 20030 !important;
+}
+
+.modal-backdrop.show {
+  background-color: rgba(15, 23, 42, 0.28) !important;
+}
+
+/* keep body overview higher than queue modal */
+.body-overview-modal,
+.body-overview-modal .modal-dialog,
+.body-overview-modal .modal-content {
+  z-index: 20050 !important;
+}
+
+.body-overview-modal.modal,
+.body-overview-modal.fade,
+.body-overview-modal.show {
+  z-index: 20050 !important;
+}

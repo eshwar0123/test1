@@ -1,0 +1,626 @@
+/* =========================================================
+ * Upload.modal.css
+ * Create this file alongside Upload.css. The new Upload.js
+ * imports it on top of your existing Upload.css.
+ * ======================================================= */
+
+/* ---------- preview box (bulk) ---------- */
+.org-preview-box {
+  margin-top: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  max-height: 180px;
+  overflow: auto;
+}
+.org-preview-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px;
+  font-weight: 600; font-size: 13px; color: #334155;
+  border-bottom: 1px solid #e2e8f0;
+  position: sticky; top: 0; background: #f8fafc;
+}
+.org-preview-list { padding: 6px 0; }
+.org-preview-row {
+  display: grid;
+  grid-template-columns: 70px 1fr 140px 110px;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 14px;
+  font-size: 13px;
+}
+.org-preview-row.warn { background: #fff7ed; }
+.org-preview-name { color: #0f172a; font-weight: 500; }
+.org-preview-meta { color: #64748b; font-size: 12px; }
+.org-preview-files { color: #16a34a; font-size: 12px; text-align: right; }
+.org-preview-row.warn .org-preview-files { color: #c2410c; }
+
+/* ---------- view/edit modal ---------- */
+.org-modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+  z-index: 2000;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.org-modal {
+  width: min(1100px, 100%);
+  max-height: 90vh;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 30px 60px rgba(0,0,0,.25);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.org-modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 22px;
+  border-bottom: 1px solid #e2e8f0;
+  background: linear-gradient(135deg, #f8fafc, #eef2ff);
+}
+.org-modal-title { font-size: 18px; font-weight: 700; color: #0f172a; }
+.org-modal-head-actions { display: flex; gap: 8px; align-items: center; }
+.org-modal-close {
+  width: 32px; height: 32px; border-radius: 8px;
+  border: none; background: #e2e8f0; color: #334155;
+  font-size: 20px; cursor: pointer;
+}
+.org-modal-close:hover { background: #cbd5e1; }
+
+.org-modal-body {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 0;
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+}
+@media (max-width: 900px) {
+  .org-modal-body { grid-template-columns: 1fr; }
+}
+
+/* left: viewer */
+.org-modal-viewer {
+  display: flex; flex-direction: column;
+  border-right: 1px solid #e2e8f0;
+  min-height: 0;
+  background: #0f172a;
+}
+.org-modal-filebar {
+  display: flex; gap: 6px; padding: 10px 12px; overflow-x: auto;
+  background: #1e293b; border-bottom: 1px solid #334155;
+}
+.org-modal-filechip {
+  display: inline-flex; align-items: center; gap: 6px;
+  max-width: 180px;
+  padding: 5px 10px;
+  background: #334155; color: #e2e8f0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 11px; cursor: pointer;
+  white-space: nowrap;
+}
+.org-modal-filechip.active {
+  background: #2563eb; color: #fff; border-color: #60a5fa;
+}
+.org-modal-filechip-name {
+  overflow: hidden; text-overflow: ellipsis; max-width: 140px;
+}
+.org-modal-filechip-x {
+  color: #f87171; font-size: 14px; line-height: 1;
+  padding: 0 2px; border-radius: 3px;
+}
+.org-modal-filechip-x:hover { background: rgba(255,255,255,.1); }
+
+.org-modal-stage {
+  flex: 1; min-height: 380px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 14px;
+  background: #0b1220;
+  overflow: auto;
+}
+.org-modal-img {
+  max-width: 100%; max-height: 100%;
+  object-fit: contain;
+  background: #000; border-radius: 6px;
+}
+.org-modal-dicom-placeholder {
+  text-align: center; color: #cbd5e1;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+}
+.org-modal-dicom-name { font-family: monospace; font-size: 13px; color: #e2e8f0; }
+.org-modal-dicom-hint { font-size: 12px; color: #94a3b8; }
+
+.org-modal-addfiles {
+  padding: 10px 14px;
+  background: #1e293b; color: #93c5fd;
+  text-align: center; font-size: 13px; cursor: pointer;
+  border-top: 1px solid #334155;
+}
+.org-modal-addfiles:hover { background: #273549; }
+
+/* right: details */
+.org-modal-details {
+  padding: 20px 22px;
+  overflow: auto;
+  display: flex; flex-direction: column;
+  gap: 14px;
+  background: #fff;
+}
+.org-modal-detail-title {
+  font-size: 13px; font-weight: 700; color: #0f172a;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  padding-bottom: 8px; border-bottom: 1px solid #e2e8f0;
+}
+
+.org-modal-dl {
+  display: grid; grid-template-columns: 110px 1fr;
+  gap: 8px 14px;
+  margin: 0; font-size: 13px;
+}
+.org-modal-dl dt { color: #64748b; font-weight: 500; }
+.org-modal-dl dd { color: #0f172a; margin: 0; }
+
+.org-modal-editform {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
+.org-modal-editform .org-upload-form-group { margin: 0; }
+
+.org-modal-footer {
+  margin-top: auto; padding-top: 14px;
+  display: flex; gap: 8px; justify-content: flex-end;
+  border-top: 1px solid #e2e8f0;
+}
+/* =========================================================
+ * Banner + History (added for History tab + inline notifications)
+ * ======================================================= */
+
+/* ---------- inline success/error banner ---------- */
+.org-upload-banner {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  margin: 0 0 14px;
+  border-radius: 10px;
+  border: 1px solid;
+  font-size: 13px;
+  font-weight: 500;
+  animation: org-banner-in 0.22s ease-out;
+}
+.org-upload-banner.success {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #065f46;
+}
+.org-upload-banner.error {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+.org-upload-banner button {
+  width: 22px; height: 22px; border-radius: 6px;
+  border: none; background: transparent; cursor: pointer;
+  color: inherit; opacity: 0.6; font-size: 16px; line-height: 1;
+}
+.org-upload-banner button:hover { opacity: 1; }
+
+@keyframes org-banner-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- history tab ---------- */
+.org-history {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 4px 2px;
+}
+
+.org-history-batch {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+}
+.org-history-batch[open] {
+  box-shadow: 0 2px 6px rgba(15,23,42,0.04);
+}
+
+.org-history-summary {
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 16px;
+  cursor: pointer;
+  list-style: none;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  font-size: 13px;
+  user-select: none;
+}
+.org-history-summary::-webkit-details-marker { display: none; }
+.org-history-summary::before {
+  content: "▸";
+  color: #94a3b8;
+  font-size: 12px;
+  transition: transform 0.15s;
+  display: inline-block;
+}
+.org-history-batch[open] .org-history-summary::before {
+  transform: rotate(90deg);
+}
+.org-history-summary:hover {
+  background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+}
+
+.org-history-badge {
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.org-history-date {
+  color: #0f172a;
+  font-weight: 600;
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 12px;
+}
+
+.org-history-count {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.org-history-excel {
+  margin-left: auto;
+  color: #475569;
+  font-size: 12px;
+  max-width: 220px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.org-history-table {
+  border-radius: 0 !important;
+  border: none !important;
+}
+.org-history-table thead th {
+  background: #f8fafc;
+  font-size: 11px;
+  color: #64748b;
+}
+
+/* =========================================================
+ * Floating toast (top-right of viewport, auto-dismissing)
+ * ======================================================= */
+.org-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 5000;
+  display: flex; align-items: center; gap: 12px;
+  min-width: 340px; max-width: 500px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  border: 1px solid;
+  box-shadow: 0 12px 30px rgba(0,0,0,.15), 0 4px 8px rgba(0,0,0,.08);
+  font-size: 14px;
+  font-weight: 500;
+  animation: org-toast-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  backdrop-filter: blur(8px);
+}
+.org-toast.success {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border-color: #047857;
+  color: #fff;
+}
+.org-toast.error {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  border-color: #b91c1c;
+  color: #fff;
+}
+.org-toast-icon {
+  flex-shrink: 0;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.25);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; font-weight: 700;
+}
+.org-toast-message {
+  flex: 1;
+  line-height: 1.4;
+}
+.org-toast-close {
+  flex-shrink: 0;
+  width: 24px; height: 24px;
+  border: none; background: rgba(255,255,255,0.15);
+  border-radius: 6px;
+  color: #fff; cursor: pointer;
+  font-size: 16px; line-height: 1;
+  opacity: 0.8;
+}
+.org-toast-close:hover {
+  background: rgba(255,255,255,0.3);
+  opacity: 1;
+}
+
+@keyframes org-toast-in {
+  from { opacity: 0; transform: translateX(30px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* =========================================================
+ * "Ready to Submit" bar (Patient Records tab)
+ * Only shows when preview is loaded — tells user loud and clear
+ * there are pending records waiting to be saved to DB.
+ * ======================================================= */
+.org-ready-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  margin-bottom: 14px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #dbeafe 0%, #e0e7ff 100%);
+  border: 1px solid #93c5fd;
+  animation: org-banner-in 0.22s ease-out;
+}
+
+.org-ready-info {
+  display: flex; align-items: center; gap: 12px;
+  font-size: 14px;
+  color: #1e3a8a;
+}
+
+.org-ready-info strong {
+  color: #1e40af;
+  font-weight: 700;
+}
+
+.org-ready-dot {
+  flex-shrink: 0;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: #3b82f6;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.25);
+  animation: org-ready-pulse 2s ease-in-out infinite;
+}
+@keyframes org-ready-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.25); }
+  50%      { box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.10); }
+}
+
+.org-ready-actions {
+  display: flex; gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Error state — duplicates in the preview */
+.org-ready-bar.has-errors {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  border-color: #f87171;
+}
+.org-ready-bar.has-errors .org-ready-info { color: #991b1b; }
+.org-ready-bar.has-errors .org-ready-dot {
+  background: #ef4444;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.25);
+}
+
+/* =========================================================
+ * QC badges (in history table) + Returned tab
+ * ======================================================= */
+.org-qc-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+.org-qc-badge.qc-pending {
+  background: #f1f5f9; color: #475569; border-color: #cbd5e1;
+  animation: qc-pulse 1.6s ease-in-out infinite;
+}
+.org-qc-badge.qc-pass    { background: #ecfdf5; color: #065f46; border-color: #a7f3d0; }
+.org-qc-badge.qc-warn    { background: #fffbeb; color: #92400e; border-color: #fcd34d; }
+.org-qc-badge.qc-error   { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
+
+@keyframes qc-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+
+/* Counter badge on tabs (shows count next to Returned) */
+.org-tab-badge {
+  margin-left: 6px;
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+/* Returned cases list */
+.org-returned {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 4px 2px;
+  /* Cap height so only ~2 cards show; rest scrolls. Each card is roughly
+     180–220px tall depending on reason length — 440px ≈ 2 cards with gap. */
+  max-height: 460px;
+  overflow-y: auto;
+  padding-right: 6px;   /* room for the scrollbar */
+}
+
+.org-returned-card {
+  border: 1px solid #fecaca;
+  background: linear-gradient(135deg, #fef2f2 0%, #fff 40%);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.org-returned-card.ack {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  opacity: 0.7;
+}
+
+.org-returned-head {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 12px;
+}
+.org-returned-title-row {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 14px;
+  flex-wrap: wrap;
+}
+.org-returned-title-row strong { color: #0f172a; }
+.org-returned-modality {
+  color: #64748b; font-size: 12px;
+  padding: 1px 8px;
+  background: #e2e8f0;
+  border-radius: 6px;
+}
+.org-returned-meta {
+  font-size: 11px; color: #64748b;
+  text-align: right;
+  flex-shrink: 0;
+}
+.org-returned-ack { color: #16a34a; font-weight: 600; }
+
+.org-returned-reason,
+.org-returned-files {
+  background: rgba(255,255,255,0.7);
+  border: 1px solid #fee2e2;
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+.org-returned-card.ack .org-returned-reason,
+.org-returned-card.ack .org-returned-files {
+  border-color: #e2e8f0;
+}
+.org-returned-reason-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+.org-returned-reason-text {
+  font-size: 13px;
+  color: #7f1d1d;
+  line-height: 1.5;
+  word-break: break-word;
+}
+.org-returned-card.ack .org-returned-reason-text { color: #475569; }
+
+.org-returned-filechips {
+  display: flex; gap: 6px; flex-wrap: wrap;
+}
+.org-returned-filechip {
+  font-size: 11px;
+  padding: 3px 8px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  color: #334155;
+  font-family: 'SF Mono', 'Consolas', monospace;
+}
+
+.org-returned-actions {
+  display: flex; gap: 8px; justify-content: flex-end;
+}
+
+/* Lighter Acknowledge button — less visual noise on the returned card */
+.org-ack-btn {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  background: #e0f2fe;
+  border: 1px solid #bae6fd;
+  color: #0369a1;
+  transition: background 0.15s, border-color 0.15s;
+}
+.org-ack-btn:hover {
+  background: #bae6fd;
+  border-color: #7dd3fc;
+}
+.org-ack-btn:active {
+  background: #7dd3fc;
+}
+
+/* Extra stat-card tones for Pending and Warn */
+.org-upload-stat.pending .org-upload-stat-value { color: #64748b; }
+.org-upload-stat.pending .org-upload-stat-label { color: #94a3b8; }
+.org-upload-stat.warn    .org-upload-stat-value { color: #d97706; }
+.org-upload-stat.warn    .org-upload-stat-label { color: #a16207; }
+/* =========================================================
+ * Horizontal scroll for tab contents — so wide tables and
+ * long card rows don't overflow the card body.
+ * ======================================================= */
+
+/* History tab — each batch's table scrolls horizontally */
+.org-history-table-wrap {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+.org-history-table-wrap .org-upload-table {
+  min-width: 700px;    /* force horizontal scroll below this width */
+}
+
+/* Patient Records preview table — keep existing vertical scroll,
+   also enable horizontal when content is wide */
+.org-upload-table-wrap--scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.org-upload-table-wrap--scroll .org-upload-table {
+  min-width: 900px;
+}
+
+/* Rejected tab — allow a very long reason or filechip list to scroll
+   horizontally within each card rather than breaking layout. */
+.org-returned-reason,
+.org-returned-files {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.org-returned-reason-text {
+  white-space: normal;   /* wrap by default */
+  word-break: break-word;
+}
+.org-returned-filechips {
+  flex-wrap: nowrap;     /* long file lists scroll sideways instead of wrapping */
+  overflow-x: auto;
+  padding-bottom: 2px;   /* room for scrollbar */
+}
+
+/* Scrollbar styling for the three tab content areas */
+.org-history-table-wrap::-webkit-scrollbar,
+.org-upload-table-wrap--scroll::-webkit-scrollbar,
+.org-returned::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+.org-history-table-wrap::-webkit-scrollbar-thumb,
+.org-upload-table-wrap--scroll::-webkit-scrollbar-thumb,
+.org-returned::-webkit-scrollbar-thumb {
+  background: rgba(148,163,184,0.5);
+  border-radius: 4px;
+}
+.org-history-table-wrap::-webkit-scrollbar-thumb:hover,
+.org-upload-table-wrap--scroll::-webkit-scrollbar-thumb:hover,
+.org-returned::-webkit-scrollbar-thumb:hover {
+  background: rgba(100,116,139,0.7);
+}
