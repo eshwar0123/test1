@@ -548,7 +548,32 @@ def _extract_dicom_meta(ds) -> dict:
         except Exception:
             return None
 
+    # PixelSpacing is [row_mm, col_mm] — falls back to ImagerPixelSpacing, which some
+    # X-ray/CR equipment populates instead (detector-plane spacing, not patient-plane, but
+    # the closest available value when true PixelSpacing is absent).
+    def get_pixel_spacing():
+        try:
+            ps = getattr(ds, "PixelSpacing", None) or getattr(ds, "ImagerPixelSpacing", None)
+            if ps and len(ps) >= 2:
+                return float(ps[0]), float(ps[1])
+        except Exception:
+            pass
+        return None, None
+
+    row_mm, col_mm = get_pixel_spacing()
+
+    def gi(tag):
+        try:
+            v = getattr(ds, tag, None)
+            return int(v) if v is not None else None
+        except Exception:
+            return None
+
     return {
+        "pixel_spacing_row_mm": row_mm,
+        "pixel_spacing_col_mm": col_mm,
+        "rows": gi("Rows"),
+        "columns": gi("Columns"),
         "modality": g("Modality"),
         "series_number": g("SeriesNumber"),
         "study_description": g("StudyDescription"),
@@ -600,6 +625,16 @@ def _get_cached_scan(s3_key: str):
                 arr = data[:, :, mid]
             else:
                 arr = data
+            try:
+                zooms = nii_img.header.get_zooms()
+                meta = {
+                    "pixel_spacing_row_mm": float(zooms[0]) if len(zooms) > 0 else None,
+                    "pixel_spacing_col_mm": float(zooms[1]) if len(zooms) > 1 else None,
+                    "rows": int(data.shape[0]) if data.ndim >= 1 else None,
+                    "columns": int(data.shape[1]) if data.ndim >= 2 else None,
+                }
+            except Exception:
+                pass
         else:
             from dicom_transcode import read_dicom_lenient
             # read_dicom_lenient handles both cases that weren't normalized
