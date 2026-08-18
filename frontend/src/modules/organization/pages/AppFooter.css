@@ -1,0 +1,115 @@
+.org-footer {
+  display: block;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  background-color: #f1f5f9;
+  background-image: url("/sidebar.png");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  border-top: 1px solid #e2e8f0;
+}
+
+.org-footer-inner {
+  display: flex;
+  width: 100%;
+  max-width: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  gap: 16px;
+  flex-wrap: wrap;
+  box-sizing: border-box;
+}
+
+@media (min-width: 640px) {
+  .org-footer-inner {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .org-footer-inner {
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+}
+
+.org-footer-version {
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f172a;
+  opacity: 0.6;
+  white-space: nowrap;
+}
+
+.org-footer-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.org-footer-link {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  text-decoration: none;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.org-footer-link:hover {
+  background: rgba(15, 23, 42, 0.12);
+  color: #0f172a;
+}
+
+.org-footer-link.active {
+  color: #1e40af;
+  font-weight: 700;
+}
+
+.org-footer-sep {
+  color: #0f172a;
+  opacity: 0.35;
+  font-size: 13px;
+  user-select: none;
+}
+
+.org-footer-copy {
+  font-size: 12px;
+  color: #0f172a;
+  opacity: 0.55;
+  white-space: nowrap;
+}
+
+[data-theme="dark"] .org-footer {
+  background-color: #0f172a;
+  background-image: linear-gradient(rgba(10, 15, 30, 0.8), rgba(10, 15, 30, 0.8)), url("/sidebar.png");
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .org-footer-version,
+[data-theme="dark"] .org-footer-copy,
+[data-theme="dark"] .org-footer-sep {
+  color: #94a3b8;
+  opacity: 1;
+}
+
+[data-theme="dark"] .org-footer-link {
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] .org-footer-link:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+[data-theme="dark"] .org-footer-link.active {
+  color: #60a5fa;
+}

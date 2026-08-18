@@ -1,0 +1,89 @@
+/* =========================
+   Organization layout
+   Full width, no sidebar
+========================= */
+
+html,
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+  min-height: 100%;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow-x: hidden;
+  overflow-y: auto;
+  --cui-sidebar-occupy-start: 0px !important;
+  --cui-sidebar-occupy-end: 0px !important;
+  --cui-sidebar-width: 0px !important;
+}
+
+.radiology-app .container,
+.radiology-app .container-fluid,
+.radiology-app .container-xxl,
+.radiology-app .container-xl,
+.radiology-app .container-lg {
+  width: 100% !important;
+  max-width: 100% !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+.radiology-app .header {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.header-inner {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box;
+}
+
+.radiology-app {
+  width: 100%;
+  min-height: 100vh;
+}
+
+.org-layout {
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  overflow-y: visible;
+}
+
+.org-main {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  overflow-y: visible;
+}
+
+.radiology-app .sidebar,
+.radiology-app .gp-sidebar,
+.radiology-app .c-sidebar {
+  display: none !important;
+  width: 0 !important;
+}
+
+.org-footer,
+.radiology-app .org-footer,
+.radiology-app footer {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding-inline: 0 !important;
+  box-sizing: border-box !important;
+  flex-shrink: 0;
+}
+
+.organization-app .org-layout > .org-footer,
+.organization-app .org-layout > footer.org-footer {
+  margin-left: 0 !important;
+  width: 100% !important;
+  max-width: none !important;
+}

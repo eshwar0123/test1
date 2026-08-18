@@ -1,0 +1,28 @@
+fastapi
+uvicorn
+python-multipart
+pydantic
+sqlalchemy
+psycopg2-binary
+python-dotenv
+passlib[bcrypt]
+bcrypt
+python-jose[cryptography]
+email-validator
+boto3
+pydicom
+pylibjpeg
+pylibjpeg-libjpeg
+pylibjpeg-openjpeg
+pylibjpeg-rle
+# Second, independent pixel-data decoder — ships prebuilt wheels (no C
+# compiler needed on the server), so it's much less likely to silently fail
+# to install than pylibjpeg-openjpeg. pydicom tries all registered handlers
+# automatically, so having both just widens transfer-syntax coverage.
+python-gdcm
+nibabel
+numpy
+Pillow
+# pip uninstall bcrypt passlib -y
+# pip install "bcrypt==3.2.2" "passlib==1.7.4"
+
