@@ -1,0 +1,30 @@
+.theme-btn-sm {
+  background: linear-gradient(90deg, #57a1eb, #07265f);
+  border: none;
+  color: white;
+  padding: 6px 14px;
+  font-weight: 500;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.theme-btn-sm:hover {
+  background: linear-gradient(90deg, #8eb0f086, #001e5bb4);
+  transform: translateY(-1px);
+}
+
+.theme-btn-sm:active {
+  transform: scale(0.98);
+}
+
+/* =========================
+   DARK MODE OVERRIDES
+========================= */
+.radiology-app.dark .theme-btn-sm {
+  background: linear-gradient(90deg, #6ab4f7, #1a3f7a);
+  color: #ffffff;
+}
+
+.radiology-app.dark .theme-btn-sm:hover {
+  background: linear-gradient(90deg, #8ec8ff, #2a5a9e);
+}
