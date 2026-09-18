@@ -1,0 +1,301 @@
+@use "@coreui/coreui/scss/coreui" as * with (
+  $enable-deprecation-messages: false,
+);
+
+@use "@coreui/chartjs/scss/coreui-chartjs";
+@use "vendors/simplebar";
+
+/* =========================
+   Global
+========================= */
+body {
+  background-color: var(--cui-tertiary-bg);
+}
+
+/* 🔥 Prevent full page scroll */
+html,
+body {
+  height: 100%;
+  overflow: hidden; // prevent whole page scrolling
+}
+
+.wrapper {
+  width: 100%;
+  padding-inline: var(--cui-sidebar-occupy-start, 0)
+    var(--cui-sidebar-occupy-end, 0);
+  will-change: auto;
+  @include transition(padding 0.15s);
+
+  height: 100vh;          // full viewport height
+  overflow: hidden;       // stop wrapper scrolling
+}
+
+/* =========================
+   Header height reduce
+========================= */
+.header > .container-fluid,
+.sidebar-header {
+  min-height: 3.25rem; // reduced from 4rem
+}
+
+.header > .container-fluid + .container-fluid {
+  min-height: 2.5rem;
+}
+
+/* =========================
+   Sidebar brand
+========================= */
+.sidebar-brand-full {
+  margin-left: 3px;
+}
+
+.sidebar-header {
+  .nav-underline-border {
+    --cui-nav-underline-border-link-padding-x: 1rem;
+    --cui-nav-underline-border-gap: 0;
+  }
+
+  .nav-link {
+    display: flex;
+    align-items: center;
+    min-height: 3.25rem;
+  }
+}
+
+.sidebar-toggler {
+  margin-inline-start: auto;
+}
+
+.sidebar-narrow,
+.sidebar-narrow-unfoldable:not(:hover) {
+  .sidebar-toggler {
+    margin-inline-end: auto;
+  }
+}
+
+/* =========================
+   SIDEBAR THEME (FINAL)
+========================= */
+/* =========================
+   SIDEBAR THEME (APPTHEME DRIVEN)
+========================= */
+
+/* set defaults (fallbacks) */
+:root {
+  --app-sidebar-bg: rgba(111,66,193,0.10);
+  --sidebar-text: rgba(255,255,255,0.90);
+  --sidebar-icon: rgba(255,255,255,0.90);
+  --sidebar-hover: rgba(255,255,255,0.10);
+  --sidebar-active: rgba(255,255,255,0.16);
+  --sidebar-active-text: #ffffff;
+}
+
+/* ✅ DO NOT hardcode dark bg here */
+/* .sidebar, .c-sidebar { background-color: #0f172a !important; }  <-- DELETE */
+
+/* apply theme background (supports gradient OR solid) */
+.custom-sidebar,
+.custom-sidebar.c-sidebar,
+.c-sidebar.custom-sidebar {
+  background: var(--app-sidebar-bg) !important;         /* gradient works */
+  background-color: transparent !important;             /* avoid overriding background */
+}
+
+/* Links */
+.custom-sidebar .sidebar-nav .nav-link,
+.custom-sidebar .nav-link {
+  color: var(--sidebar-text) !important;
+  font-weight: 500;
+}
+
+/* Icons */
+.custom-sidebar .nav-icon {
+  color: var(--sidebar-icon) !important;
+}
+
+/* Hover */
+.custom-sidebar .sidebar-nav .nav-link:hover,
+.custom-sidebar .nav-link:hover {
+  background: var(--sidebar-hover) !important;
+  color: var(--sidebar-active-text) !important;
+}
+
+/* Active */
+.custom-sidebar .sidebar-nav .nav-link.active,
+.custom-sidebar .nav-link.active {
+  background: var(--sidebar-active) !important;
+  color: var(--sidebar-active-text) !important;
+}
+
+
+/* =========================
+   Footer
+========================= */
+.footer {
+  min-height: 2.75rem;
+}
+
+/* =========================
+   Dark mode overrides
+========================= */
+@include color-mode(dark) {
+  body {
+    background-color: var(--cui-dark-bg-subtle);
+  }
+
+  .footer {
+    --cui-footer-bg: var(--cui-body-bg);
+  }
+
+
+}
+
+
+/* =========================
+   AppHeaderDropdown Theme
+   (Only this component)
+========================= */
+
+/* Bell + menu icons */
+.app-hdrdd .app-hdrdd-icon {
+  color: var(--hdrdd-icon) !important;
+}
+.app-hdrdd .app-hdrdd-bell:hover .app-hdrdd-icon {
+  color: var(--hdrdd-icon-hover) !important;
+}
+
+/* Badge */
+.app-hdrdd .app-hdrdd-badge {
+  background: var(--hdrdd-badge-bg) !important;
+  color: var(--hdrdd-badge-text) !important;
+}
+
+/* =========================
+   Dropdown menu
+========================= */
+.app-hdrdd-menu {
+  background: var(--hdrdd-menu-bg) !important;
+  color: var(--hdrdd-menu-text) !important;
+  border: none !important;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18) !important;
+}
+
+/* Header row (Settings) */
+.app-hdrdd-menu-header {
+  background: var(--hdrdd-menu-header-bg) !important;
+  color: var(--hdrdd-menu-header-text) !important;
+}
+
+/* Items: text + icons + CoreUI states */
+.app-hdrdd-menu .dropdown-item,
+.app-hdrdd-menu .dropdown-item span,
+.app-hdrdd-menu .dropdown-item svg {
+  color: var(--hdrdd-menu-text) !important;
+}
+
+.app-hdrdd-menu .dropdown-item:hover {
+  background: var(--hdrdd-menu-hover-bg) !important;
+}
+
+.app-hdrdd-menu .dropdown-item:focus,
+.app-hdrdd-menu .dropdown-item:active,
+.app-hdrdd-menu .dropdown-item.active {
+  background: var(--hdrdd-menu-hover-bg) !important;
+  color: var(--hdrdd-menu-text) !important;
+}
+
+/* =========================
+   Notification drawer (Offcanvas)
+========================= */
+.app-hdrdd-drawer,
+.app-hdrdd-drawer .offcanvas-header,
+.app-hdrdd-drawer .offcanvas-body {
+  background: var(--hdrdd-drawer-bg) !important;
+  color: var(--hdrdd-drawer-text) !important;
+}
+
+.app-hdrdd-drawer-header {
+  background: var(--hdrdd-drawer-header-bg) !important;
+  color: var(--hdrdd-drawer-header-text) !important;
+}
+
+.app-hdrdd-drawer-item:hover {
+  background: var(--hdrdd-drawer-item-hover-bg) !important;
+}
+
+/* Close (X) visibility on dark headers (optional but helpful) */
+.app-hdrdd-drawer .btn-close {
+  filter: invert(1) grayscale(1);
+}
+.app-hdrdd-icon {
+  transition: color 0.2s ease;
+}
+
+
+
+.wrapper {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* ===== Dashboard width fix ===== */
+.body {
+  width: 100%;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.25rem;
+  width: 100%;
+}
+
+.dashboard-split {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 1.25rem;
+  width: 100%;
+}
+
+@media (max-width: 1200px) {
+  .dashboard-split {
+    grid-template-columns: 1fr;
+  }
+}
+/* ===== GLOBAL FOOTER SPACE ===== */
+body {
+  padding-bottom: 46px; // same as footer height
+}
+
+.app-layout {
+  display: flex;
+}
+
+.wrapper {
+  flex: 1;
+  margin-left: 250px;
+}
+
+.content {
+  background: #f4f7fb;
+  min-height: 100vh;
+  padding: 20px;
+}
+
+
+/* ======================================
+   FORCE COREUI TO NOT SCROLL FULL PAGE
+====================================== */
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+.wrapper,
+.body,
+.content {
+  height: 100vh;
+  overflow: hidden !important;
+}
+

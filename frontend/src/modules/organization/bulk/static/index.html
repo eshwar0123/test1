@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Upload Patients</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+
+  <!-- Top Header Bar -->
+  <header class="app-header">
+    <div class="header-left">
+      <button class="icon-btn" id="sidebar-toggle" title="Toggle sidebar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="header-center">
+      <p class="header-disclaimer">All images, profiles, and data shown are fictional and for demonstration only, and do not represent real patients, professionals, or clinical cases.</p>
+    </div>
+    <div class="header-right">
+      <!-- Dark / Light Toggle -->
+      <button class="icon-btn theme-btn" id="theme-toggle" title="Toggle theme">
+        <svg id="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg id="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
+
+      <!-- Notification Bell -->
+      <div class="notif-wrap">
+        <button class="icon-btn notif-btn" id="notif-toggle" title="Notifications">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span class="notif-badge" id="notif-badge">2</span>
+        </button>
+        <!-- Notification Dropdown -->
+        <div class="notif-dropdown" id="notif-dropdown" style="display:none;">
+          <div class="notif-header">
+            <span>Notifications</span>
+            <button class="notif-clear-btn" id="notif-clear">Clear all</button>
+          </div>
+          <div class="notif-list" id="notif-list">
+            <div class="notif-item unread">
+              <div class="notif-dot"></div>
+              <div class="notif-content">
+                <div class="notif-title">Upload Complete</div>
+                <div class="notif-desc">Batch of 24 images uploaded successfully for C001.</div>
+                <div class="notif-time">2 min ago</div>
+              </div>
+            </div>
+            <div class="notif-item unread">
+              <div class="notif-dot"></div>
+              <div class="notif-content">
+                <div class="notif-title">Validation Warning</div>
+                <div class="notif-desc">3 rows failed validation in the last bulk upload.</div>
+                <div class="notif-time">15 min ago</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- User Avatar -->
+      <div class="avatar-wrap">
+        <button class="avatar-btn" id="avatar-toggle" title="Account">
+          <div class="avatar">
+            <img src="" alt="" id="avatar-img" style="display:none;" />
+            <span id="avatar-initials">JD</span>
+          </div>
+        </button>
+        <!-- Avatar Dropdown -->
+        <div class="avatar-dropdown" id="avatar-dropdown" style="display:none;">
+          <div class="avatar-profile">
+            <div class="avatar avatar-lg">
+              <span>JD</span>
+            </div>
+            <div>
+              <div class="avatar-name">John Doe</div>
+              <div class="avatar-email">john.doe@genphase.ai</div>
+            </div>
+          </div>
+          <div class="avatar-menu">
+            <a href="#" class="avatar-menu-item">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              Profile
+            </a>
+            <a href="#" class="avatar-menu-item">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+              Settings
+            </a>
+            <div class="avatar-menu-divider"></div>
+            <a href="#" class="avatar-menu-item avatar-menu-item--danger">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              Sign out
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="main-layout">
+
+    <!-- LEFT COLUMN: Upload Form -->
+    <div class="left-col">
+      <div class="card">
+        <div class="card-header" style="flex-direction:column;align-items:flex-start;gap:4px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            </span>
+            <div>
+              <h2 style="font-size:16px;font-weight:700;">Upload Patients</h2>
+              <p style="font-size:12px;color:var(--text-muted);margin-top:1px;">Add individual patients or bulk-upload from a single workspace.</p>
+            </div>
+          </div>
+          <button type="button" onclick="toggleDocs()" style="background:none;border:none;cursor:pointer;font-size:12px;font-weight:600;color:var(--accent);padding:0;display:inline-flex;align-items:center;gap:4px;margin-left:2px;">
+            <span id="docs-arrow">&#x25B6;</span> ! open docs
+          </button>
+        </div>
+
+        <!-- Docs Card -->
+        <div id="upload-docs-card" style="display:none;border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--surface-2);overflow:hidden;">
+          <div style="background:var(--accent-light);padding:10px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);">
+            <div>
+              <div style="font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;">UPLOAD GUIDE</div>
+              <div style="font-size:15px;font-weight:700;color:var(--text);margin-top:2px;">Upload Form Help</div>
+            </div>
+            <button type="button" onclick="toggleDocs()" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:14px;font-weight:700;color:var(--text-muted);">&#x2715;</button>
+          </div>
+          <div style="padding:16px;max-height:420px;overflow-y:auto;font-size:13px;">
+            <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:var(--text);">Single Patient Upload</div>
+            <ul style="list-style:disc;padding-left:18px;margin-bottom:14px;line-height:1.8;">
+              <li>Fill in <strong>Case ID</strong> (required), name, age, gender and study date.</li>
+              <li>Optionally attach one or more image files directly.</li>
+              <li><strong>Supported:</strong> <code>.dcm, .nii, .nii.gz, .png, .jpg, .mhd, .raw</code></li>
+            </ul>
+            <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:var(--text);">Bulk Upload</div>
+            <ul style="list-style:disc;padding-left:18px;margin-bottom:14px;line-height:1.8;">
+              <li><strong>Metadata File (Excel):</strong> Select one <code>.xlsx</code> or <code>.xls</code> file containing patient metadata.</li>
+              <li><strong>Image Folder:</strong> Select an uncompressed folder with case-wise image files.</li>
+            </ul>
+            <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:var(--text);">Expected Folder Structure</div>
+            <pre style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-size:12px;line-height:1.7;overflow-x:auto;margin-bottom:6px;">images/
+  C001/
+    img1.dcm
+    img2.dcm
+  C002/
+    scan1.nii.gz</pre>
+            <p style="color:var(--text-muted);font-size:12px;margin-bottom:14px;">The first folder level should match the Excel <code>Case_ID</code>.</p>
+            <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:var(--text);">Excel File Format</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
+              <span class="badge badge-blue">Case_ID</span>
+              <span class="badge badge-blue">Patient_Name</span>
+              <span class="badge badge-blue">Age</span>
+              <span class="badge badge-blue">Gender</span>
+              <span class="badge badge-blue">Study_Date</span>
+              <span class="badge badge-blue">Image_File_Name</span>
+            </div>
+            <div style="overflow-x:auto;margin-bottom:14px;">
+              <table style="font-size:11px;width:100%;">
+                <thead><tr><th>Case_ID</th><th>Patient_Name</th><th>Age</th><th>Gender</th><th>Study_Date</th><th>Image_File_Name</th></tr></thead>
+                <tbody>
+                  <tr><td>C001</td><td>John Doe</td><td>45</td><td>Male</td><td>2026-03-10</td><td>img1.dcm</td></tr>
+                  <tr><td>C002</td><td>Jane Smith</td><td>60</td><td>Female</td><td>2026-03-11</td><td>scan1.nii.gz</td></tr>
+                  <tr><td>C003</td><td>Bob Lee</td><td>52</td><td>Male</td><td>2026-03-12</td><td style="color:#2563eb;font-weight:600;">dcm</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:var(--text);">Validation Notes</div>
+            <ul style="list-style:disc;padding-left:18px;line-height:1.8;color:var(--text-muted);font-size:12px;">
+              <li><code>Case_ID</code> cannot be empty.</li>
+              <li><code>Image_File_Name</code> must exactly match the file name inside the selected folder.</li>
+              <li>Duplicate image names for the same case are rejected.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Upload Type Tabs -->
+        <div class="upload-tabs">
+          <button class="upload-tab-btn" id="tab-single-btn" data-upload-tab="single">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Single Patient
+          </button>
+          <button class="upload-tab-btn active" id="tab-bulk-btn" data-upload-tab="bulk">Bulk Upload</button>
+        </div>
+
+        <!-- ── Single Patient Panel ── -->
+        <div class="upload-tab-panel" id="upload-panel-single" style="display:none;">
+          <div class="card-body">
+            <form id="single-upload-form" novalidate>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div class="form-group">
+                  <label class="form-label">Case ID <span style="color:var(--error)">*</span></label>
+                  <input class="form-control" id="sp-case-id" type="text" placeholder="e.g. C010" required />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Patient Name</label>
+                  <input class="form-control" id="sp-name" type="text" placeholder="Full name" />
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div class="form-group">
+                  <label class="form-label">Age</label>
+                  <input class="form-control" id="sp-age" type="number" min="0" max="150" placeholder="Age" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Gender</label>
+                  <select class="form-control" id="sp-gender">
+                    <option value="">-- Select --</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Study Date</label>
+                <input class="form-control" id="sp-study-date" type="date" />
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Image Files <span style="color:var(--text-muted);font-weight:400;">(optional)</span></label>
+                <div class="drop-zone" id="sp-images-drop">
+                  <input type="file" id="sp-images-input" multiple accept=".dcm,.nii,.png,.jpg,.jpeg,.mhd,.raw" />
+                  <div class="dz-icon">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);opacity:.7;"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                  </div>
+                  <div class="dz-title">Drop images here or click to browse</div>
+                  <div class="dz-hint">.dcm &middot; .nii &middot; .nii.gz &middot; .png &middot; .jpg &middot; .mhd &middot; .raw</div>
+                  <div class="dz-selected" id="sp-images-selected"></div>
+                </div>
+                <div class="file-preview-list" id="sp-file-preview" style="display:none;"></div>
+              </div>
+
+              <!-- Workspace Status -->
+              <div class="workspace-status">
+                <div class="ws-label">WORKSPACE STATUS</div>
+                <div class="ws-title">Patient intake console</div>
+                <div class="ws-desc">Fill patient details, attach images and click Upload to register a new patient.</div>
+              </div>
+
+              <div id="sp-progress-wrap" style="display:none;margin-bottom:8px;">
+                <div class="progress-wrap">
+                  <div class="progress-label">
+                    <span id="sp-progress-text">Uploading...</span>
+                    <span id="sp-progress-pct">0%</span>
+                  </div>
+                  <div class="progress-bar-outer">
+                    <div class="progress-bar-inner" id="sp-progress-bar"></div>
+                  </div>
+                </div>
+              </div>
+
+              <button type="submit" class="btn btn-primary btn-full" id="sp-upload-btn">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+                Upload Patient
+              </button>
+            </form>
+            <div id="sp-result-area" style="display:none;margin-top:12px;"></div>
+          </div>
+        </div>
+
+        <!-- ── Bulk Upload Panel ── -->
+        <div class="upload-tab-panel active" id="upload-panel-bulk">
+          <div class="card-body">
+            <form id="upload-form" novalidate>
+
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+                <!-- Excel Metadata -->
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label">1. Upload Metadata File (Excel)</label>
+                  <div class="drop-zone" id="excel-drop">
+                    <input type="file" id="excel-input" accept=".xlsx,.xls" />
+                    <div class="dz-icon">
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--accent);opacity:.7;"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="9" x2="9" y2="21"/></svg>
+                    </div>
+                    <div class="dz-title">Drop Excel file here</div>
+                    <div class="dz-hint">.xlsx or .xls with patient metadata columns</div>
+                    <div class="dz-selected" id="excel-selected"></div>
+                    <button type="button" class="dz-browse-btn" onclick="document.getElementById('excel-input').click(); event.stopPropagation();">Browse File</button>
+                  </div>
+                </div>
+
+                <!-- Image Folder -->
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label">2. Upload Image Folder</label>
+                  <div class="drop-zone" id="images-drop">
+                    <input type="file" id="images-input" name="images" webkitdirectory multiple />
+                    <div class="dz-icon">
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--accent);opacity:.7;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                    </div>
+                    <div class="dz-title">Select image folder</div>
+                    <div class="dz-hint">Supports .dcm &middot; .nii &middot; .nii.gz &middot; .png &middot; .jpg &middot; .mhd &middot; .raw</div>
+                    <div class="dz-selected" id="images-selected"></div>
+                    <button type="button" class="dz-browse-btn" onclick="document.getElementById('images-input').click(); event.stopPropagation();">Browse Folder</button>
+                  </div>
+                  <div class="file-preview-list" id="file-preview-list" style="display:none;"></div>
+                </div>
+              </div>
+
+              <!-- Workspace Status -->
+              <div class="workspace-status">
+                <div class="ws-label">WORKSPACE STATUS</div>
+                <div class="ws-title">Dataset intake console</div>
+                <div class="ws-desc">Prepare metadata, verify folder structure, and review patient records from one clean upload workflow.</div>
+              </div>
+
+              <!-- Progress -->
+              <div id="progress-wrap" style="display:none;margin-bottom:8px;">
+                <div class="progress-wrap">
+                  <div class="progress-label">
+                    <span id="progress-text">Ready to upload</span>
+                    <span id="progress-pct">0%</span>
+                  </div>
+                  <div class="progress-bar-outer">
+                    <div class="progress-bar-inner" id="progress-bar"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Static ready bar shown before upload -->
+              <div class="progress-wrap" id="ready-bar">
+                <div class="progress-label">
+                  <span style="color:var(--text-muted);">Ready to upload</span>
+                  <span style="color:var(--text-muted);">0%</span>
+                </div>
+                <div class="progress-bar-outer">
+                  <div class="progress-bar-inner" style="width:0%;"></div>
+                </div>
+              </div>
+
+              <button type="submit" class="btn btn-primary btn-full" id="upload-btn">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+                Upload Dataset
+              </button>
+            </form>
+
+            <!-- Result Summary -->
+            <div id="result-area" style="display:none;margin-top:12px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Excel Format Guide -->
+      <div class="card" style="margin-top:16px;">
+        <div class="card-header">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          </span>
+          <div>
+            <h2>Excel Format</h2>
+            <p style="font-size:12px;color:var(--text-muted);margin-top:1px;">Expected metadata structure for the upload file.</p>
+          </div>
+        </div>
+        <div class="card-body" style="padding:0;">
+          <div style="overflow-x:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>CASE_ID</th>
+                  <th>PATIENT_NAME</th>
+                  <th>AGE</th>
+                  <th>GENDER</th>
+                  <th>STUDY_DATE</th>
+                  <th>IMAGE_FILE_NAME</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>C001</td><td>John Doe</td><td>45</td><td>Male</td><td>2026-03-10</td><td>img1.dcm</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT COLUMN: Stats + Patient Records -->
+    <div class="right-col">
+
+      <!-- Stats -->
+      <div class="stats-bar" id="stats-bar">
+        <div class="stat-card">
+          <div class="stat-label">Total Patients</div>
+          <div class="stat-value" id="stat-patients">128</div>
+        </div>
+        <div class="stat-card accent">
+          <div class="stat-label">Total Images</div>
+          <div class="stat-value" id="stat-images">1,642</div>
+        </div>
+        <div class="stat-card success">
+          <div class="stat-label">Successful</div>
+          <div class="stat-value" id="stat-success">1,596</div>
+        </div>
+        <div class="stat-card error">
+          <div class="stat-label">Failed</div>
+          <div class="stat-value" id="stat-failed">46</div>
+        </div>
+      </div>
+
+      <!-- Patient Records -->
+      <div class="card">
+        <div class="tabs">
+          <button class="tab-btn active" data-tab="patients">Patient Records</button>
+          <button class="tab-btn" data-tab="about">About</button>
+        </div>
+
+        <div class="tab-panel active" id="tab-patients">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <input type="text" class="form-control" id="patient-search" placeholder="Search by Case ID or Name..." style="max-width:260px;" />
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-primary" style="padding:6px 14px;font-size:13px;" onclick="openAddModal()">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add Patient
+              </button>
+              <button class="btn btn-secondary" onclick="loadPatients()">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.5-4.97"/></svg>
+                Refresh
+              </button>
+            </div>
+          </div>
+          <div class="patient-table-wrap">
+            <table id="patient-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Case ID</th>
+                  <th>Patient Name</th>
+                  <th>Age</th>
+                  <th>Gender</th>
+                  <th>Study Date</th>
+                  <th>Images</th>
+                  <th style="text-align:center;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="patient-tbody">
+                <tr><td colspan="8"><div class="empty-state"><div class="es-icon">&#x1F465;</div><p>No patients yet. Upload a dataset to get started.</p></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div id="patient-pagination" style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;"></div>
+        </div>
+
+        <div class="tab-panel" id="tab-about">
+          <h3 style="font-size:15px; margin-bottom:12px;">Supported Formats</h3>
+          <ul style="list-style:none; display:flex; flex-wrap:wrap; gap:8px; margin-bottom:20px;">
+            <li><span class="badge badge-blue">.dcm — DICOM</span></li>
+            <li><span class="badge badge-blue">.nii — NIfTI</span></li>
+            <li><span class="badge badge-blue">.nii.gz — NIfTI (compressed)</span></li>
+            <li><span class="badge badge-blue">.png</span></li>
+            <li><span class="badge badge-blue">.jpg / .jpeg</span></li>
+            <li><span class="badge badge-blue">.mhd</span></li>
+            <li><span class="badge badge-blue">.raw</span></li>
+          </ul>
+          <h3 style="font-size:15px; margin-bottom:8px;">API Endpoints</h3>
+          <ul style="font-size:13px; list-style:none; display:flex; flex-direction:column; gap:6px;">
+            <li><span class="badge badge-green">POST</span> <code>/api/bulk-upload</code> — Upload Excel + images</li>
+            <li><span class="badge badge-green">POST</span> <code>/api/patients</code> — Add single patient</li>
+            <li><span class="badge badge-blue">GET</span> <code>/api/patients</code> — List all patients</li>
+            <li><span class="badge badge-blue">GET</span> <code>/api/patients/{case_id}</code> — Patient detail + images</li>
+            <li><span class="badge badge-blue">GET</span> <code>/api/stats</code> — System statistics</li>
+            <li><span class="badge badge-blue">GET</span> <code>/docs</code> — Swagger API documentation</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Patient Detail Card -->
+      <div id="patient-detail-card" class="card" style="display:none;">
+        <div class="card-header" style="justify-content:space-between;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            </span>
+            <h2 id="detail-title">Patient Detail</h2>
+          </div>
+          <button class="btn btn-secondary" onclick="closeDetail()" style="padding:4px 12px;">&#x2715; Close</button>
+        </div>
+        <div class="card-body" id="detail-body"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-container"></div>
+
+  <!-- Edit Patient Modal -->
+  <div id="edit-modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:1000; align-items:center; justify-content:center;">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2>Edit Patient</h2>
+        <button onclick="closeEditModal()" class="modal-close-btn">&#x2715;</button>
+      </div>
+      <form id="edit-form" style="padding:22px;" onsubmit="submitEdit(event)">
+        <input type="hidden" id="edit-case-id" />
+        <div class="form-group">
+          <label class="form-label">Case ID</label>
+          <input class="form-control" id="edit-case-id-display" disabled style="background:var(--surface-2); color:var(--text-muted);" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Patient Name</label>
+          <input class="form-control" id="edit-name" type="text" placeholder="Full name" />
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+          <div class="form-group">
+            <label class="form-label">Age</label>
+            <input class="form-control" id="edit-age" type="number" min="0" max="150" placeholder="Age" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Gender</label>
+            <select class="form-control" id="edit-gender">
+              <option value="">-- Select --</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Study Date</label>
+          <input class="form-control" id="edit-study-date" type="text" placeholder="YYYY-MM-DD" />
+        </div>
+        <div style="border-top:1px solid var(--border); margin:16px 0;"></div>
+        <div class="form-group">
+          <label class="form-label">Replace / Add Image Files</label>
+          <div class="drop-zone" id="edit-images-drop" style="padding:18px 12px;">
+            <input type="file" id="edit-images-input" multiple webkitdirectory />
+            <div class="dz-icon" style="font-size:24px;">&#x1F5BC;&#xFE0F;</div>
+            <div class="dz-title" style="font-size:13px;">Drop new images here or click to browse</div>
+            <div class="dz-hint">.dcm &middot; .nii &middot; .nii.gz &middot; .png &middot; .jpg &middot; .mhd &middot; .raw</div>
+            <div class="dz-selected" id="edit-images-selected"></div>
+          </div>
+          <div id="edit-file-preview" class="file-preview-list" style="display:none;"></div>
+          <p class="form-hint">Files with the same name will replace the existing ones. New filenames will be added.</p>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:8px;">
+          <button type="submit" class="btn btn-primary" style="flex:1;" id="edit-save-btn">Save Changes</button>
+          <button type="button" class="btn btn-secondary" onclick="closeEditModal()" style="flex:1;">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Delete Confirm Modal -->
+  <div id="delete-modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:1000; align-items:center; justify-content:center;">
+    <div class="modal-box" style="max-width:400px; padding:28px;">
+      <div style="text-align:center; margin-bottom:20px;">
+        <div style="font-size:40px; margin-bottom:12px;">&#x1F5D1;&#xFE0F;</div>
+        <h2 style="font-size:17px; font-weight:700; margin-bottom:8px;">Delete Patient?</h2>
+        <p style="color:var(--text-muted); font-size:13px;">This will permanently delete <strong id="delete-patient-label"></strong> and all their images from storage. This cannot be undone.</p>
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button class="btn btn-secondary" onclick="closeDeleteModal()" style="flex:1;">Cancel</button>
+        <button class="btn" id="confirm-delete-btn" onclick="confirmDelete()" style="flex:1; background:var(--error); color:#fff;">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Patient Modal -->
+  <div id="add-modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:1000; align-items:center; justify-content:center;">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2>Add Patient</h2>
+        <button onclick="closeAddModal()" class="modal-close-btn">&#x2715;</button>
+      </div>
+      <form id="add-form" style="padding:22px;" onsubmit="submitAdd(event)">
+        <div class="form-group">
+          <label class="form-label">Case ID <span style="color:var(--error)">*</span></label>
+          <input class="form-control" id="add-case-id" type="text" placeholder="e.g. C010" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Patient Name</label>
+          <input class="form-control" id="add-name" type="text" placeholder="Full name" />
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+          <div class="form-group">
+            <label class="form-label">Age</label>
+            <input class="form-control" id="add-age" type="number" min="0" max="150" placeholder="Age" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Gender</label>
+            <select class="form-control" id="add-gender">
+              <option value="">-- Select --</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Study Date</label>
+          <input class="form-control" id="add-study-date" type="date" />
+        </div>
+        <div style="border-top:1px solid var(--border); margin:16px 0;"></div>
+        <div class="form-group">
+          <label class="form-label">Image Files (optional)</label>
+          <div class="drop-zone" id="add-images-drop" style="padding:18px 12px;">
+            <input type="file" id="add-images-input" multiple webkitdirectory />
+            <div class="dz-icon" style="font-size:24px;">&#x1F5BC;&#xFE0F;</div>
+            <div class="dz-title" style="font-size:13px;">Drop images here or click to browse</div>
+            <div class="dz-hint">.dcm &middot; .nii &middot; .nii.gz &middot; .png &middot; .jpg &middot; .mhd &middot; .raw</div>
+            <div class="dz-selected" id="add-images-selected"></div>
+          </div>
+          <div id="add-file-preview" class="file-preview-list" style="display:none;"></div>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:8px;">
+          <button type="submit" class="btn btn-primary" style="flex:1;" id="add-save-btn">Add Patient</button>
+          <button type="button" class="btn btn-secondary" onclick="closeAddModal()" style="flex:1;">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

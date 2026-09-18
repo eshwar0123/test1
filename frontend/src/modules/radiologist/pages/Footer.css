@@ -1,0 +1,94 @@
+/* =========================
+   App Footer — portal-rendered, truly full-width
+========================= */
+
+.app-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  margin: 0;
+  padding: 10px 24px;
+  z-index: 99999;
+  box-sizing: border-box;
+  background: #f8fafc;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.footer-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
+.footer-version {
+  font-size: 13px;
+  color: #64748b;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.footer-links {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.footer-link {
+  font-size: 13px;
+  color: #475569;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s ease;
+}
+
+.footer-link:hover {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+.footer-sep {
+  font-size: 13px;
+  color: #94a3b8;
+  user-select: none;
+}
+
+.footer-copy {
+  font-size: 13px;
+  color: #64748b;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Dark mode */
+.dark .app-footer {
+  background: #1a1d23;
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+.dark .footer-version,
+.dark .footer-copy {
+  color: #94a3b8;
+}
+.dark .footer-link {
+  color: #94a3b8;
+}
+.dark .footer-link:hover {
+  color: #60a5fa;
+}
+.dark .footer-sep {
+  color: #475569;
+}
+
+@media (max-width: 600px) {
+  .footer-inner {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    flex-wrap: wrap;
+  }
+}

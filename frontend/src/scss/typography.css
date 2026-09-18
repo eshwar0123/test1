@@ -1,0 +1,42 @@
+:root {
+  --font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* HEADINGS */
+h1 {
+  font-size: 32px;
+  font-weight: 900;
+  line-height: 1.15;
+}
+h2 {
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1.18;
+}
+h3 {
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+h4 {
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+h5 {
+  font-size: 17px;
+  font-weight: 800;
+}
+h6 {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+/* BODY */
+body {
+  font-family: var(--font-family);
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
