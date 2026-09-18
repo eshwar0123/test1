@@ -61,6 +61,49 @@ async function api(path, opts = {}) {
 }
 
 /* -----------------------------------------------------------
+ * Folder picking via the File System Access API
+ * ---------------------------------------------------------
+ * The classic <input webkitdirectory> flow relies on the browser's native
+ * "choose a folder" panel, which on macOS can leave Open permanently
+ * disabled for folders under Desktop/Documents/Downloads until the browser
+ * has been granted folder access in System Settings → Privacy & Security.
+ * showDirectoryPicker() goes through a separate, app-scoped permission
+ * flow that isn't gated by that same OS restriction, so we prefer it when
+ * the browser supports it (all recent Chromium browsers) and only fall
+ * back to the hidden <input> for browsers that don't (Firefox/Safari).
+ * --------------------------------------------------------- */
+async function walkDirectoryHandle(dirHandle, path = "") {
+  const files = [];
+  for await (const [name, handle] of dirHandle.entries()) {
+    const relPath = path ? `${path}/${name}` : name;
+    if (handle.kind === "file") {
+      const file = await handle.getFile();
+      try {
+        Object.defineProperty(file, "webkitRelativePath", { value: relPath, configurable: true });
+      } catch (_) {}
+      files.push(file);
+    } else if (handle.kind === "directory") {
+      files.push(...(await walkDirectoryHandle(handle, relPath)));
+    }
+  }
+  return files;
+}
+
+// Returns: array of File objects on success, null if the browser doesn't
+// support the API (caller should fall back to the hidden input), or [] if
+// the user cancelled the picker.
+async function pickFolderFiles() {
+  if (typeof window === "undefined" || !window.showDirectoryPicker) return null;
+  try {
+    const dirHandle = await window.showDirectoryPicker();
+    return await walkDirectoryHandle(dirHandle, dirHandle.name);
+  } catch (err) {
+    if (err?.name === "AbortError") return [];   // user cancelled — not an error
+    throw err;
+  }
+}
+
+/* -----------------------------------------------------------
  * File-matching logic  (Excel row  ↔  uploaded files)
  * --------------------------------------------------------- */
 const IMAGE_EXT = /\.(dcm|nii|nii\.gz|png|jpe?g|mhd|raw|tiff?)$/i;
@@ -276,25 +319,57 @@ export default function Upload() {
 
   const handleSpChange = (e) => setSp((s) => ({ ...s, [e.target.name]: e.target.value }));
 
-  const applySpFiles = (picked) => {
-    const result = picked.filter((f) => IMAGE_EXT.test(f.name));
+  const applySpFiles = async (picked) => {
+    const result = [];
+    for (const f of picked) {
+      if (f.name.toLowerCase().endsWith(".zip")) {
+        try {
+          const extracted = await extractZipFiles(f);
+          if (extracted.length === 0) showBanner("error", `No supported image files found inside ${f.name}.`);
+          result.push(...extracted);
+        } catch (err) {
+          showBanner("error", `Failed to extract ${f.name}: ${err.message}`);
+        }
+      } else if (IMAGE_EXT.test(f.name)) {
+        result.push(f);
+      }
+    }
     if (result.length === 0 && picked.length > 0) {
-      showBanner("error", "No supported image files found. Accepted: " + SUPPORTED);
+      showBanner("error", "No supported image files found. Accepted: " + SUPPORTED + ", .zip");
       return;
     }
     setSpFiles(result);
   };
 
+  // Folder picks are trusted as-is — a DICOM export commonly has files with no
+  // extension or a non-standard one, so we don't filter by IMAGE_EXT here.
+  const applySpFolderFiles = (picked) => {
+    setSpFiles(picked);
+  };
+
+  const handleSpBrowseFolder = async () => {
+    try {
+      const files = await pickFolderFiles();
+      if (files === null) { spFolderInputRef.current?.click(); return; }   // no FS Access API — fall back
+      if (files.length > 0) applySpFolderFiles(files);
+    } catch (err) {
+      showBanner("error", "Folder selection failed: " + err.message);
+    }
+  };
+
   const handleSpFiles = (e) => applySpFiles(Array.from(e.target.files || []));
+  const handleSpFolderFiles = (e) => applySpFolderFiles(Array.from(e.target.files || []));
 
   const handleSpDrop = async (e) => {
     e.preventDefault();
     const items = Array.from(e.dataTransfer.items || []);
     let dropped = [];
+    let containsFolder = false;
     if (items.length && items[0].webkitGetAsEntry) {
       const entryResults = await Promise.all(
         items.filter((i) => i.kind === "file").map((i) => {
           const entry = i.webkitGetAsEntry?.();
+          if (entry?.isDirectory) containsFolder = true;
           return entry ? readEntry(entry) : Promise.resolve([]);
         })
       );
@@ -302,7 +377,9 @@ export default function Upload() {
     } else {
       dropped = Array.from(e.dataTransfer.files || []);
     }
-    applySpFiles(dropped);
+    // A dropped folder is treated like "Browse Folder" — accept everything inside it.
+    if (containsFolder) applySpFolderFiles(dropped);
+    else applySpFiles(dropped);
   };
 
   const handleSpSubmit = (e) => {
@@ -392,11 +469,22 @@ export default function Upload() {
     }
   };
 
-  const handleFolderPick = (e) => {
-    const picked = Array.from(e.target.files || []);
+  const applyFolderPick = (picked) => {
     setImageFiles(picked);
     if (excelFile) {
       parseExcel(excelFile).then((rows) => refreshPreview(rows, picked));
+    }
+  };
+
+  const handleFolderPick = (e) => applyFolderPick(Array.from(e.target.files || []));
+
+  const handleBulkBrowseFolder = async () => {
+    try {
+      const files = await pickFolderFiles();
+      if (files === null) { folderInputRef.current?.click(); return; }   // no FS Access API — fall back
+      if (files.length > 0) applyFolderPick(files);
+    } catch (err) {
+      showBanner("error", "Folder selection failed: " + err.message);
     }
   };
 
@@ -803,13 +891,13 @@ export default function Upload() {
                   <div className="org-upload-form-group">
                     <label>Image Files <span style={{ color: "#94a3b8", fontWeight: 400 }}>(optional)</span></label>
                     <input ref={spFilesInputRef} type="file" multiple
-                           accept=".dcm,.nii,.nii.gz,.png,.jpg,.jpeg,.mhd,.raw"
+                           accept=".dcm,.nii,.nii.gz,.png,.jpg,.jpeg,.mhd,.raw,.zip"
                            style={{ display: "none" }}
                            onChange={handleSpFiles} />
-                    <input ref={spFolderInputRef} type="file" multiple
+                    <input ref={spFolderInputRef} type="file"
                            /* @ts-ignore */ webkitdirectory="true" directory=""
                            style={{ display: "none" }}
-                           onChange={handleSpFiles} />
+                           onChange={handleSpFolderFiles} />
                     <div className="org-sp-dropzone"
                          style={{ cursor: "pointer" }}
                          onClick={() => spFilesInputRef.current?.click()}
@@ -820,12 +908,12 @@ export default function Upload() {
                       ) : (
                         <>
                           <span className="org-upload-drop-title" style={{ fontSize: 14 }}>Drop images here or click to browse</span>
-                          <span className="org-upload-drop-hint">{SUPPORTED}</span>
+                          <span className="org-upload-drop-hint">{SUPPORTED}, .zip</span>
                         </>
                       )}
                       <span className="org-upload-secondary-btn"
                             style={{ marginTop: 8 }}
-                            onClick={(e) => { e.stopPropagation(); spFolderInputRef.current?.click(); }}>
+                            onClick={(e) => { e.stopPropagation(); handleSpBrowseFolder(); }}>
                         Browse Folder
                       </span>
                     </div>
@@ -871,7 +959,7 @@ export default function Upload() {
                     {/* Inputs outside any label — only triggered by explicit clicks */}
                     <input ref={filesInputRef} type="file" multiple
                            style={{ display: "none" }} onChange={handleFilesPick} />
-                    <input ref={folderInputRef} type="file" multiple
+                    <input ref={folderInputRef} type="file"
                            /* @ts-ignore */ webkitdirectory="true" directory=""
                            style={{ display: "none" }} onChange={handleFolderPick} />
                     <div
@@ -897,7 +985,7 @@ export default function Upload() {
                         <span className="org-upload-secondary-btn">Browse Files / ZIP</span>
                         <span
                           className="org-upload-secondary-btn"
-                          onClick={(e) => { e.stopPropagation(); folderInputRef.current?.click(); }}>
+                          onClick={(e) => { e.stopPropagation(); handleBulkBrowseFolder(); }}>
                           Browse Folder
                         </span>
                       </div>

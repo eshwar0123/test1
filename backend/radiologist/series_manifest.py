@@ -601,6 +601,17 @@ def build_s3_manifest(prefix: str, keys: List[str]) -> Dict[str, Any]:
             "modality": g["modality"],
             "instanceCount": len(insts),
             "keys": [i["ref"] for i in insts],
+            # Parallel to "keys" — the 3D position (mm, patient space) of each instance,
+            # in the same order. Lets the client compute exactly where one series'
+            # currently-displayed slice plane intersects another (perpendicular) series'
+            # image, for a reference-line overlay like the web MPR viewports draw.
+            # None entries for any instance missing ImagePositionPatient.
+            "positionsMm": [i.get("imagePositionPatient") for i in insts],
+            # Direction cosines [rx,ry,rz,cx,cy,cz] — tracked at the group level for sorting/
+            # plane-detection since forever, but never actually surfaced in the response
+            # until now. The client needs it (paired with positionsMm) to compute plane
+            # geometry for cross-series reference lines.
+            "imageOrientationPatient": g["imageOrientationPatient"],
             "isScout": bool(SCOUT_RE.search(desc)),
             "sliceSpacingMm": _estimate_slice_spacing_mm(insts),
             "rows": int(g["rows"]) if g["rows"] is not None else None,
