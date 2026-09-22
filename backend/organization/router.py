@@ -586,6 +586,7 @@ async def bulk_submit(
             "priority_text":    c.get("priority"),
             "modality_text":    c.get("modality"),
             "study_type_text":  c.get("study_type"),
+            "referring_doctor":  c.get("referring_doctor"),
         }
         generated_ids.append(case_id)
         bg_tasks.add_task(run_qc_for_case, case_meta)
@@ -1009,23 +1010,46 @@ def dashboard_cases(user=Depends(get_current_user)):
     org_id = profile["org_id"]
     rows = crud.list_submissions_for_org(org_id)
 
+    # De-duplicate: a case_id can end up with more than one row in
+    # admin_schema.case_submission (e.g. a re-submitted report). The
+    # dashboard should only ever show the LAST report submitted for a case,
+    # not every row. list_submissions_for_org already orders rows by
+    # submitted_at DESC (ties broken by id DESC), so the first occurrence of
+    # each case_id we see here is the most recently submitted one.
+    seen_case_ids = set()
+    deduped_rows = []
+    for r in rows:
+        cid = r.get("case_id")
+        if cid in seen_case_ids:
+            continue
+        seen_case_ids.add(cid)
+        deduped_rows.append(r)
+    rows = deduped_rows
+
     completed: List[dict] = []
     routine:   List[dict] = []
     pending:   List[dict] = []
     modality_counts: Dict[str, int] = {}
 
-    # ── Modality counts from ALL org uploads (bulk_uploads) ──────────────────
-    # We count modalities from organization_schema.bulk_uploads instead of
-    # case_submission so that cases still in QC / radiologist pipeline are
-    # included. This fixes the "Cases by Modality" card showing only 1 CT
-    # (the one completed case) instead of all 5 uploaded cases.
+    # ── Modality counts from COMPLETED rad_scans ──────────────────────────────
+    # "Cases by Modality" shows how many cases are DONE per modality (X-Ray,
+    # CT, MRI, etc.), sourced from radiology_schema.rad_scans.status rather
+    # than raw upload counts — a case only counts once its scan is complete.
+    # Per-modality study-type counts (e.g. under XR: Chest, Elbow, Left Knee)
+    # are collected alongside so the frontend can drill down on click.
+    study_type_counts: Dict[str, Dict[str, int]] = {}
     try:
-        bulk_mod_rows = crud.list_bulk_upload_modalities_for_org(org_id, user_id)
-        for bm in bulk_mod_rows:
-            mod = _norm_modality(bm.get("modality_type"))
+        completed_mod_rows = crud.list_completed_rad_scan_modalities_for_org(org_id, user_id)
+        for rm in completed_mod_rows:
+            mod = _norm_modality(rm.get("scan_type"))
             modality_counts[mod] = modality_counts.get(mod, 0) + 1
-    except Exception as _bm_err:
-        print(f"[dashboard] bulk_upload modality count failed: {_bm_err}")
+
+            study_type_raw = (rm.get("modality_study_type") or "").strip()
+            study_type = study_type_raw.title() if study_type_raw else "Unspecified"
+            bucket = study_type_counts.setdefault(mod, {})
+            bucket[study_type] = bucket.get(study_type, 0) + 1
+    except Exception as _rm_err:
+        print(f"[dashboard] completed rad_scans modality count failed: {_rm_err}")
         # fall through — modality_counts stays empty; frontend handles gracefully
 
     # Aggregators for KPI subtitles
@@ -1078,11 +1102,16 @@ def dashboard_cases(user=Depends(get_current_user)):
     modality_list = []
     for tag, cnt in sorted(modality_counts.items(), key=lambda kv: -kv[1]):
         pct = round((cnt / total_cases) * 100, 0) if total_cases else 0
+        study_types = [
+            {"name": name, "count": c}
+            for name, c in sorted(study_type_counts.get(tag, {}).items(), key=lambda kv: -kv[1])
+        ]
         modality_list.append({
-            "tag":    tag,
-            "name":   _MODALITY_DISPLAY_NAME.get(tag, tag),
-            "count":  cnt,
-            "pct":    int(pct),
+            "tag":         tag,
+            "name":        _MODALITY_DISPLAY_NAME.get(tag, tag),
+            "count":       cnt,
+            "pct":         int(pct),
+            "study_types": study_types,
         })
 
     avg_tat_h = round(tat_sum / tat_n / 3600.0, 1) if tat_n else None

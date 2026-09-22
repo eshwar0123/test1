@@ -55,52 +55,50 @@ const Header = () => {
   const [avatarUrl, setAvatarUrl] = useState(localStorage.getItem("avatarUrl") || "");
 
   // ── Org identity ───────────────────────────────────────────────────────────
-  // Canonical source for the org profile (name + logo + email) is the
-  // OrgSetupModal, which writes the full form blob to localStorage.org_profile
-  // (key "org_profile") and also dispatches the "org-profile-updated" event
-  // on save. We read directly from that key — no backend fetch — so the
-  // header logo and name stay in sync with the Profile page exactly.
+  // Canonical source is organization_schema.org_profile, resolved server-side
+  // by the logged-in org user (GET /organization/org-profile → matches on
+  // user_id from the JWT). Logo/name/email shown here are exactly what's
+  // stored in that table — no localStorage copy, so it can never drift from
+  // what the org actually saved.
   //
   // Seed values from JWT/login payload so the dropdown is never blank while
-  // we read from localStorage on first mount.
+  // the fetch is in flight.
   const [orgName,   setOrgName]   = useState(auth?.username || "");
   const [orgLogo,   setOrgLogo]   = useState("");
   const [userEmail, setUserEmail] = useState(auth?.email || "");
 
-  const loadOrgProfile = () => {
+  // logo_path is stored relative to the backend cwd (e.g.
+  // "uploads/organization/org_profile/<email>.png"); main.py mounts that
+  // directory at the same path, so prefixing with API_BASE serves it as-is.
+  const buildLogoUrl = (logoPath) => {
+    if (!logoPath) return "";
+    if (/^https?:\/\//i.test(logoPath)) return logoPath;
+    return `${API_BASE}/${logoPath.replace(/^\/+/, "")}`;
+  };
+
+  const loadOrgProfile = async () => {
     if (!isLoggedIn) return;
     try {
-      const raw = localStorage.getItem("org_profile");
-      if (!raw) {
-        // No profile saved yet — keep JWT-seeded values
-        setOrgName(prev => prev || auth?.username || "");
-        setUserEmail(prev => prev || auth?.email || "");
-        setOrgLogo("");
-        return;
-      }
-      const p = JSON.parse(raw);
-      // OrgSetupModal stores the logo as a base64 data URL under p.logo
-      setOrgLogo(p?.logo || "");
-      // Prefer the form value, but fall back to auth (the locked username
-      // sourced from core_schema.users).
-      setOrgName(p?.orgName || auth?.username || "");
+      const res = await apiFetch("/organization/org-profile");
+      const p = res?.data;
+      setOrgName(p?.org_name || auth?.username || "");
       setUserEmail(p?.email || auth?.email || "");
+      setOrgLogo(buildLogoUrl(p?.logo_path));
     } catch (err) {
-      // Stay quiet — header should never crash; just fall back to defaults.
-      console.warn("[Header] localStorage.org_profile parse failed:", err.message);
+      // Stay quiet — header should never crash; just fall back to JWT values.
+      console.warn("[Header] failed to load org-profile:", err.message);
+      setOrgName(prev => prev || auth?.username || "");
+      setUserEmail(prev => prev || auth?.email || "");
     }
   };
 
   useEffect(() => {
     loadOrgProfile();
-    // Re-read when the profile is saved elsewhere (OrgSetupModal dispatches this).
+    // Re-fetch when the profile is saved elsewhere (OrgSetupModal dispatches this).
     const onProfileUpdated = () => loadOrgProfile();
     window.addEventListener("org-profile-updated", onProfileUpdated);
-    // Also react to localStorage changes from other tabs/windows
-    window.addEventListener("storage", onProfileUpdated);
     return () => {
       window.removeEventListener("org-profile-updated", onProfileUpdated);
-      window.removeEventListener("storage", onProfileUpdated);
     };
   }, [isLoggedIn]); // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -88,6 +88,13 @@ ORG_BULK_CASES_DIR = os.path.join(BASE_DIR, "uploads", "organization", "bulk_cas
 os.makedirs(ORG_BULK_CASES_DIR, exist_ok=True)
 app.mount("/uploads/organization/bulk_cases", StaticFiles(directory=ORG_BULK_CASES_DIR), name="org-bulk-cases")
 
+# Org profile logos — written by POST /organization/org-profile
+# (backend/organization/router.py ORG_PROFILE_DIR) and served back to the
+# header dropdown / profile page via GET /organization/org-profile.logo_path.
+ORG_PROFILE_LOGO_DIR = os.path.join(BASE_DIR, "uploads", "organization", "org_profile")
+os.makedirs(ORG_PROFILE_LOGO_DIR, exist_ok=True)
+app.mount("/uploads/organization/org_profile", StaticFiles(directory=ORG_PROFILE_LOGO_DIR), name="org-profile-logos")
+
 # ✅ put this first (more specific)
 RADIOLOGIST_UPLOADS_DIR = os.path.join(BASE_DIR, "radiologist", "uploads")
 os.makedirs(RADIOLOGIST_UPLOADS_DIR, exist_ok=True)

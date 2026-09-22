@@ -311,7 +311,6 @@ export default function Upload() {
   const [sp, setSp] = useState({
     subject_id: "", patient_name: "", age: "", gender: "",
     priority: "Routine", modality: "CT", study_type: "", study_date: "",
-    referring_doctor: "",
   });
   const [spFiles, setSpFiles] = useState([]);
   const [spSubmitting, setSpSubmitting] = useState(false);
@@ -401,7 +400,6 @@ export default function Upload() {
       modality:     sp.modality || null,
       study_type:   sp.study_type || null,
       study_date:   sp.study_date || null,
-      referring_doctor: sp.referring_doctor || null,
       file_name:    matchedNames[0] || null,
       matched_files:    matchedNames,
       _matchedFileObjs: spFiles,   // File objects — required by handleBulkSubmit
@@ -415,8 +413,7 @@ export default function Upload() {
 
     // Clear the form so user can add another one
     setSp({ subject_id: "", patient_name: "", age: "", gender: "",
-            priority: "Routine", modality: "CT", study_type: "", study_date: "",
-            referring_doctor: "" });
+            priority: "Routine", modality: "CT", study_type: "", study_date: "" });
     setSpFiles([]);
     setActiveTab("records");
     showBanner("success",
@@ -648,7 +645,6 @@ export default function Upload() {
       modality:      r.modality || null,
       study_type:    r.study_type || null,
       study_date:    r.study_date || null,
-      referring_doctor: r.referring_doctor || null,
       file_name:     r.file_name || null,
       matched_files: r.matched_files || [],
     }));
@@ -890,18 +886,6 @@ export default function Upload() {
                       <input className="org-upload-input" name="study_date" type="date"
                              value={sp.study_date} onChange={handleSpChange} />
                     </div>
-                  </div>
-
-                  {/* Referring Doctor - UI only for now */}
-                  <div className="org-upload-form-group">
-                    <label>Referring Doctor</label>
-                    <input
-                      className="org-upload-input"
-                      name="referring_doctor"
-                      value={sp.referring_doctor || ""}
-                      onChange={handleSpChange}
-                      placeholder="Enter referring doctor name"
-                    />
                   </div>
 
                   <div className="org-upload-form-group">

@@ -196,6 +196,7 @@ def insert_bulk_upload_after_qc(
           priority_type,       priority_type_id,
           modality_type,       modality_type_id,
           modality_study_type, modality_study_type_id,
+          referring_doctor,
           subject_id,
           qc_status, qc_summary, qc_ran_at
         ) VALUES (
@@ -230,6 +231,7 @@ def insert_bulk_upload_after_qc(
             resolve_modality_id(case_meta.get("modality_text")),
             case_meta.get("study_type_text"),
             resolve_study_type_id(case_meta.get("study_type_text")),
+            case_meta.get("referring_doctor"),
             case_meta.get("subject_id"),
             qc_status,
             qc_summary,

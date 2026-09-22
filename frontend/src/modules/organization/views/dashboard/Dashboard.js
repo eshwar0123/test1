@@ -475,6 +475,7 @@ export default function Dashboard() {
   const [completedCasesModal, setCompletedCasesModal] = useState(false);
   const [routineQueueModal, setRoutineQueueModal] = useState(false);
   const [pendingOverdueModal, setPendingOverdueModal] = useState(false);
+  const [modalityStudyModal, setModalityStudyModal] = useState(null); // selected modality item | null
   const [downloadingCase, setDownloadingCase] = useState(null);
 
   // ── Routine Queue — workflow cases (from case_workflow table) ─────────────
@@ -709,14 +710,21 @@ export default function Dashboard() {
       // but case_workflow has rows (org uploaded scans not yet in case_submission).
       if (Array.isArray(wfCases) && wfCases.length > 0) {
         const countMap = {};
+        const studyMap = {};
         wfCases.forEach(c => {
           const tag = (c.modality || "OTHER").toUpperCase();
           countMap[tag] = (countMap[tag] || 0) + 1;
+          const st = (c.study_type || "").trim() || "Unspecified";
+          const bucket = studyMap[tag] || (studyMap[tag] = {});
+          bucket[st] = (bucket[st] || 0) + 1;
         });
         const total = wfCases.length || 1;
         return Object.entries(countMap)
           .map(([tag, count]) => {
             const ms = modalityStyle(tag);
+            const studyTypes = Object.entries(studyMap[tag] || {})
+              .map(([name, c]) => ({ name, count: c }))
+              .sort((a, b) => b.count - a.count);
             return {
               tag,
               name: ms.name,
@@ -725,6 +733,7 @@ export default function Dashboard() {
               bar: Math.max(6, Math.min(100, Math.round((count / total) * 100))),
               color: ms.color,
               bg: ms.barBg,
+              studyTypes,
             };
           })
           .sort((a, b) => b.count - a.count);
@@ -742,6 +751,7 @@ export default function Dashboard() {
         bar:   Math.max(6, Math.min(100, Math.round(((m.count || 0) / total) * 100))),
         color: ms.color,
         bg:    ms.barBg,
+        studyTypes: Array.isArray(m.study_types) ? m.study_types.map(s => ({ name: s.name, count: s.count })) : [],
       };
     });
   })();
@@ -2219,12 +2229,14 @@ export default function Dashboard() {
                   ) : modalityValueData.map((item, index) => (
                     <div
                       key={item.tag}
+                      onClick={() => setModalityStudyModal(item)}
                       style={{
                         display: "grid",
                         gridTemplateColumns: "48px 1fr 48px 52px",
                         alignItems: "center",
                         gap: 10,
                         padding: "12px 0",
+                        cursor: "pointer",
                         borderBottom:
                           index < modalityValueData.length - 1
                             ? `1px solid ${tblBorder}`
@@ -2711,19 +2723,19 @@ export default function Dashboard() {
             position: "fixed", inset: 0, zIndex: 20000,
             background: "rgba(0,0,0,0.55)",
             display: "flex", alignItems: "center", justifyContent: "center",
-            padding: 24,
+            padding: 0,
           }}
         >
           <div
             onClick={e => e.stopPropagation()}
             style={{
-              width: "100%", maxWidth: 1260,
-              maxHeight: "88vh",
+              width: "100vw", maxWidth: "100vw",
+              height: "100vh", maxHeight: "100vh",
               background: isDark ? "#0f172a" : "#ffffff",
-              border: `1px solid ${isDark ? "rgba(255,255,255,0.10)" : "#e2e8f0"}`,
-              borderRadius: 20,
+              border: "none",
+              borderRadius: 0,
               overflow: "hidden",
-              boxShadow: "0 24px 60px rgba(0,0,0,0.40)",
+              boxShadow: "none",
               display: "flex", flexDirection: "column",
             }}
           >
@@ -2905,6 +2917,97 @@ export default function Dashboard() {
               <span style={{ fontSize: 12, color: textMuted }}>
                 Downloads include radiologist report + scan images (ZIP)
               </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modality → Study Type Drill-down Modal ── */}
+      {modalityStudyModal && (
+        <div
+          onClick={() => setModalityStudyModal(null)}
+          style={{
+            position: "fixed", inset: 0, zIndex: 20000,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 24,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: "100%", maxWidth: 420,
+              maxHeight: "80vh",
+              background: isDark ? "#0f172a" : "#ffffff",
+              border: `1px solid ${isDark ? "rgba(255,255,255,0.10)" : "#e2e8f0"}`,
+              borderRadius: 20,
+              overflow: "hidden",
+              boxShadow: "0 24px 60px rgba(0,0,0,0.35)",
+              display: "flex", flexDirection: "column",
+            }}
+          >
+            {/* Header */}
+            <div style={{
+              background: modalityStudyModal.bg,
+              padding: "20px 22px",
+              position: "relative",
+              flexShrink: 0,
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "1.5px", color: modalityStudyModal.color, textTransform: "uppercase", marginBottom: 6 }}>
+                {modalityStudyModal.tag} · Study Types
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: textPri, lineHeight: 1.2 }}>
+                {modalityStudyModal.name}
+              </div>
+              <div style={{ fontSize: 13, color: textSec, marginTop: 6 }}>
+                {modalityStudyModal.count} completed case{modalityStudyModal.count === 1 ? "" : "s"}
+              </div>
+              <button
+                onClick={() => setModalityStudyModal(null)}
+                style={{
+                  position: "absolute", top: 14, right: 14,
+                  background: isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)",
+                  border: "none",
+                  borderRadius: 8, color: textPri, width: 28, height: 28,
+                  cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center",
+                }}
+              >×</button>
+            </div>
+
+            {/* Study type breakdown */}
+            <div style={{ padding: "8px 0", overflowY: "auto" }}>
+              {(!modalityStudyModal.studyTypes || modalityStudyModal.studyTypes.length === 0) ? (
+                <div style={{ padding: "28px 22px", textAlign: "center", fontSize: 14, color: textSec, fontStyle: "italic" }}>
+                  No study type data available.
+                </div>
+              ) : modalityStudyModal.studyTypes.map((st, i) => {
+                const maxCount = modalityStudyModal.studyTypes[0]?.count || 1;
+                return (
+                  <div key={st.name} style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    padding: "10px 22px",
+                    background: i % 2 === 0 ? (isDark ? "rgba(255,255,255,0.03)" : "#f8fafc") : "transparent",
+                    borderBottom: `1px solid ${isDark ? "rgba(255,255,255,0.06)" : "#f1f5f9"}`,
+                    gap: 14,
+                  }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, color: textPri, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {st.name}
+                      </div>
+                      <div style={{
+                        width: "100%", height: 4, borderRadius: 999, marginTop: 5,
+                        background: isDark ? "rgba(255,255,255,0.12)" : "#e2e8f0", overflow: "hidden",
+                      }}>
+                        <div style={{
+                          width: `${Math.max(6, Math.round((st.count / maxCount) * 100))}%`,
+                          height: "100%", borderRadius: 999, background: modalityStudyModal.color,
+                        }} />
+                      </div>
+                    </div>
+                    <span style={{ ...mono, fontSize: 16, fontWeight: 700, color: textPri }}>{st.count}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

@@ -374,6 +374,7 @@ def insert_upload_row(
     priority_text: Optional[str],
     modality_text: Optional[str],
     study_type_text: Optional[str],
+    referring_doctor: Optional[str],
     subject_id: str,
 ) -> int:
     row = _one(
@@ -387,6 +388,7 @@ def insert_upload_row(
           priority_type,       priority_type_id,
           modality_type,       modality_type_id,
           modality_study_type, modality_study_type_id,
+          referring_doctor,
           subject_id
         ) VALUES (
           %s, %s, %s,
@@ -410,6 +412,9 @@ def insert_upload_row(
             priority_text, resolve_priority_id(priority_text),
             modality_text, resolve_modality_id(modality_text),
             study_type_text, resolve_study_type_id(study_type_text),
+
+            referring_doctor,
+
             subject_id,
         ),
     )
@@ -763,6 +768,31 @@ def list_workflow_cases_for_org(org_id: str, org_user_id: str = None) -> List[Di
         print(f"[workflow_cases] strategy C failed for org {oid}: {e}")
 
     return []
+
+
+def list_completed_rad_scan_modalities_for_org(org_id: str, org_user_id) -> List[Dict[str, Any]]:
+    """Return (case_id, scan_type, modality_study_type) for every COMPLETED
+    radiology_schema.rad_scans row belonging to this org. Used by the
+    dashboard's "Cases by Modality" card to count cases actually finished,
+    grouped by modality (and, per-modality, by study type for the drill-down
+    view), instead of counting every upload regardless of completion state.
+
+    Uses the same org-match logic as list_active_rad_scans_for_org: org_id may
+    be stored in either id_organisation or ref_organisation, plus a legacy
+    UUID-as-text fallback via org_user_id.
+    """
+    return _all(
+        """
+        SELECT rs.case_id, rs.scan_type, rs.modality_study_type
+        FROM radiology_schema.rad_scans rs
+        WHERE
+            (rs.id_organisation  = %(org_id)s
+             OR rs.ref_organisation = %(org_id)s
+             OR rs.id_organisation  = %(user_id)s)
+            AND LOWER(COALESCE(rs.status, '')) IN ('complete', 'completed', 'done')
+        """,
+        {"org_id": str(org_id), "user_id": str(org_user_id)},
+    )
 
 
 def list_bulk_upload_modalities_for_org(org_id: str) -> List[Dict[str, Any]]:
