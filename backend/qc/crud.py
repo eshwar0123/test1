@@ -209,7 +209,7 @@ def insert_bulk_upload_after_qc(
           %s, %s,
           %s, %s,
           %s,
-          %s, %s, NOW()
+          %s, %s, %s, NOW()
         ) RETURNING id
         """,
         (
@@ -570,6 +570,7 @@ def insert_rad_scan_for_case(src_row: Dict[str, Any], rad: Dict[str, Any], thumb
            id_organisation,
            priority_type,
            modality_study_type,
+           referring_doctor,
            assigned_rad_id,
            due_date,
            assigned_at,
@@ -591,6 +592,7 @@ def insert_rad_scan_for_case(src_row: Dict[str, Any], rad: Dict[str, Any], thumb
            %s,
            %s,
            %s,
+           %s,
            (SELECT due_at      FROM admin_schema.case_workflow WHERE case_id = %s LIMIT 1),
            (SELECT assigned_at FROM admin_schema.case_workflow WHERE case_id = %s LIMIT 1),
            (SELECT qc_status   FROM admin_schema.case_workflow WHERE case_id = %s LIMIT 1),
@@ -608,6 +610,7 @@ def insert_rad_scan_for_case(src_row: Dict[str, Any], rad: Dict[str, Any], thumb
            id_organisation  = EXCLUDED.id_organisation,
            priority_type    = EXCLUDED.priority_type,
            modality_study_type = EXCLUDED.modality_study_type,
+           referring_doctor = EXCLUDED.referring_doctor,
            assigned_rad_id  = EXCLUDED.assigned_rad_id,
            due_date         = EXCLUDED.due_date,
            assigned_at      = EXCLUDED.assigned_at,
@@ -627,6 +630,7 @@ def insert_rad_scan_for_case(src_row: Dict[str, Any], rad: Dict[str, Any], thumb
             org_id,
             src_row.get("priority_type"),
             src_row.get("modality_study_type"),
+            src_row.get("referring_doctor"),
             rad_id,
             src_row.get("case_id"),   # for due_at subquery
             src_row.get("case_id"),   # for assigned_at subquery

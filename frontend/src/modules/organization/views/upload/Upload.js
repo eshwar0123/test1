@@ -184,6 +184,7 @@ const HEADER_ALIASES = {
   modality:       ["modality", "modality_type"],
   study_type:     ["study_type", "study type", "modality_study_type"],
   study_date:     ["study_date", "study date", "date"],
+  referring_doctor: ["referring_doctor", "referring doctor", "referring physician", "referred by", "ref_doctor", "ref doctor"],
   file_name:      ["image_file_name", "image file name", "file_name", "file name", "filename", "image"],
 };
 
@@ -1547,7 +1548,7 @@ Matches: case-1.nii, case-1.dcm,
 
           <div className="org-guide-section-title">Excel columns</div>
           <div className="org-guide-chips">
-            {["Subject_ID","Priority","Patient_Name","Age","Gender","Modality","Study_Type","Study_Date","Image_File_Name"].map(c => (
+            {["Subject_ID","Priority","Patient_Name","Age","Gender","Modality","Study_Type","Study_Date","Referring_Doctor","Image_File_Name"].map(c => (
               <span key={c} className="org-guide-chip">{c}</span>
             ))}
           </div>
@@ -1825,6 +1826,7 @@ function PreviewCaseModal({ row, mode, onClose, onSave }) {
     modality:     row.modality     || "CT",
     study_type:   row.study_type   || "",
     study_date:   row.study_date   || "",
+    referring_doctor: row.referring_doctor || "",
   });
   const onChange = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
 
@@ -1915,6 +1917,7 @@ function PreviewCaseModal({ row, mode, onClose, onSave }) {
                 <dt>Modality</dt>     <dd>{(row.modality || "").toUpperCase() || "—"}</dd>
                 <dt>Study Type</dt>   <dd>{row.study_type || "—"}</dd>
                 <dt>Study Date</dt>   <dd>{row.study_date || "—"}</dd>
+                <dt>Referring Doctor</dt> <dd>{row.referring_doctor || "—"}</dd>
                 <dt>File key</dt>     <dd style={{ fontFamily: "monospace" }}>{row.file_name || "—"}</dd>
                 <dt>Matched files</dt><dd>{matched.length === 0
                                             ? <em style={{ color: "#c2410c" }}>⚠ no files matched</em>
@@ -1934,6 +1937,8 @@ function PreviewCaseModal({ row, mode, onClose, onSave }) {
                 <EditField  label="Study Type"   name="study_type"   value={form.study_type}   onChange={onChange}
                             placeholder="e.g. Head w/o Contrast" />
                 <EditField  label="Study Date"   name="study_date"   value={form.study_date}   onChange={onChange} type="date" />
+                <EditField  label="Referring Doctor" name="referring_doctor" value={form.referring_doctor} onChange={onChange}
+                            placeholder="Enter referring doctor name" />
               </div>
             )}
 

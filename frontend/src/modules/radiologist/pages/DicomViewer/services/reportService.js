@@ -228,10 +228,13 @@ export function getReportTemplateHtml({
             <td class="k">Study Date</td>
             <td class="v"><span class="report-answer report-scan-editor" contenteditable="true"></span></td>
           </tr>
+          <tr>
+            <td class="k">Referring Doctor</td>
+            <td class="v" colspan="3"><span class="report-answer report-ref-doctor" contenteditable="true"></span></td>
+          </tr>
         </table>
 
         <table class="report-table">
-          <tr><td class="report-label">Referring Doctor</td><td class="report-colon">:</td><td><span class="report-answer report-ref-doctor" contenteditable="true"></span></td></tr>
           <tr><td class="report-label">Investigation</td><td class="report-colon">:</td><td><span class="report-answer report-clinical-indication" contenteditable="true"></span></td></tr>
         </table>
 

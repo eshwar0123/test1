@@ -611,6 +611,7 @@ def single_submit(
     modality:     Optional[str] = Form(None),
     study_type:   Optional[str] = Form(None),
     study_date:   Optional[str] = Form(None),
+    referring_doctor: Optional[str] = Form(None),
     files: List[UploadFile] = File(default=[]),
     user=Depends(get_current_user),
 ):
@@ -648,6 +649,7 @@ def single_submit(
         "priority_text":    priority,
         "modality_text":    modality,
         "study_type_text":  study_type,
+        "referring_doctor": referring_doctor,
     }
     bg_tasks.add_task(run_qc_for_case, case_meta)
     return {"ok": True, "case_id": case_id, "upload_id": upload_id, "images": len(saved)}

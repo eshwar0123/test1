@@ -682,7 +682,7 @@ def get_or_create_report(conn: connection, case_id: str, user_id: UUID) -> Dict[
         # 2️⃣ Get patient details from rad_scans
         cur.execute(
             """
-            SELECT patient_name, patient_age, patient_sex
+            SELECT patient_name, patient_age, patient_sex, referring_doctor
             FROM radiology_schema.rad_scans
             WHERE case_id=%s
             ORDER BY scan_date DESC
@@ -695,7 +695,7 @@ def get_or_create_report(conn: connection, case_id: str, user_id: UUID) -> Dict[
         if not scan_row:
             raise ValueError("No scan found for case_id")
 
-        patient_name, patient_age, patient_sex = scan_row
+        patient_name, patient_age, patient_sex, referring_doctor = scan_row
 
         # 3️⃣ Get radiologist details
         cur.execute(
@@ -740,11 +740,11 @@ def get_or_create_report(conn: connection, case_id: str, user_id: UUID) -> Dict[
             """
             INSERT INTO radiology_schema.reports (
                 case_id, user_id,
-                patient_name, patient_age, patient_sex,
+                patient_name, patient_age, patient_sex, referring_doctor,
                 radiologist_name, qualification, designation,
                 user_lab_name, lab_address, department, lab_logo_url
             )
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             """,
             (
                 case_id,
@@ -752,6 +752,7 @@ def get_or_create_report(conn: connection, case_id: str, user_id: UUID) -> Dict[
                 patient_name,
                 patient_age,
                 patient_sex,
+                referring_doctor,
                 radiologist_name,
                 qualification,
                 designation,
