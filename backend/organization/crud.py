@@ -94,6 +94,13 @@ def _gen_org_id() -> str:
     return f"GENRAD-ORG-{_random.randint(10000000, 99999999)}"
 
 
+def _ensure_gst_column() -> None:
+    """Lazily adds org_profile.gst if it doesn't exist yet — same
+    self-healing pattern used elsewhere (e.g. radiologists.dmc_no), so no
+    separate migration step is needed to roll this field out."""
+    _exec("ALTER TABLE organization_schema.org_profile ADD COLUMN IF NOT EXISTS gst TEXT")
+
+
 def upsert_org_profile(
     *,
     user_id: str,
@@ -107,9 +114,7 @@ def upsert_org_profile(
     org_admin_name: Optional[str] = None,
     org_admin_email: Optional[str] = None,
     org_admin_contact: Optional[str] = None,
-    npi: Optional[str] = None,
-    ein: Optional[str] = None,
-    clia: Optional[str] = None,
+    gst: Optional[str] = None,
     fax: Optional[str] = None,
     street: Optional[str] = None,
     city: Optional[str] = None,
@@ -117,14 +122,13 @@ def upsert_org_profile(
     zip_code: Optional[str] = None,
     country: Optional[str] = None,
     admin_role: Optional[str] = None,
-    hipaa_officer_name: Optional[str] = None,
-    hipaa_officer_email: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Insert or update the org_profile row keyed by user_id.
 
     Returns the saved row (after the upsert) so the router can pass
     it back to the frontend (incl. the newly-assigned org_id and
     resolved logo_path)."""
+    _ensure_gst_column()
     new_org_id = _gen_org_id()
 
     row = _one(
@@ -133,16 +137,16 @@ def upsert_org_profile(
             user_id, email, org_name, org_type, website, logo_path,
             contact_number, address,
             org_admin_name, org_admin_email, org_admin_contact,
-            org_id, npi, ein, clia, fax,
+            org_id, gst, fax,
             street, city, state, zip, country,
-            admin_role, hipaa_officer_name, hipaa_officer_email
+            admin_role
         ) VALUES (
             %s, %s, %s, %s, %s, %s,
             %s, %s,
             %s, %s, %s,
+            %s, %s, %s,
             %s, %s, %s, %s, %s,
-            %s, %s, %s, %s, %s,
-            %s, %s, %s
+            %s
         )
         ON CONFLICT (user_id) DO UPDATE SET
             email              = EXCLUDED.email,
@@ -158,9 +162,7 @@ def upsert_org_profile(
             org_admin_contact  = EXCLUDED.org_admin_contact,
             -- preserve existing org_id on update
             -- (the newly-generated one in EXCLUDED is discarded)
-            npi                = EXCLUDED.npi,
-            ein                = EXCLUDED.ein,
-            clia               = EXCLUDED.clia,
+            gst                = EXCLUDED.gst,
             fax                = EXCLUDED.fax,
             street             = EXCLUDED.street,
             city               = EXCLUDED.city,
@@ -168,36 +170,33 @@ def upsert_org_profile(
             zip                = EXCLUDED.zip,
             country            = EXCLUDED.country,
             admin_role         = EXCLUDED.admin_role,
-            hipaa_officer_name = EXCLUDED.hipaa_officer_name,
-            hipaa_officer_email= EXCLUDED.hipaa_officer_email,
             updated_at         = NOW()
         RETURNING id, user_id, email, org_name, org_type, website, logo_path,
                   contact_number, address, org_admin_name, org_admin_email,
-                  org_admin_contact, org_id, npi, ein, clia, fax,
+                  org_admin_contact, org_id, gst, fax,
                   street, city, state, zip, country, admin_role,
-                  hipaa_officer_name, hipaa_officer_email,
                   created_at, updated_at
         """,
         (
             str(user_id), email, org_name, org_type, website, logo_path,
             contact_number, address,
             org_admin_name, org_admin_email, org_admin_contact,
-            new_org_id, npi, ein, clia, fax,
+            new_org_id, gst, fax,
             street, city, state, zip_code, country,
-            admin_role, hipaa_officer_name, hipaa_officer_email,
+            admin_role,
         ),
     )
     return row or {}
 
 
 def get_org_profile_by_user(user_id) -> Optional[Dict[str, Any]]:
+    _ensure_gst_column()
     return _one(
         """
         SELECT id, user_id, email, org_name, org_type, website, logo_path,
                contact_number, address, org_admin_name, org_admin_email,
-               org_admin_contact, org_id, npi, ein, clia, fax,
+               org_admin_contact, org_id, gst, fax,
                street, city, state, zip, country, admin_role,
-               hipaa_officer_name, hipaa_officer_email,
                created_at, updated_at
         FROM organization_schema.org_profile
         WHERE user_id = %s
@@ -353,6 +352,34 @@ def get_upload_by_id(row_id: int, user_id) -> Optional[Dict[str, Any]]:
     )
 
 
+def get_upload_by_case_id(case_id: str, user_id) -> Optional[Dict[str, Any]]:
+    """Used by the Active Worklist "Edit" form — that table only carries
+    case_id (it's sourced from rad_scans, not bulk_uploads), so lookups
+    for the edit form go by case_id rather than the bulk_uploads row id."""
+    row = _one(
+        """
+        SELECT * FROM organization_schema.bulk_uploads
+        WHERE case_id = %s AND user_id = %s
+        """,
+        (case_id, str(user_id)),
+    )
+    if not row:
+        return None
+    return {
+        "case_id":                row.get("case_id"),
+        "subject_id":             row.get("subject_id"),
+        "patient_name":           row.get("patient_name"),
+        "age":                    row.get("age"),
+        "gender":                 row.get("gender"),
+        "priority_type":          row.get("priority_type"),
+        "modality_type":          row.get("modality_type"),
+        "modality_study_type":    row.get("modality_study_type"),
+        "study_date":             str(row["study_date"]) if row.get("study_date") else None,
+        "referring_doctor":       row.get("referring_doctor"),
+        "history":                row.get("history"),
+    }
+
+
 # ------------------------------------------------------------
 # INSERT — called by /uploads/bulk-submit  and  /uploads/single-submit
 # ------------------------------------------------------------
@@ -474,6 +501,117 @@ def update_upload_row(
     )
     row = _one(sql, tuple(params))
     return bool(row)
+
+
+# ------------------------------------------------------------
+# UPDATE by case_id — Active Worklist "Edit" form. Keyed by case_id
+# (not the bulk_uploads row id) because that table's rows come from
+# rad_scans, which only carries case_id. Returns the updated row so
+# the caller can propagate the final values into rad_scans/reports.
+# ------------------------------------------------------------
+def update_upload_by_case_id(
+    case_id: str,
+    user_id: str,
+    *,
+    patient_name: Optional[str] = None,
+    age: Optional[int] = None,
+    gender: Optional[str] = None,
+    priority_text: Optional[str] = None,
+    modality_text: Optional[str] = None,
+    study_type_text: Optional[str] = None,
+    study_date_str: Optional[str] = None,
+    referring_doctor: Optional[str] = None,
+    history: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    sets, params = [], []
+
+    def add(col, val):
+        sets.append(f"{col} = %s")
+        params.append(val)
+
+    if patient_name     is not None: add("patient_name", patient_name)
+    if age               is not None: add("age", age)
+    if gender             is not None: add("gender", gender)
+    if study_date_str  is not None: add("study_date", _parse_date(study_date_str))
+    if priority_text     is not None:
+        add("priority_type",    priority_text)
+        add("priority_type_id", resolve_priority_id(priority_text))
+    if modality_text      is not None:
+        add("modality_type",    modality_text)
+        add("modality_type_id", resolve_modality_id(modality_text))
+    if study_type_text is not None:
+        add("modality_study_type",    study_type_text)
+        add("modality_study_type_id", resolve_study_type_id(study_type_text))
+    if referring_doctor is not None: add("referring_doctor", referring_doctor)
+    if history            is not None: add("history", history)
+
+    if not sets:
+        return _one(
+            "SELECT * FROM organization_schema.bulk_uploads WHERE case_id = %s AND user_id = %s",
+            (case_id, str(user_id)),
+        )
+
+    params.extend([case_id, str(user_id)])
+    sql = (
+        "UPDATE organization_schema.bulk_uploads SET "
+        + ", ".join(sets)
+        + " WHERE case_id = %s AND user_id = %s RETURNING *"
+    )
+    return _one(sql, tuple(params))
+
+
+def sync_rad_scan_from_upload(case_id: str, row: Dict[str, Any]) -> None:
+    """Push the just-edited bulk_uploads fields into the matching
+    radiology_schema.rad_scans row, keeping the two in sync."""
+    _exec(
+        """
+        UPDATE radiology_schema.rad_scans
+        SET patient_name        = %s,
+            patient_age         = %s,
+            patient_sex         = %s,
+            priority_type       = %s,
+            modality_study_type = %s,
+            referring_doctor    = %s,
+            history             = %s
+        WHERE case_id = %s
+        """,
+        (
+            row.get("patient_name"),
+            row.get("age"),
+            row.get("gender"),
+            row.get("priority_type"),
+            row.get("modality_study_type"),
+            row.get("referring_doctor"),
+            row.get("history"),
+            case_id,
+        ),
+    )
+
+
+def sync_report_from_upload(case_id: str, row: Dict[str, Any]) -> None:
+    """Push the just-edited bulk_uploads fields into every
+    radiology_schema.reports row for this case (one per radiologist who
+    has opened/saved a report for it)."""
+    _exec(
+        """
+        UPDATE radiology_schema.reports
+        SET patient_name     = %s,
+            patient_age      = %s,
+            patient_sex      = %s,
+            referring_doctor = %s,
+            history          = %s,
+            updated_at       = NOW()
+        WHERE case_id = %s
+        """,
+        (
+            row.get("patient_name"),
+            row.get("age"),
+            row.get("gender"),
+            row.get("referring_doctor"),
+            row.get("history"),
+            case_id,
+        ),
+    )
 
 
 # ------------------------------------------------------------
@@ -617,7 +755,8 @@ def list_active_rad_scans_for_org(org_id: str, org_user_id) -> List[Dict[str, An
             rs.modality_study_type,
             rs.assigned_rad_id,
             r.first_name,
-            r.last_name
+            r.last_name,
+            bu.uploaded_at
         FROM radiology_schema.rad_scans rs
         LEFT JOIN radiology_schema.radiologists r
                ON r.rad_id = rs.assigned_rad_id

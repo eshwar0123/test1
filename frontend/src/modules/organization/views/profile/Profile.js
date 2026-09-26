@@ -11,11 +11,14 @@ const Row = ({ label, value }) =>
     </div>
   ) : null
 
+// Indian phone format — "+91 XXXXXXXXXX". Strips any existing country code /
+// non-digits first so it works whether the number was saved as
+// "9876543210", "+91 9876543210", or "09876543210".
 const formatPhone = (v) => {
   if (!v) return ''
-  const d = v.replace(/\D/g, '')
-  if (d.length === 10) return `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`
-  return v
+  const digits = v.replace(/\D/g, '')
+  const last10 = digits.slice(-10)
+  return last10.length === 10 ? `+91 ${last10}` : v
 }
 
 const Profile = () => {
@@ -64,9 +67,7 @@ const Profile = () => {
           <div className="op-card-title">Basic Information</div>
           <Row label="Organization Name" value={data.orgName} />
           <Row label="Type" value={data.orgType} />
-          <Row label="NPI Number" value={data.npi} />
-          <Row label="EIN / Tax ID" value={data.ein} />
-          <Row label="CLIA Number" value={data.clia} />
+          <Row label="GST Number" value={data.gst} />
           <Row label="Website" value={data.website} />
         </div>
 
@@ -84,13 +85,6 @@ const Profile = () => {
           <Row label="Role / Title" value={data.adminRole} />
           <Row label="Email" value={data.adminEmail} />
           <Row label="Phone" value={formatPhone(data.adminPhone)} />
-        </div>
-
-        <div className="op-card">
-          <div className="op-card-title">Compliance</div>
-          <Row label="HIPAA Privacy Officer" value={data.hipaaOfficerName} />
-          <Row label="Privacy Officer Email" value={data.hipaaOfficerEmail} />
-          <Row label="Country" value={data.country} />
         </div>
       </div>
     </div>

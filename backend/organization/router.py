@@ -21,6 +21,7 @@ from .schemas import (
     JobRoleCreate,
     QuestionnaireSaveIn,
     CaseUpdateIn,
+    CaseEditByCaseIdIn,
 )
 
 # QC — kicked off as a background task after each upload row is inserted
@@ -190,9 +191,7 @@ def save_org_profile(body: OrgProfileSaveIn, user=Depends(get_current_user)):
         org_admin_name=body.adminName,
         org_admin_email=body.adminEmail,
         org_admin_contact=body.adminPhone,
-        npi=body.npi,
-        ein=body.ein,
-        clia=body.clia,
+        gst=body.gst,
         fax=body.fax,
         street=body.street,
         city=body.city,
@@ -200,8 +199,6 @@ def save_org_profile(body: OrgProfileSaveIn, user=Depends(get_current_user)):
         zip_code=body.zip,
         country=body.country or "United States",
         admin_role=body.adminRole,
-        hipaa_officer_name=body.hipaaOfficerName,
-        hipaa_officer_email=body.hipaaOfficerEmail,
     )
 
     return {"ok": True, "data": saved}
@@ -587,6 +584,7 @@ async def bulk_submit(
             "modality_text":    c.get("modality"),
             "study_type_text":  c.get("study_type"),
             "referring_doctor":  c.get("referring_doctor"),
+            "history":          c.get("history"),
         }
         generated_ids.append(case_id)
         bg_tasks.add_task(run_qc_for_case, case_meta)
@@ -612,6 +610,7 @@ def single_submit(
     study_type:   Optional[str] = Form(None),
     study_date:   Optional[str] = Form(None),
     referring_doctor: Optional[str] = Form(None),
+    history:      Optional[str] = Form(None),
     files: List[UploadFile] = File(default=[]),
     user=Depends(get_current_user),
 ):
@@ -650,6 +649,7 @@ def single_submit(
         "modality_text":    modality,
         "study_type_text":  study_type,
         "referring_doctor": referring_doctor,
+        "history":          history,
     }
     bg_tasks.add_task(run_qc_for_case, case_meta)
     return {"ok": True, "case_id": case_id, "upload_id": upload_id, "images": len(saved)}
@@ -697,6 +697,53 @@ def update_upload(
     )
     if not ok:
         raise HTTPException(400, "Update failed")
+    return {"ok": True}
+
+
+# 4b) GET / EDIT a case by case_id — used by the Active Worklist "Edit" icon
+#     on the dashboard, whose rows only carry case_id (sourced from
+#     rad_scans), not the bulk_uploads row id.
+@router.get("/uploads/by-case/{case_id}")
+def get_upload_by_case(case_id: str, user=Depends(get_current_user)):
+    user_id = user.get("user_id")
+    if not user_id:
+        raise HTTPException(401, "Invalid token payload")
+
+    row = crud.get_upload_by_case_id(case_id, user_id)
+    if not row:
+        raise HTTPException(404, "Case not found")
+    return {"ok": True, "data": row}
+
+
+@router.put("/uploads/by-case/{case_id}")
+def update_upload_by_case(
+    case_id: str,
+    body: CaseEditByCaseIdIn,
+    user=Depends(get_current_user),
+):
+    user_id = user.get("user_id")
+    if not user_id:
+        raise HTTPException(401, "Invalid token payload")
+
+    updated = crud.update_upload_by_case_id(
+        case_id, user_id,
+        patient_name     = body.patient_name,
+        age              = body.age,
+        gender           = body.gender,
+        priority_text    = body.priority,
+        modality_text    = body.modality,
+        study_type_text  = body.study_type,
+        study_date_str   = body.study_date,
+        referring_doctor = body.referring_doctor,
+        history          = body.history,
+    )
+    if not updated:
+        raise HTTPException(404, "Case not found")
+
+    # Keep the downstream radiology tables in sync with the edited values.
+    crud.sync_rad_scan_from_upload(case_id, updated)
+    crud.sync_report_from_upload(case_id, updated)
+
     return {"ok": True}
 
 
@@ -1211,7 +1258,7 @@ def dashboard_cases(user=Depends(get_current_user)):
                     "modality_raw": rs.get("scan_type"),
                     "study_type":  rs.get("modality_study_type") or rs.get("scan_type") or "—",
                     "site":        _site_for_rad(rad_name) or rs.get("ref_organisation") or profile.get("org_name") or "—",
-                    "received_at": scan_date.strftime("%H:%M") if scan_date else "—",
+                    "received_at": rs.get("uploaded_at").strftime("%d %b %Y") if rs.get("uploaded_at") else "—",
                     "uploaded_at": _fmt_ts(scan_date),
                     "tat_left":    tat_left,
                     "assigned_to": rad_name,

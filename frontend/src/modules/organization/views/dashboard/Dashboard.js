@@ -112,7 +112,6 @@ const DEFAULT_KPIS = [
 ];
 
 const tatData = [
-  { label: isTh ? "เร่งด่วนพิเศษ / ฉุกเฉิน" : "STAT / Emergency", target: isTh ? "เป้าหมาย ≤ 1 ชั่วโมง" : "Target ≤ 1 hr", val: "0.8h", trend: "↓ 0.1", ok: "good" },
   { label: isTh ? "วิกฤต / เร่งด่วน" : "Critical / Urgent", target: isTh ? "เป้าหมาย ≤ 4 ชั่วโมง" : "Target ≤ 4 hr", val: "3.2h", trend: "↓ 0.4", ok: "good" },
   { label: isTh ? "ปกติ" : "Routine", target: isTh ? "เป้าหมาย ≤ 24 ชั่วโมง" : "Target ≤ 24 hr", val: "19.4h", trend: "↑ 1.8", ok: "warn" },
 ];
@@ -477,6 +476,11 @@ export default function Dashboard() {
   const [pendingOverdueModal, setPendingOverdueModal] = useState(false);
   const [modalityStudyModal, setModalityStudyModal] = useState(null); // selected modality item | null
   const [downloadingCase, setDownloadingCase] = useState(null);
+
+  // ── Active Worklist "Edit" modal — edits organization_schema.bulk_uploads
+  // by case_id, then propagates the change into rad_scans + reports. ────────
+  const [editModal, setEditModal] = useState(null);
+  // { caseId, loading, saving, error, form: {...} } | null
 
   // ── Routine Queue — workflow cases (from case_workflow table) ─────────────
   const [queueTab, setQueueTab]   = useState("Routine");   // "Critical" | "Urgent" | "Routine"
@@ -947,6 +951,88 @@ export default function Dashboard() {
     return null;
   };
 
+
+  // ── Active Worklist "Edit" modal ────────────────────────────────────────
+  const openEditModal = async (caseId) => {
+    setEditModal({ caseId, loading: true, saving: false, error: null, form: null });
+    try {
+      const tok = readToken();
+      const res = await fetch(
+        `${API_BASE_DASH}/organization/uploads/by-case/${encodeURIComponent(caseId)}`,
+        { headers: tok ? { Authorization: `Bearer ${tok}` } : {} },
+      );
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.data) {
+        throw new Error(json?.detail || `HTTP ${res.status}`);
+      }
+      const d = json.data;
+      setEditModal({
+        caseId,
+        loading: false,
+        saving: false,
+        error: null,
+        form: {
+          subjectId:       d.subject_id || "",
+          patientName:     d.patient_name || "",
+          age:              d.age ?? "",
+          gender:           d.gender || "",
+          priority:         d.priority_type || "Routine",
+          modality:         d.modality_type || "CT",
+          studyType:        d.modality_study_type || "",
+          studyDate:        d.study_date || "",
+          referringDoctor: d.referring_doctor || "",
+          history:          d.history || "",
+        },
+      });
+    } catch (e) {
+      setEditModal({ caseId, loading: false, saving: false, error: e?.message || "Failed to load case", form: null });
+    }
+  };
+
+  const saveEditModal = async () => {
+    if (!editModal?.form) return;
+    setEditModal((m) => ({ ...m, saving: true, error: null }));
+    try {
+      const tok = readToken();
+      const f = editModal.form;
+      const res = await fetch(
+        `${API_BASE_DASH}/organization/uploads/by-case/${encodeURIComponent(editModal.caseId)}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...(tok ? { Authorization: `Bearer ${tok}` } : {}),
+          },
+          body: JSON.stringify({
+            patient_name:     f.patientName || null,
+            age:               f.age === "" ? null : Number(f.age),
+            gender:            f.gender || null,
+            priority:          f.priority || null,
+            modality:          f.modality || null,
+            study_type:        f.studyType || null,
+            study_date:        f.studyDate || null,
+            referring_doctor: f.referringDoctor || null,
+            history:           f.history || null,
+          }),
+        },
+      );
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.detail || `HTTP ${res.status}`);
+      }
+      setEditModal(null);
+      // Refresh the dashboard so the edited row reflects immediately.
+      const reloadTok = readToken();
+      fetch(`${API_BASE_DASH}/organization/dashboard/cases`, {
+        headers: reloadTok ? { Authorization: `Bearer ${reloadTok}` } : {},
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => { if (d) setDashData(d); })
+        .catch(() => {});
+    } catch (e) {
+      setEditModal((m) => ({ ...m, saving: false, error: e?.message || "Save failed" }));
+    }
+  };
 
   // Download the radiologist's PDF report for a case from the backend.
   // Falls back to a generated text-stub blob when:
@@ -1575,7 +1661,411 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* ════ ROW 2 — TAT | Protocol QC | Cases by Modality ════ */}
+        {/* ════ ROW 2 — Active Worklist ════ */}
+        <div
+          className="dash-card"
+          style={{
+            background: cardBg,
+            borderRadius: 18,
+            padding: 0,
+            boxShadow: cardShadow,
+            border: `1px solid ${cardBorder}`,
+            animationDelay: "380ms",
+            overflow: "hidden",
+            marginBottom: 16,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "18px 24px",
+              borderBottom: `1px solid ${tblBorder}`,
+              background: innerBg,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 15,
+                letterSpacing: "1.5px",
+                color: textSec,
+                textTransform: "uppercase",
+                fontWeight: 700,
+              }}
+            >
+              Active Worklist · Priority Cases
+            </div>
+
+            {/* ── Four filter dropdowns: Status / Priority / Radiologist / Study Type ── */}
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              {[
+                { label: "Status",      value: wlStatus,      setter: setWlStatus,      options: statusOptions },
+                { label: "Priority",    value: wlPriority,    setter: setWlPriority,    options: priorityOptions },
+                { label: "Radiologist", value: wlRadiologist, setter: setWlRadiologist, options: radiologistOptions },
+                { label: "Study Type",  value: wlStudyType,   setter: setWlStudyType,   options: studyTypeOptions },
+              ].map((f) => (
+                <div
+                  key={f.label}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    background: "#fff",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: 20,
+                    padding: "4px 6px 4px 14px",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+                  }}
+                >
+                  <label
+                    htmlFor={`wl-${f.label}`}
+                    style={{
+                      ...sg,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: "#64748b",
+                      letterSpacing: "0.5px",
+                      whiteSpace: "nowrap",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {f.label}
+                  </label>
+                  <select
+                    id={`wl-${f.label}`}
+                    value={f.value}
+                    onChange={(e) => f.setter(e.target.value)}
+                    style={{
+                      ...sg,
+                      fontSize: 14,
+                      fontWeight: 600,
+                      color: f.value === "All" ? "#64748b" : "#1e293b",
+                      background: "transparent",
+                      border: "none",
+                      outline: "none",
+                      cursor: "pointer",
+                      paddingRight: 4,
+                      maxWidth: 180,
+                    }}
+                    title={f.value}    /* tooltip for long radiologist / study type names */
+                  >
+                    {f.options.map((opt) => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+
+              {/* Show a small "Clear" affordance when any filter is active */}
+              {(wlStatus !== "All" || wlPriority !== "All" ||
+                wlRadiologist !== "All" || wlStudyType !== "All") && (
+                <button
+                  onClick={() => {
+                    setWlStatus("All");
+                    setWlPriority("All");
+                    setWlRadiologist("All");
+                    setWlStudyType("All");
+                  }}
+                  style={{
+                    ...sg,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    padding: "6px 12px",
+                    borderRadius: 16,
+                    border: "1px solid #cbd5e1",
+                    background: "#f1f5f9",
+                    color: "#475569",
+                    cursor: "pointer",
+                  }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Scrollable worklist container — shows ~7 rows, scrolls for more.
+              maxHeight tuned to header (~52px) + 7 rows (~56px each) ≈ 460px.
+              Sticky <thead> keeps column labels in view while scrolling. */}
+          <div style={{
+            overflowX: "auto",
+            overflowY: "auto",
+            maxHeight: 460,
+            border: `1px solid ${tblHdrBorder}`,
+            borderRadius: 12,
+          }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ background: tblHeadBg }}>
+                  {[
+                    "Priority",
+                    "Case ID",
+                    "Patient Name",
+                    "Modality",
+                    "Study Type",
+                    "Time Stamp",
+                    "Assigned To",
+                    "Status",
+                    "Edit",
+                    "Files",
+                  ].map((h) => (
+                    <th
+                      key={h}
+                      style={{
+                        ...sg,
+                        fontSize: 15,
+                        letterSpacing: "1.5px",
+                        color: isDark ? "#ffffff" : "#0f172a",
+                        textTransform: "uppercase",
+                        padding: "12px 18px",
+                        textAlign: "left",
+                        fontWeight: 700,
+                        whiteSpace: "nowrap",
+                        borderBottom: `1px solid ${tblHdrBorder}`,
+                        // Sticky header stays pinned while body scrolls.
+                        // Background MUST be fully opaque — semi-transparent
+                        // tblHeadBg lets rows bleed through visually.
+                        position: "sticky",
+                        top: 0,
+                        zIndex: 3,
+                        background: isDark ? "#1e293b" : "#f1f5f9",
+                        boxShadow: isDark
+                          ? "0 1px 0 rgba(255,255,255,0.10)"
+                          : "0 1px 0 #e2e8f0",
+                      }}
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+
+              <tbody>
+                {filteredWL.length === 0 ? (
+                  <tr>
+                    <td colSpan={10} style={{
+                      padding: "32px 18px",
+                      textAlign: "center",
+                      fontSize: 14,
+                      color: textSec,
+                      fontStyle: "italic",
+                    }}>
+                      {dashData
+                        ? "No active cases for this organization."
+                        : "Loading active worklist…"}
+                    </td>
+                  </tr>
+                ) : filteredWL.map((r) => {
+                  const ssDark = {
+                    reading: { bg: "rgba(59,130,246,0.10)", color: "#2563eb" },
+                    overdue: { bg: "rgba(239,68,68,0.10)", color: "#dc2626" },
+                    pending: { bg: "rgba(245,158,11,0.10)", color: "#d97706" },
+                    complete: { bg: "rgba(16,185,129,0.10)", color: "#059669" },
+                  }[r.sk] || { bg: "rgba(148,163,184,0.10)", color: "#64748b" };
+
+                  return (
+                    <tr
+                      key={r.id}
+                      className="wl-row"
+                      style={{
+                        borderTop: `1px solid ${tblBorder}`,
+                        background: tblRowBg,
+                      }}
+                    >
+                      <td style={{ padding: "13px 18px", whiteSpace: "nowrap" }}>
+                        <span
+                          style={{
+                            display: "inline-block",
+                            width: 9,
+                            height: 9,
+                            borderRadius: "50%",
+                            background: r.pColor,
+                            marginRight: 9,
+                            verticalAlign: "middle",
+                            boxShadow: `0 0 6px ${r.pColor}80`,
+                          }}
+                        />
+                        <span
+                          style={{
+                            fontSize: 15,
+                            color: textPri,
+                            fontWeight: 700,
+                          }}
+                        >
+                          {r.priority}
+                        </span>
+                      </td>
+
+                      <td
+                        style={{
+                          ...mono,
+                          padding: "13px 18px",
+                          fontSize: 15,
+                          color: textSec,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {r.id}
+                      </td>
+
+                      {/* Patient Name */}
+                      <td
+                        style={{
+                          padding: "13px 18px",
+                          fontSize: 14,
+                          color: textPri,
+                          fontWeight: 500,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {r.patientName}
+                      </td>
+
+                      <td style={{ padding: "13px 18px" }}>
+                        <span
+                          style={{
+                            ...mono,
+                            fontSize: 15,
+                            fontWeight: 700,
+                            background: r.mBg,
+                            color: r.mColor,
+                            padding: "3px 10px",
+                            borderRadius: 6,
+                          }}
+                        >
+                          {r.mod}
+                        </span>
+                      </td>
+
+                      <td
+                        style={{
+                          padding: "13px 18px",
+                          fontSize: 15,
+                          color: textPri,
+                          fontWeight: 600,
+                          textTransform: "capitalize",
+                        }}
+                      >
+                        {r.study}
+                      </td>
+
+                      <td
+                        style={{
+                          ...mono,
+                          padding: "13px 18px",
+                          fontSize: 15,
+                          color: textSec,
+                        }}
+                      >
+                        {r.recv}
+                      </td>
+
+                      <td
+                        style={{
+                          padding: "13px 18px",
+                          fontSize: 15,
+                          color:
+                            r.assignee === "Unassigned"
+                              ? "#d97706"
+                              : textPri,
+                          fontWeight:
+                            r.assignee === "Unassigned" ? 700 : 600,
+                        }}
+                      >
+                        {r.assignee}
+                      </td>
+
+                      <td style={{ padding: "13px 18px" }}>
+                        <span
+                          style={{
+                            ...sg,
+                            fontSize: 15,
+                            padding: "4px 12px",
+                            borderRadius: 6,
+                            background: ssDark.bg,
+                            color: ssDark.color,
+                            fontWeight: 700,
+                            letterSpacing: "0.5px",
+                          }}
+                        >
+                          {r.status}
+                        </span>
+                      </td>
+
+                      {/* ── Edit ── */}
+                      <td style={{ padding: "10px 14px", whiteSpace: "nowrap" }}>
+                        <button
+                          onClick={() => openEditModal(r.id)}
+                          title={`Edit ${r.id}`}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            width: 28,
+                            height: 28,
+                            borderRadius: 6,
+                            border: `1px solid ${isDark ? "rgba(255,255,255,0.14)" : "#e2e8f0"}`,
+                            background: isDark ? "rgba(255,255,255,0.04)" : "#f8fafc",
+                            color: textSec,
+                            cursor: "pointer",
+                          }}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 20h9" />
+                            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                          </svg>
+                        </button>
+                      </td>
+
+                      {/* ── Files / View button ── */}
+                      <td style={{ padding: "10px 14px", whiteSpace: "nowrap" }}>
+                        <button
+                          onClick={() => navigate(`/organization/scan-view/${r.id}`)}
+                          title={`View scan files for ${r.id}`}
+                          style={{
+                            ...sg,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 6,
+                            fontSize: 13,
+                            fontWeight: 700,
+                            padding: "6px 14px",
+                            borderRadius: 8,
+                            border: "1.5px solid rgba(96,165,250,0.55)",
+                            background: "rgba(37,99,235,0.10)",
+                            color: "#60a5fa",
+                            cursor: "pointer",
+                            letterSpacing: "0.3px",
+                            transition: "background 0.15s, border-color 0.15s",
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.background = "rgba(37,99,235,0.22)";
+                            e.currentTarget.style.borderColor = "#60a5fa";
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.background = "rgba(37,99,235,0.10)";
+                            e.currentTarget.style.borderColor = "rgba(96,165,250,0.55)";
+                          }}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                               stroke="currentColor" strokeWidth="2.2"
+                               strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M1 12S5 4 12 4s11 8 11 8-4 8-11 8S1 12 1 12z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                          </svg>
+                          View
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* ════ ROW 3 — TAT | Protocol QC | Cases by Modality ════ */}
         <div
           style={{
             display: "grid",
@@ -2322,398 +2812,207 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+      </div>
 
-        {/* ════ ROW 3 — Active Worklist ════ */}
+      {/* ── Active Worklist "Edit" modal ── */}
+      {editModal && (
         <div
-          className="dash-card"
+          onClick={() => !editModal.saving && setEditModal(null)}
           style={{
-            background: cardBg,
-            borderRadius: 18,
-            padding: 0,
-            boxShadow: cardShadow,
-            border: `1px solid ${cardBorder}`,
-            animationDelay: "380ms",
-            overflow: "hidden",
+            position: "fixed", inset: 0, zIndex: 20000,
+            background: "rgba(0,0,0,0.55)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 24,
           }}
         >
           <div
+            onClick={e => e.stopPropagation()}
             style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "18px 24px",
-              borderBottom: `1px solid ${tblBorder}`,
-              background: innerBg,
+              width: "100%", maxWidth: 640,
+              maxHeight: "88vh",
+              background: isDark ? "#0f172a" : "#ffffff",
+              border: `1px solid ${isDark ? "rgba(255,255,255,0.10)" : "#e2e8f0"}`,
+              borderRadius: 20,
+              overflow: "hidden",
+              boxShadow: "0 24px 60px rgba(0,0,0,0.40)",
+              display: "flex", flexDirection: "column",
             }}
           >
-            <div
-              style={{
-                fontSize: 15,
-                letterSpacing: "1.5px",
-                color: textSec,
-                textTransform: "uppercase",
-                fontWeight: 700,
-              }}
-            >
-              Active Worklist · Priority Cases
-            </div>
-
-            {/* ── Four filter dropdowns: Status / Priority / Radiologist / Study Type ── */}
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              {[
-                { label: "Status",      value: wlStatus,      setter: setWlStatus,      options: statusOptions },
-                { label: "Priority",    value: wlPriority,    setter: setWlPriority,    options: priorityOptions },
-                { label: "Radiologist", value: wlRadiologist, setter: setWlRadiologist, options: radiologistOptions },
-                { label: "Study Type",  value: wlStudyType,   setter: setWlStudyType,   options: studyTypeOptions },
-              ].map((f) => (
-                <div
-                  key={f.label}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    background: "#fff",
-                    border: "1px solid #cbd5e1",
-                    borderRadius: 20,
-                    padding: "4px 6px 4px 14px",
-                    boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
-                  }}
-                >
-                  <label
-                    htmlFor={`wl-${f.label}`}
-                    style={{
-                      ...sg,
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: "#64748b",
-                      letterSpacing: "0.5px",
-                      whiteSpace: "nowrap",
-                      cursor: "pointer",
-                    }}
-                  >
-                    {f.label}
-                  </label>
-                  <select
-                    id={`wl-${f.label}`}
-                    value={f.value}
-                    onChange={(e) => f.setter(e.target.value)}
-                    style={{
-                      ...sg,
-                      fontSize: 14,
-                      fontWeight: 600,
-                      color: f.value === "All" ? "#64748b" : "#1e293b",
-                      background: "transparent",
-                      border: "none",
-                      outline: "none",
-                      cursor: "pointer",
-                      paddingRight: 4,
-                      maxWidth: 180,
-                    }}
-                    title={f.value}    /* tooltip for long radiologist / study type names */
-                  >
-                    {f.options.map((opt) => (
-                      <option key={opt} value={opt}>{opt}</option>
-                    ))}
-                  </select>
+            {/* Header */}
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "18px 24px",
+              borderBottom: `1px solid ${isDark ? "rgba(255,255,255,0.10)" : "#e2e8f0"}`,
+              flexShrink: 0,
+            }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "2px", color: textMuted, textTransform: "uppercase", marginBottom: 4 }}>
+                  Edit Case
                 </div>
-              ))}
-
-              {/* Show a small "Clear" affordance when any filter is active */}
-              {(wlStatus !== "All" || wlPriority !== "All" ||
-                wlRadiologist !== "All" || wlStudyType !== "All") && (
-                <button
-                  onClick={() => {
-                    setWlStatus("All");
-                    setWlPriority("All");
-                    setWlRadiologist("All");
-                    setWlStudyType("All");
-                  }}
-                  style={{
-                    ...sg,
-                    fontSize: 12,
-                    fontWeight: 700,
-                    padding: "6px 12px",
-                    borderRadius: 16,
-                    border: "1px solid #cbd5e1",
-                    background: "#f1f5f9",
-                    color: "#475569",
-                    cursor: "pointer",
-                  }}
-                >
-                  Clear
-                </button>
-              )}
+                <div style={{ ...mono, fontSize: 16, fontWeight: 700, color: textPri }}>
+                  {editModal.caseId}
+                </div>
+              </div>
+              <button
+                onClick={() => !editModal.saving && setEditModal(null)}
+                style={{
+                  background: isDark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.06)",
+                  border: "none", borderRadius: 8, color: textPri,
+                  width: 30, height: 30, cursor: "pointer", fontSize: 18,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}
+              >×</button>
             </div>
-          </div>
 
-          {/* Scrollable worklist container — shows ~7 rows, scrolls for more.
-              maxHeight tuned to header (~52px) + 7 rows (~56px each) ≈ 460px.
-              Sticky <thead> keeps column labels in view while scrolling. */}
-          <div style={{
-            overflowX: "auto",
-            overflowY: "auto",
-            maxHeight: 460,
-            border: `1px solid ${tblHdrBorder}`,
-            borderRadius: 12,
-          }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ background: tblHeadBg }}>
-                  {[
-                    "Priority",
-                    "Case ID",
-                    "Patient Name",
-                    "Modality",
-                    "Study Type",
-                    "Received",
-                    "TAT Left",
-                    "Assigned To",
-                    "Status",
-                    "Files",
-                  ].map((h) => (
-                    <th
-                      key={h}
-                      style={{
-                        ...sg,
-                        fontSize: 15,
-                        letterSpacing: "1.5px",
-                        color: isDark ? "#ffffff" : "#0f172a",
-                        textTransform: "uppercase",
-                        padding: "12px 18px",
-                        textAlign: "left",
-                        fontWeight: 700,
-                        whiteSpace: "nowrap",
-                        borderBottom: `1px solid ${tblHdrBorder}`,
-                        // Sticky header stays pinned while body scrolls.
-                        // Background MUST be fully opaque — semi-transparent
-                        // tblHeadBg lets rows bleed through visually.
-                        position: "sticky",
-                        top: 0,
-                        zIndex: 3,
-                        background: isDark ? "#1e293b" : "#f1f5f9",
-                        boxShadow: isDark
-                          ? "0 1px 0 rgba(255,255,255,0.10)"
-                          : "0 1px 0 #e2e8f0",
-                      }}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-
-              <tbody>
-                {filteredWL.length === 0 ? (
-                  <tr>
-                    <td colSpan={10} style={{
-                      padding: "32px 18px",
-                      textAlign: "center",
-                      fontSize: 14,
-                      color: textSec,
-                      fontStyle: "italic",
-                    }}>
-                      {dashData
-                        ? "No active cases for this organization."
-                        : "Loading active worklist…"}
-                    </td>
-                  </tr>
-                ) : filteredWL.map((r) => {
-                  const ssDark = {
-                    reading: { bg: "rgba(59,130,246,0.10)", color: "#2563eb" },
-                    overdue: { bg: "rgba(239,68,68,0.10)", color: "#dc2626" },
-                    pending: { bg: "rgba(245,158,11,0.10)", color: "#d97706" },
-                    complete: { bg: "rgba(16,185,129,0.10)", color: "#059669" },
-                  }[r.sk] || { bg: "rgba(148,163,184,0.10)", color: "#64748b" };
+            {/* Body */}
+            <div className="modal-scroll" style={{ overflowY: "auto", padding: "20px 24px", flex: 1 }}>
+              {editModal.loading ? (
+                <div style={{ textAlign: "center", padding: "30px 0", color: textMuted, fontSize: 13 }}>Loading case…</div>
+              ) : !editModal.form ? (
+                <div style={{ textAlign: "center", padding: "30px 0", color: "#f87171", fontSize: 13 }}>
+                  {editModal.error || "Case not found"}
+                </div>
+              ) : (
+                (() => {
+                  const f = editModal.form;
+                  const set = (key) => (e) => {
+                    const val = e.target.value;
+                    setEditModal((m) => ({ ...m, form: { ...m.form, [key]: val } }));
+                  };
+                  const fieldLabelStyle = { fontSize: 13, fontWeight: 700, color: textPri, marginBottom: 6, display: "block" };
+                  const inputStyle = {
+                    ...sg,
+                    width: "100%", boxSizing: "border-box",
+                    padding: "10px 12px", borderRadius: 8, fontSize: 14,
+                    border: `1px solid ${isDark ? "rgba(255,255,255,0.14)" : "#cbd5e1"}`,
+                    background: isDark ? "rgba(255,255,255,0.04)" : "#ffffff",
+                    color: textPri,
+                  };
+                  const disabledInputStyle = { ...inputStyle, opacity: 0.6, cursor: "not-allowed" };
+                  const row2 = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 };
 
                   return (
-                    <tr
-                      key={r.id}
-                      className="wl-row"
-                      style={{
-                        borderTop: `1px solid ${tblBorder}`,
-                        background: tblRowBg,
-                      }}
-                    >
-                      <td style={{ padding: "13px 18px", whiteSpace: "nowrap" }}>
-                        <span
-                          style={{
-                            display: "inline-block",
-                            width: 9,
-                            height: 9,
-                            borderRadius: "50%",
-                            background: r.pColor,
-                            marginRight: 9,
-                            verticalAlign: "middle",
-                            boxShadow: `0 0 6px ${r.pColor}80`,
-                          }}
+                    <>
+                      <div style={row2}>
+                        <div>
+                          <label style={fieldLabelStyle}>Subject ID</label>
+                          <input style={disabledInputStyle} value={f.subjectId} disabled />
+                        </div>
+                        <div>
+                          <label style={fieldLabelStyle}>Patient Name</label>
+                          <input style={inputStyle} value={f.patientName} onChange={set("patientName")} placeholder="Full name" />
+                        </div>
+                      </div>
+
+                      <div style={row2}>
+                        <div>
+                          <label style={fieldLabelStyle}>Age</label>
+                          <input style={inputStyle} type="number" min="0" max="150" value={f.age} onChange={set("age")} />
+                        </div>
+                        <div>
+                          <label style={fieldLabelStyle}>Gender</label>
+                          <select style={inputStyle} value={f.gender} onChange={set("gender")}>
+                            <option value="">-- Select --</option>
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                            <option value="Other">Other</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div style={row2}>
+                        <div>
+                          <label style={fieldLabelStyle}>Priority</label>
+                          <select style={inputStyle} value={f.priority} onChange={set("priority")}>
+                            <option value="Routine">Routine</option>
+                            <option value="Urgent">Urgent</option>
+                            <option value="STAT">STAT</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label style={fieldLabelStyle}>Modality</label>
+                          <select style={inputStyle} value={f.modality} onChange={set("modality")}>
+                            <option value="CT">CT</option>
+                            <option value="MRI">MRI</option>
+                            <option value="XRAY">XRAY</option>
+                            <option value="US">US</option>
+                            <option value="PET">PET</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div style={row2}>
+                        <div>
+                          <label style={fieldLabelStyle}>Study Type</label>
+                          <input style={inputStyle} value={f.studyType} onChange={set("studyType")} placeholder="e.g. Head w/o Contrast" />
+                        </div>
+                        <div>
+                          <label style={fieldLabelStyle}>Study Date</label>
+                          <input style={inputStyle} type="date" value={f.studyDate} onChange={set("studyDate")} />
+                        </div>
+                      </div>
+
+                      <div style={{ marginBottom: 16 }}>
+                        <label style={fieldLabelStyle}>Referring Doctor</label>
+                        <input style={inputStyle} value={f.referringDoctor} onChange={set("referringDoctor")} placeholder="Enter referring doctor name" />
+                      </div>
+
+                      <div style={{ marginBottom: 4 }}>
+                        <label style={fieldLabelStyle}>History</label>
+                        <textarea
+                          style={{ ...inputStyle, minHeight: 90, resize: "vertical" }}
+                          value={f.history}
+                          onChange={set("history")}
+                          placeholder="Enter patient's clinical / medical history"
                         />
-                        <span
-                          style={{
-                            fontSize: 15,
-                            color: textPri,
-                            fontWeight: 700,
-                          }}
-                        >
-                          {r.priority}
-                        </span>
-                      </td>
+                      </div>
 
-                      <td
-                        style={{
-                          ...mono,
-                          padding: "13px 18px",
-                          fontSize: 15,
-                          color: textSec,
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {r.id}
-                      </td>
-
-                      {/* Patient Name */}
-                      <td
-                        style={{
-                          padding: "13px 18px",
-                          fontSize: 14,
-                          color: textPri,
-                          fontWeight: 500,
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {r.patientName}
-                      </td>
-
-                      <td style={{ padding: "13px 18px" }}>
-                        <span
-                          style={{
-                            ...mono,
-                            fontSize: 15,
-                            fontWeight: 700,
-                            background: r.mBg,
-                            color: r.mColor,
-                            padding: "3px 10px",
-                            borderRadius: 6,
-                          }}
-                        >
-                          {r.mod}
-                        </span>
-                      </td>
-
-                      <td
-                        style={{
-                          padding: "13px 18px",
-                          fontSize: 15,
-                          color: textPri,
-                          fontWeight: 600,
-                          textTransform: "capitalize",
-                        }}
-                      >
-                        {r.study}
-                      </td>
-
-                      <td
-                        style={{
-                          ...mono,
-                          padding: "13px 18px",
-                          fontSize: 15,
-                          color: textSec,
-                        }}
-                      >
-                        {r.recv}
-                      </td>
-
-                      <td
-                        style={{
-                          ...mono,
-                          padding: "13px 18px",
-                          fontSize: 15,
-                          fontWeight: 700,
-                          color: r.tatColor,
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {r.tat}
-                      </td>
-
-                      <td
-                        style={{
-                          padding: "13px 18px",
-                          fontSize: 15,
-                          color:
-                            r.assignee === "Unassigned"
-                              ? "#d97706"
-                              : textPri,
-                          fontWeight:
-                            r.assignee === "Unassigned" ? 700 : 600,
-                        }}
-                      >
-                        {r.assignee}
-                      </td>
-
-                      <td style={{ padding: "13px 18px" }}>
-                        <span
-                          style={{
-                            ...sg,
-                            fontSize: 15,
-                            padding: "4px 12px",
-                            borderRadius: 6,
-                            background: ssDark.bg,
-                            color: ssDark.color,
-                            fontWeight: 700,
-                            letterSpacing: "0.5px",
-                          }}
-                        >
-                          {r.status}
-                        </span>
-                      </td>
-
-                      {/* ── Files / View button ── */}
-                      <td style={{ padding: "10px 14px", whiteSpace: "nowrap" }}>
-                        <button
-                          onClick={() => navigate(`/organization/scan-view/${r.id}`)}
-                          title={`View scan files for ${r.id}`}
-                          style={{
-                            ...sg,
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 6,
-                            fontSize: 13,
-                            fontWeight: 700,
-                            padding: "6px 14px",
-                            borderRadius: 8,
-                            border: "1.5px solid rgba(96,165,250,0.55)",
-                            background: "rgba(37,99,235,0.10)",
-                            color: "#60a5fa",
-                            cursor: "pointer",
-                            letterSpacing: "0.3px",
-                            transition: "background 0.15s, border-color 0.15s",
-                          }}
-                          onMouseEnter={e => {
-                            e.currentTarget.style.background = "rgba(37,99,235,0.22)";
-                            e.currentTarget.style.borderColor = "#60a5fa";
-                          }}
-                          onMouseLeave={e => {
-                            e.currentTarget.style.background = "rgba(37,99,235,0.10)";
-                            e.currentTarget.style.borderColor = "rgba(96,165,250,0.55)";
-                          }}
-                        >
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                               stroke="currentColor" strokeWidth="2.2"
-                               strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M1 12S5 4 12 4s11 8 11 8-4 8-11 8S1 12 1 12z"/>
-                            <circle cx="12" cy="12" r="3"/>
-                          </svg>
-                          View
-                        </button>
-                      </td>
-                    </tr>
+                      {editModal.error && (
+                        <div style={{ marginTop: 12, fontSize: 13, color: "#f87171" }}>{editModal.error}</div>
+                      )}
+                    </>
                   );
-                })}
-              </tbody>
-            </table>
+                })()
+              )}
+            </div>
+
+            {/* Footer */}
+            {editModal.form && (
+              <div style={{
+                display: "flex", justifyContent: "flex-end", gap: 10,
+                padding: "14px 24px",
+                borderTop: `1px solid ${isDark ? "rgba(255,255,255,0.10)" : "#e2e8f0"}`,
+                flexShrink: 0,
+              }}>
+                <button
+                  onClick={() => setEditModal(null)}
+                  disabled={editModal.saving}
+                  style={{
+                    ...sg, padding: "9px 18px", borderRadius: 8,
+                    border: `1px solid ${isDark ? "rgba(255,255,255,0.14)" : "#cbd5e1"}`,
+                    background: "transparent", color: textPri,
+                    fontWeight: 600, fontSize: 14, cursor: editModal.saving ? "default" : "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveEditModal}
+                  disabled={editModal.saving}
+                  style={{
+                    ...sg, padding: "9px 20px", borderRadius: 8, border: "none",
+                    background: editModal.saving ? "#475569" : "linear-gradient(135deg,#1e3a8a,#2563eb)",
+                    color: "#fff", fontWeight: 700, fontSize: 14,
+                    cursor: editModal.saving ? "wait" : "pointer",
+                  }}
+                >
+                  {editModal.saving ? "Saving…" : "Save Changes"}
+                </button>
+              </div>
+            )}
           </div>
         </div>
-      </div>
+      )}
 
       {/* ── Completed Today Cases Modal ── */}
       {completedCasesModal && (

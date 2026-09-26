@@ -65,9 +65,7 @@ class OrganizationProfileOut(BaseModel):
 class OrgProfileSaveIn(BaseModel):
     orgName: Optional[str] = None       # ignored on backend; forced from users.username
     orgType: Optional[str] = None
-    npi: Optional[str] = None
-    ein: Optional[str] = None
-    clia: Optional[str] = None
+    gst: Optional[str] = None
     website: Optional[str] = None
     email: Optional[str] = None         # ignored on backend; forced from users.email
     phone: Optional[str] = None
@@ -81,8 +79,6 @@ class OrgProfileSaveIn(BaseModel):
     adminEmail: Optional[str] = None
     adminPhone: Optional[str] = None
     adminRole: Optional[str] = None
-    hipaaOfficerName: Optional[str] = None
-    hipaaOfficerEmail: Optional[str] = None
     logo: Optional[str] = None          # base64 data URL or ""
 
 
@@ -199,3 +195,16 @@ class CaseUpdateIn(BaseModel):
     study_date:     Optional[str] = None
     case_id:        Optional[str] = None
     removed_files:  List[str] = []
+
+
+class CaseEditByCaseIdIn(BaseModel):
+    """PUT /organization/uploads/by-case/{case_id} body — Active Worklist edit form."""
+    patient_name:     Optional[str] = None
+    age:              Optional[int] = None
+    gender:           Optional[str] = None
+    priority:         Optional[str] = None
+    modality:         Optional[str] = None
+    study_type:       Optional[str] = None
+    study_date:       Optional[str] = None
+    referring_doctor: Optional[str] = None
+    history:          Optional[str] = None

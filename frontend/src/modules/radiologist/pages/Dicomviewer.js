@@ -234,6 +234,7 @@
   const {
     fileUrl, filename, seriesFiles, patientName, patientAge, patientSex, caseId, clientId,
     priority, status, study, modality: caseModality, referredBy, location: caseLocation, waitMins,
+    history: caseHistory,
   } = hasRouterState ? location.state : (queryState || {});
 
     const [loading, setLoading] = useState(true);
@@ -3990,6 +3991,7 @@
                   referredBy={referredBy}
                   caseLocation={caseLocation}
                   waitMins={waitMins}
+                  history={caseHistory}
                   chatMessages={chatMessages}
                   onChatFile={onChatFile}
                   chatInput={chatInput}
@@ -4416,6 +4418,7 @@
                   referredBy={referredBy}
                   caseLocation={caseLocation}
                   waitMins={waitMins}
+                  history={caseHistory}
                   chatMessages={chatMessages}
                   onChatFile={onChatFile}
                   chatInput={chatInput}

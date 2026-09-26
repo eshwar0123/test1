@@ -20,18 +20,27 @@ const INDIA_STATES = [
 ]
 
 const EMPTY = {
-  orgName: '', orgType: '', npi: '', ein: '', clia: '', website: '',
+  orgName: '', orgType: '', gst: '', website: '',
   email: '', phone: '', fax: '', street: '', city: '', state: '', zip: '', country: 'India',
   adminName: '', adminEmail: '', adminPhone: '', adminRole: '',
-  hipaaOfficerName: '', hipaaOfficerEmail: '', logo: '',
+  logo: '',
 }
 
 /* ── Validators ─────────────────────────────────────────────────────────── */
 const isEmail  = v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())
-const isNPI    = v => /^\d{10}$/.test(v.trim())
-const isEIN    = v => /^\d{2}-\d{7}$/.test(v.trim())
+const isGST    = v => /^\d{2}[A-Z]{5}\d{4}[A-Z]\d[A-Z]\d[A-Z\d]$/.test(v.trim())
 const isZIP    = v => /^\d{5}$/.test(v.trim())
 const isUSPhone = v => v.replace(/\D/g, '').length === 10
+
+// Indian phone format for the preview step — "+91 XXXXXXXXXX".
+// Strips any existing country code / non-digits first so it works whether
+// the operator typed "9876543210", "+91 9876543210", or "09876543210".
+const formatIndianPhone = (v) => {
+  if (!v) return ''
+  const digits = v.replace(/\D/g, '')
+  const last10 = digits.slice(-10)
+  return last10.length === 10 ? `+91 ${last10}` : v
+}
 
 const OrgSetupModal = ({ onComplete, onBack }) => {
   const [form, setForm]   = useState(EMPTY)
@@ -218,35 +227,14 @@ const OrgSetupModal = ({ onComplete, onBack }) => {
 
               <div className="osm-row">
                 <div className="osm-field">
-                  <label>NPI Number</label>
+                  <label>GST Number</label>
                   <input
-                    value={form.npi}
-                    onChange={e => set('npi', e.target.value.replace(/\D/g, '').slice(0, 10))}
-                    placeholder="e.g. 1234567890"
-                    maxLength={10}
+                    value={form.gst}
+                    onChange={e => set('gst', e.target.value.toUpperCase().slice(0, 15))}
+                    placeholder="e.g. 22AAAAA0000A1Z5"
+                    maxLength={15}
                   />
-                  {errors.npi && <span className="osm-err">{errors.npi}</span>}
-                </div>
-                <div className="osm-field">
-                  <label>EIN / Tax ID</label>
-                  <input
-                    value={form.ein}
-                    onChange={e => {
-                      let v = e.target.value.replace(/[^\d-]/g, '')
-                      if (v.length === 2 && !v.includes('-') && e.nativeEvent.inputType !== 'deleteContentBackward') v += '-'
-                      set('ein', v.slice(0, 10))
-                    }}
-                    placeholder="e.g. 12-3456789"
-                    maxLength={10}
-                  />
-                  {errors.ein && <span className="osm-err">{errors.ein}</span>}
-                </div>
-              </div>
-
-              <div className="osm-row">
-                <div className="osm-field">
-                  <label>CLIA Number <span className="osm-optional">(optional)</span></label>
-                  <input value={form.clia} onChange={e => set('clia', e.target.value)} placeholder="e.g. 12D0123456" />
+                  {errors.gst && <span className="osm-err">{errors.gst}</span>}
                 </div>
                 <div className="osm-field">
                   <label>Website</label>
@@ -363,19 +351,6 @@ const OrgSetupModal = ({ onComplete, onBack }) => {
                   {errors.adminPhone && <span className="osm-err">{errors.adminPhone}</span>}
                 </div>
               </div>
-
-              <div className="osm-row">
-                <div className="osm-field">
-                  <label>HIPAA Privacy Officer Name</label>
-                  <input value={form.hipaaOfficerName} onChange={e => set('hipaaOfficerName', e.target.value)} placeholder="Full name of Privacy Officer" />
-                  {errors.hipaaOfficerName && <span className="osm-err">{errors.hipaaOfficerName}</span>}
-                </div>
-                <div className="osm-field">
-                  <label>HIPAA Privacy Officer Email</label>
-                  <input value={form.hipaaOfficerEmail} onChange={e => set('hipaaOfficerEmail', e.target.value)} placeholder="privacy@org.com" />
-                  {errors.hipaaOfficerEmail && <span className="osm-err">{errors.hipaaOfficerEmail}</span>}
-                </div>
-              </div>
             </div>
           )}
 
@@ -397,16 +372,14 @@ const OrgSetupModal = ({ onComplete, onBack }) => {
                   <div className="osm-preview-card-title">Basic Information</div>
                   <div className="osm-preview-row"><span>Org Name</span><span>{form.orgName}</span></div>
                   <div className="osm-preview-row"><span>Type</span><span>{form.orgType}</span></div>
-                  <div className="osm-preview-row"><span>NPI Number</span><span>{form.npi}</span></div>
-                  <div className="osm-preview-row"><span>EIN / Tax ID</span><span>{form.ein}</span></div>
-                  {form.clia && <div className="osm-preview-row"><span>CLIA Number</span><span>{form.clia}</span></div>}
+                  {form.gst && <div className="osm-preview-row"><span>GST Number</span><span>{form.gst}</span></div>}
                   {form.website && <div className="osm-preview-row"><span>Website</span><span>{form.website}</span></div>}
                 </div>
 
                 <div className="osm-preview-card">
                   <div className="osm-preview-card-title">Contact Details</div>
                   <div className="osm-preview-row"><span>Email</span><span>{form.email}</span></div>
-                  <div className="osm-preview-row"><span>Phone</span><span>{form.phone}</span></div>
+                  <div className="osm-preview-row"><span>Phone</span><span>{formatIndianPhone(form.phone)}</span></div>
                   {form.fax && <div className="osm-preview-row"><span>Fax</span><span>{form.fax}</span></div>}
                   <div className="osm-preview-row">
                     <span>Address</span>
@@ -420,12 +393,6 @@ const OrgSetupModal = ({ onComplete, onBack }) => {
                   {form.adminRole && <div className="osm-preview-row"><span>Role</span><span>{form.adminRole}</span></div>}
                   <div className="osm-preview-row"><span>Email</span><span>{form.adminEmail}</span></div>
                   {form.adminPhone && <div className="osm-preview-row"><span>Phone</span><span>{form.adminPhone}</span></div>}
-                </div>
-
-                <div className="osm-preview-card">
-                  <div className="osm-preview-card-title">Compliance</div>
-                  <div className="osm-preview-row"><span>HIPAA Officer</span><span>{form.hipaaOfficerName}</span></div>
-                  <div className="osm-preview-row"><span>Officer Email</span><span>{form.hipaaOfficerEmail}</span></div>
                 </div>
               </div>
 

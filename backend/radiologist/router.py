@@ -765,7 +765,7 @@ def get_scans(request: Request, user_id: Optional[str] = None):
             patient_name, patient_sex, patient_age,
             ref_organisation, org_logo_url, id_organisation,
             priority_type, status, modality_study_type,
-            s3_key, storage_type
+            s3_key, storage_type, history
         ) in rows:
 
             # If file_path is a placeholder/invalid, fall back to bulk_uploads path
@@ -803,6 +803,7 @@ def get_scans(request: Request, user_id: Optional[str] = None):
                 "priority": priority_type or "routine",
                 "status": status or "pending",
                 "study": modality_study_type or scan_type or "",
+                "history": history,
 
                 # ── S3 storage fields ─────────────────────────────────
                 "s3_key": s3_key,
@@ -850,6 +851,7 @@ def get_scans(request: Request, user_id: Optional[str] = None):
                 "ref_organisation": ref_organisation,
                 "org_logo_url": org_logo_url,
                 "id_organisation": id_organisation,
+                "history": item.get("history"),
             })
 
         return {"success": True, "data": data, "mode": "local-cache"}

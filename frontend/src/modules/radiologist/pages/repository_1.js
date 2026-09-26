@@ -649,6 +649,7 @@ export default function Repository1() {
               study:        s.study || local.study || s.scan_type || '',
               priority:     (s.priority || local.priority || 'routine').toLowerCase(),
               status:       s.status || local.status || 'pending',
+              history:      s.history || local.history || '',
               waitMins:     local.waitMins ?? 20,
               referredBy:   local.referredBy || 'Dr. —',
               location:     local.location || '-',
@@ -970,6 +971,7 @@ export default function Repository1() {
         referredBy:  item.referredBy,
         location:    item.location,
         waitMins:    item.waitMins,
+        history:     item.history,
       },
     });
   };

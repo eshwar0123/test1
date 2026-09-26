@@ -10,6 +10,7 @@ bcrypt
 python-jose[cryptography]
 email-validator
 boto3
+apscheduler
 pydicom
 pylibjpeg
 pylibjpeg-libjpeg

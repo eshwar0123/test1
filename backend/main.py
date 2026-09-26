@@ -189,6 +189,19 @@ except Exception as _e:
     print(f"[warn] QC router not loaded: {_e}")
 
 
+# S3 machine-ingest — polls uploads/Clients/<org>/<case>/ for cases the MRI
+# machine uploads directly to S3, and feeds them through the same QC/insert
+# pipeline the manual organization upload flow uses. Purely additive: if this
+# fails to start, the rest of the app is unaffected.
+@app.on_event("startup")
+def _start_s3_machine_ingest():
+    try:
+        from machine_ingest.scheduler import start_s3_ingest_scheduler
+        start_s3_ingest_scheduler()
+    except Exception as _e:
+        print(f"[warn] S3 machine-ingest scheduler not started: {_e}")
+
+
 # =======================
 # Home
 # =======================
@@ -790,3 +803,4 @@ def change_email(data: ChangeEmailSchema):
     conn.close()
 
     return {"message": "Email changed successfully", "email": str(data.new_email)}
+

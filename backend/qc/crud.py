@@ -197,6 +197,7 @@ def insert_bulk_upload_after_qc(
           modality_type,       modality_type_id,
           modality_study_type, modality_study_type_id,
           referring_doctor,
+          history,
           subject_id,
           qc_status, qc_summary, qc_ran_at
         ) VALUES (
@@ -208,6 +209,7 @@ def insert_bulk_upload_after_qc(
           %s, %s,
           %s, %s,
           %s, %s,
+          %s,
           %s,
           %s, %s, %s, NOW()
         ) RETURNING id
@@ -232,6 +234,7 @@ def insert_bulk_upload_after_qc(
             case_meta.get("study_type_text"),
             resolve_study_type_id(case_meta.get("study_type_text")),
             case_meta.get("referring_doctor"),
+            case_meta.get("history"),
             case_meta.get("subject_id"),
             qc_status,
             qc_summary,
@@ -571,6 +574,7 @@ def insert_rad_scan_for_case(src_row: Dict[str, Any], rad: Dict[str, Any], thumb
            priority_type,
            modality_study_type,
            referring_doctor,
+           history,
            assigned_rad_id,
            due_date,
            assigned_at,
@@ -588,6 +592,7 @@ def insert_rad_scan_for_case(src_row: Dict[str, Any], rad: Dict[str, Any], thumb
            %s,
            (SELECT org_name  FROM organization_schema.org_profile WHERE org_id = %s LIMIT 1),
            (SELECT logo_path FROM organization_schema.org_profile WHERE org_id = %s LIMIT 1),
+           %s,
            %s,
            %s,
            %s,
@@ -611,6 +616,7 @@ def insert_rad_scan_for_case(src_row: Dict[str, Any], rad: Dict[str, Any], thumb
            priority_type    = EXCLUDED.priority_type,
            modality_study_type = EXCLUDED.modality_study_type,
            referring_doctor = EXCLUDED.referring_doctor,
+           history          = EXCLUDED.history,
            assigned_rad_id  = EXCLUDED.assigned_rad_id,
            due_date         = EXCLUDED.due_date,
            assigned_at      = EXCLUDED.assigned_at,
@@ -631,6 +637,7 @@ def insert_rad_scan_for_case(src_row: Dict[str, Any], rad: Dict[str, Any], thumb
             src_row.get("priority_type"),
             src_row.get("modality_study_type"),
             src_row.get("referring_doctor"),
+            src_row.get("history"),
             rad_id,
             src_row.get("case_id"),   # for due_at subquery
             src_row.get("case_id"),   # for assigned_at subquery

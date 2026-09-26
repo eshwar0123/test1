@@ -90,6 +90,61 @@ def _ensure_dmc_no_column(conn: connection) -> None:
     conn.commit()
 
 
+def _ensure_reports_sync_trigger(conn: connection) -> None:
+    """Lazily installs a DB-level trigger that backfills reports.referring_doctor
+    and reports.history from the matching rad_scans row whenever either is left
+    blank on an insert/update — same self-healing pattern as _ensure_dmc_no_column.
+
+    This exists as a safety net UNDERNEATH the Python-level fallbacks in
+    get_or_create_report/upsert_report: those only protect the two write paths
+    this module knows about. A trigger guarantees the fix applies no matter
+    which code (or ad-hoc SQL) writes the row, and doesn't depend on every
+    backend process having picked up the latest app code."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            CREATE OR REPLACE FUNCTION radiology_schema.sync_report_from_rad_scan()
+            RETURNS trigger
+            LANGUAGE plpgsql
+            AS $$
+            BEGIN
+              IF NEW.case_id IS NOT NULL AND (NEW.referring_doctor IS NULL OR NEW.referring_doctor = '') THEN
+                SELECT rs.referring_doctor INTO NEW.referring_doctor
+                FROM radiology_schema.rad_scans rs
+                WHERE rs.case_id = NEW.case_id
+                  AND rs.referring_doctor IS NOT NULL AND rs.referring_doctor <> ''
+                ORDER BY rs.scan_date DESC
+                LIMIT 1;
+              END IF;
+
+              IF NEW.case_id IS NOT NULL AND (NEW.history IS NULL OR NEW.history = '') THEN
+                SELECT rs.history INTO NEW.history
+                FROM radiology_schema.rad_scans rs
+                WHERE rs.case_id = NEW.case_id
+                  AND rs.history IS NOT NULL AND rs.history <> ''
+                ORDER BY rs.scan_date DESC
+                LIMIT 1;
+              END IF;
+
+              RETURN NEW;
+            END;
+            $$;
+            """
+        )
+        cur.execute(
+            "DROP TRIGGER IF EXISTS trg_sync_report_from_rad_scan ON radiology_schema.reports"
+        )
+        cur.execute(
+            """
+            CREATE TRIGGER trg_sync_report_from_rad_scan
+            BEFORE INSERT OR UPDATE ON radiology_schema.reports
+            FOR EACH ROW
+            EXECUTE FUNCTION radiology_schema.sync_report_from_rad_scan()
+            """
+        )
+    conn.commit()
+
+
 def ensure_radiologist_row(conn: connection, user_id: UUID) -> None:
     """
     Ensures radiology_schema.radiologists has a row for this user_id.
@@ -219,7 +274,12 @@ def list_scans(conn: connection, user_id: Optional[UUID] = None) -> List[Tuple]:
                     scan_id, case_id, user_id, scan_type, scan_date,
                     file_path, thumbnail_path,
                     patient_name, patient_sex, patient_age,
-                    ref_organisation, org_logo_url, id_organisation
+                    ref_organisation, org_logo_url, id_organisation,
+                    COALESCE(priority_type, 'routine') AS priority_type,
+                    COALESCE(status, 'pending') AS status,
+                    modality_study_type,
+                    s3_key, storage_type,
+                    history
                 FROM radiology_schema.rad_scans
                 WHERE user_id=%s
                 ORDER BY scan_date DESC
@@ -233,7 +293,12 @@ def list_scans(conn: connection, user_id: Optional[UUID] = None) -> List[Tuple]:
                     scan_id, case_id, user_id, scan_type, scan_date,
                     file_path, thumbnail_path,
                     patient_name, patient_sex, patient_age,
-                    ref_organisation, org_logo_url, id_organisation
+                    ref_organisation, org_logo_url, id_organisation,
+                    COALESCE(priority_type, 'routine') AS priority_type,
+                    COALESCE(status, 'pending') AS status,
+                    modality_study_type,
+                    s3_key, storage_type,
+                    history
                 FROM radiology_schema.rad_scans
                 ORDER BY scan_date DESC
                 """
@@ -274,7 +339,8 @@ def list_scans_for_radiologist(
                     COALESCE(priority_type, 'routine') AS priority_type,
                     COALESCE(status, 'pending') AS status,
                     modality_study_type,
-                    s3_key, storage_type"""
+                    s3_key, storage_type,
+                    history"""
         if is_master:
             cur.execute(
                 f"SELECT {select_cols} FROM radiology_schema.rad_scans ORDER BY scan_date DESC"
@@ -571,6 +637,7 @@ def update_signature_path(conn: connection, user_id: UUID, path: str) -> None:
 # -----------------------------
 def get_report(conn: connection, case_id: str, user_id: UUID) -> Dict[str, Any]:
     _ensure_dmc_no_column(conn)
+    _ensure_reports_sync_trigger(conn)
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -664,25 +731,54 @@ def get_or_create_report(conn: connection, case_id: str, user_id: UUID) -> Dict[
       - Patient details from rad_scans
       - Radiologist + lab details from radiologists
     """
+    _ensure_reports_sync_trigger(conn)
 
     with conn.cursor() as cur:
 
         # 1️⃣ Check if report already exists
         cur.execute(
             """
-            SELECT report_id
+            SELECT report_id, referring_doctor, history
             FROM radiology_schema.reports
             WHERE case_id=%s AND user_id=%s
             """,
             (case_id, str(user_id)),
         )
-        if cur.fetchone():
+        existing = cur.fetchone()
+        if existing:
+            # Self-heal older report rows created before referring_doctor/history
+            # were reliably populated on rad_scans (or blanked out by a save that
+            # ran before the editor's field was pre-filled) — backfill from the
+            # scan record whenever the report is still missing them.
+            if not existing[1] or not existing[2]:
+                cur.execute(
+                    """
+                    SELECT referring_doctor, history
+                    FROM radiology_schema.rad_scans
+                    WHERE case_id=%s
+                    ORDER BY scan_date DESC
+                    LIMIT 1
+                    """,
+                    (case_id,),
+                )
+                scan_fallback = cur.fetchone()
+                if scan_fallback and (scan_fallback[0] or scan_fallback[1]):
+                    cur.execute(
+                        """
+                        UPDATE radiology_schema.reports
+                        SET referring_doctor = COALESCE(NULLIF(referring_doctor, ''), %s),
+                            history = COALESCE(NULLIF(history, ''), %s)
+                        WHERE case_id=%s AND user_id=%s
+                        """,
+                        (scan_fallback[0], scan_fallback[1], case_id, str(user_id)),
+                    )
+                    conn.commit()
             return get_report(conn, case_id, user_id)
 
         # 2️⃣ Get patient details from rad_scans
         cur.execute(
             """
-            SELECT patient_name, patient_age, patient_sex, referring_doctor
+            SELECT patient_name, patient_age, patient_sex, referring_doctor, history
             FROM radiology_schema.rad_scans
             WHERE case_id=%s
             ORDER BY scan_date DESC
@@ -695,7 +791,7 @@ def get_or_create_report(conn: connection, case_id: str, user_id: UUID) -> Dict[
         if not scan_row:
             raise ValueError("No scan found for case_id")
 
-        patient_name, patient_age, patient_sex, referring_doctor = scan_row
+        patient_name, patient_age, patient_sex, referring_doctor, history = scan_row
 
         # 3️⃣ Get radiologist details
         cur.execute(
@@ -741,10 +837,11 @@ def get_or_create_report(conn: connection, case_id: str, user_id: UUID) -> Dict[
             INSERT INTO radiology_schema.reports (
                 case_id, user_id,
                 patient_name, patient_age, patient_sex, referring_doctor,
+                history,
                 radiologist_name, qualification, designation,
                 user_lab_name, lab_address, department, lab_logo_url
             )
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             """,
             (
                 case_id,
@@ -753,6 +850,7 @@ def get_or_create_report(conn: connection, case_id: str, user_id: UUID) -> Dict[
                 patient_age,
                 patient_sex,
                 referring_doctor,
+                history,
                 radiologist_name,
                 qualification,
                 designation,
@@ -790,9 +888,29 @@ def upsert_report(
     # ✅ ADDED: ETA (frontend-tracked seconds) — None preserves existing value on re-save
     eta_report: Optional[float] = None,
 ) -> Dict[str, Any]:
+    _ensure_reports_sync_trigger(conn)
+
     # Always re-detect infrastructure on save — reflects the machine handling this save
     infra = _detect_infrastructure()
     infra_json = json.dumps(infra)
+
+    # The report editor's "Referring Doctor" field starts blank until the
+    # template is populated from reportData; a save that races that prefill
+    # (or a caller that just never sends it) would otherwise blank out a
+    # value that's already correct on rad_scans. Fall back to that instead
+    # of trusting an empty string from the caller.
+    if not referring_doctor:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT referring_doctor FROM radiology_schema.rad_scans
+                WHERE case_id=%s ORDER BY scan_date DESC LIMIT 1
+                """,
+                (case_id,),
+            )
+            row = cur.fetchone()
+            if row and row[0]:
+                referring_doctor = row[0]
 
     with conn.cursor() as cur:
         cur.execute(
@@ -809,7 +927,9 @@ def upsert_report(
                %s::jsonb, %s)
             ON CONFLICT (case_id, user_id)
             DO UPDATE SET
-              referring_doctor=EXCLUDED.referring_doctor,
+              -- Never let a blank incoming value erase a referring_doctor
+              -- that's already stored.
+              referring_doctor=COALESCE(NULLIF(EXCLUDED.referring_doctor, ''), radiology_schema.reports.referring_doctor),
               scan_datetime=EXCLUDED.scan_datetime,
               clinical_indication=EXCLUDED.clinical_indication,
               technique=EXCLUDED.technique,
@@ -915,6 +1035,7 @@ def mark_report_completed(
     2. Flip admin_schema.case_workflow.current_status to 'completed' for this case.
     Raises ValueError if no report row exists for (case_id, user_id).
     """
+    _ensure_reports_sync_trigger(conn)
     with conn.cursor() as cur:
         cur.execute(
             "SELECT 1 FROM radiology_schema.reports WHERE case_id=%s AND user_id=%s",
@@ -1250,6 +1371,7 @@ def create_ai_chat(
 def save_report_export(conn, case_id: str, user_id,  report_format: str,
                       report_file_path: str):
     """Upsert report export metadata into radiology_schema.reports."""
+    _ensure_reports_sync_trigger(conn)
     with conn.cursor() as cur:
         cur.execute(
             """

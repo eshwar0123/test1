@@ -185,6 +185,7 @@ const HEADER_ALIASES = {
   study_type:     ["study_type", "study type", "modality_study_type"],
   study_date:     ["study_date", "study date", "date"],
   referring_doctor: ["referring_doctor", "referring doctor", "referring physician", "referred by", "ref_doctor", "ref doctor"],
+  history:        ["history", "patient_history", "patient history", "clinical_history", "clinical history"],
   file_name:      ["image_file_name", "image file name", "file_name", "file name", "filename", "image"],
 };
 
@@ -312,7 +313,7 @@ export default function Upload() {
   const [sp, setSp] = useState({
     subject_id: "", patient_name: "", age: "", gender: "",
     priority: "Routine", modality: "CT", study_type: "", study_date: "",
-    referring_doctor: "",
+    referring_doctor: "", history: "",
   });
   const [spFiles, setSpFiles] = useState([]);
   const [spSubmitting, setSpSubmitting] = useState(false);
@@ -403,6 +404,7 @@ export default function Upload() {
       study_type:   sp.study_type || null,
       study_date:   sp.study_date || null,
       referring_doctor: sp.referring_doctor || null,
+      history:      sp.history || null,
       file_name:    matchedNames[0] || null,
       matched_files:    matchedNames,
       _matchedFileObjs: spFiles,   // File objects — required by handleBulkSubmit
@@ -417,7 +419,7 @@ export default function Upload() {
     // Clear the form so user can add another one
     setSp({ subject_id: "", patient_name: "", age: "", gender: "",
             priority: "Routine", modality: "CT", study_type: "", study_date: "",
-            referring_doctor: "" });
+            referring_doctor: "", history: "" });
     setSpFiles([]);
     setActiveTab("records");
     showBanner("success",
@@ -650,6 +652,7 @@ export default function Upload() {
       study_type:    r.study_type || null,
       study_date:    r.study_date || null,
       referring_doctor: r.referring_doctor || null,
+      history:       r.history || null,
       file_name:     r.file_name || null,
       matched_files: r.matched_files || [],
     }));
@@ -863,7 +866,6 @@ export default function Upload() {
                               value={sp.priority} onChange={handleSpChange}>
                         <option value="Routine">Routine</option>
                         <option value="Urgent">Urgent</option>
-                        <option value="STAT">STAT</option>
                       </select>
                     </div>
                     <div className="org-upload-form-group">
@@ -902,6 +904,18 @@ export default function Upload() {
                       value={sp.referring_doctor || ""}
                       onChange={handleSpChange}
                       placeholder="Enter referring doctor name"
+                    />
+                  </div>
+
+                  <div className="org-upload-form-group">
+                    <label>History</label>
+                    <textarea
+                      className="org-upload-input"
+                      name="history"
+                      rows={3}
+                      value={sp.history || ""}
+                      onChange={handleSpChange}
+                      placeholder="Enter patient's clinical / medical history"
                     />
                   </div>
 
@@ -1827,6 +1841,7 @@ function PreviewCaseModal({ row, mode, onClose, onSave }) {
     study_type:   row.study_type   || "",
     study_date:   row.study_date   || "",
     referring_doctor: row.referring_doctor || "",
+    history:      row.history      || "",
   });
   const onChange = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
 
@@ -1918,6 +1933,7 @@ function PreviewCaseModal({ row, mode, onClose, onSave }) {
                 <dt>Study Type</dt>   <dd>{row.study_type || "—"}</dd>
                 <dt>Study Date</dt>   <dd>{row.study_date || "—"}</dd>
                 <dt>Referring Doctor</dt> <dd>{row.referring_doctor || "—"}</dd>
+                <dt>History</dt>      <dd>{row.history || "—"}</dd>
                 <dt>File key</dt>     <dd style={{ fontFamily: "monospace" }}>{row.file_name || "—"}</dd>
                 <dt>Matched files</dt><dd>{matched.length === 0
                                             ? <em style={{ color: "#c2410c" }}>⚠ no files matched</em>
@@ -1939,6 +1955,8 @@ function PreviewCaseModal({ row, mode, onClose, onSave }) {
                 <EditField  label="Study Date"   name="study_date"   value={form.study_date}   onChange={onChange} type="date" />
                 <EditField  label="Referring Doctor" name="referring_doctor" value={form.referring_doctor} onChange={onChange}
                             placeholder="Enter referring doctor name" />
+                <EditField  label="History" name="history" value={form.history} onChange={onChange}
+                            placeholder="Enter patient's clinical / medical history" />
               </div>
             )}
 

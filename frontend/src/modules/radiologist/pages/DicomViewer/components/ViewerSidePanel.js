@@ -412,6 +412,7 @@ export default function ViewerSidePanel({
   study,
   caseModality,
   waitMins,
+  history,
   currentUserId,
   onRequestFullscreen,
   chatMessages,
@@ -3062,6 +3063,7 @@ const manualClientIdMap = {
                 </div>
                 {[
                   ["Client ID", resolvedClientId],
+                  ["History", history || "—"],
                 ].map(([k, v], idx) => (
                   <div
                     key={k}
