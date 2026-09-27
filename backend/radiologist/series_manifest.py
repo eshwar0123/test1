@@ -40,6 +40,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import unquote
 
 import numpy as np
 import pydicom
@@ -938,6 +939,16 @@ def stream_instance(key: str, request: Request):
             key = key[len(_bucket) + 1:]
     except Exception:  # noqa: BLE001
         pass
+
+    # The viewer wraps the URL in encodeURI() (buildImageId), which re-encodes
+    # the "%20" already in a presigned path into "%2520". FastAPI decodes once,
+    # so a key like "TOTAL DIAGNOSTICS CARE/..." arrives as "TOTAL%20DIAGNOSTICS
+    # %20CARE/..." and never matches the object. Keys without spaces/specials
+    # (everything the manual upload flow writes) contain no "%" and are untouched.
+    if re.search(r"%[0-9A-Fa-f]{2}", key):
+        decoded = unquote(key)
+        if ".." not in decoded and not decoded.startswith("/"):
+            key = decoded
 
     range_header = request.headers.get("range")
 

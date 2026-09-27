@@ -52,6 +52,16 @@ def parse_patient_age(raw: Any) -> Optional[int]:
     return value if unit == "Y" else 0
 
 
+def age_from_birth_date(birth: Any, study: Any) -> Optional[int]:
+    """Fallback when PatientAge is empty: whole years between PatientBirthDate
+    and StudyDate (both YYYYMMDD)."""
+    b, s = str(birth or "").strip(), str(study or "").strip()
+    if not (len(b) == 8 and b.isdigit() and len(s) == 8 and s.isdigit()):
+        return None
+    years = int(s[:4]) - int(b[:4]) - ((int(s[4:6]), int(s[6:8])) < (int(b[4:6]), int(b[6:8])))
+    return years if years >= 0 else None
+
+
 def format_study_date(raw: Any) -> Optional[str]:
     """DICOM StudyDate is YYYYMMDD -> 'YYYY-MM-DD' (parsed by
     organization/crud.py:_parse_date)."""
@@ -77,7 +87,8 @@ def extract_case_metadata(ds) -> Dict[str, Any]:
     return {
         "patient_name": normalise_person_name(getattr(ds, "PatientName", None)),
         "patient_id": (str(getattr(ds, "PatientID", "") or "").strip() or None),
-        "age": parse_patient_age(getattr(ds, "PatientAge", None)),
+        "age": parse_patient_age(getattr(ds, "PatientAge", None))
+        or age_from_birth_date(getattr(ds, "PatientBirthDate", None), getattr(ds, "StudyDate", None)),
         "gender": normalise_gender(getattr(ds, "PatientSex", None)),
         "study_date_str": format_study_date(getattr(ds, "StudyDate", None)),
         "modality_text": map_dicom_modality(getattr(ds, "Modality", None)),

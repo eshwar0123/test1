@@ -19,10 +19,12 @@ scan_once() is safe to call repeatedly (scheduler.py runs it on a timer) and
 never raises — a bad case is logged and skipped, never crashes the poller.
 """
 import os
+import posixpath
 import shutil
 import tempfile
 import traceback
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
 
@@ -34,6 +36,7 @@ from qc import engine, crud as qc_crud
 
 from . import crud
 from .dicom_meta import extract_case_metadata
+from .multiframe import expand_to_single_frames, is_image, is_multiframe, safe_stem, save_dicom
 
 CLIENTS_PREFIX = f"{S3_PREFIX}/Clients/"
 
@@ -46,6 +49,87 @@ STABILITY_SECONDS = int(os.getenv("S3_INGEST_STABILITY_SECONDS", "120"))
 # same regardless of which pipeline generated them.
 THUMB_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                           "radiologist", "uploads", "thumbnails")
+
+
+def common_folder_prefix(keys: List[str]) -> str:
+    """Deepest S3 folder containing every key, returned as 'a/b/c/'."""
+    dirs = [posixpath.dirname(k) for k in keys]
+    return posixpath.commonpath(dirs) + "/"
+
+
+def load_dicom_entries(s3_prefix: str, keys: List[str], tmp_dir: str) -> Tuple[int, List[Tuple[str, str, Any]]]:
+    """Download a case's files and keep the ones that are DICOM by content, not
+    extension (MRI exports commonly have none). Returns (downloaded_count,
+    [(s3_key, local_name, pydicom Dataset)]). Local names get '.dcm' appended
+    when missing so qc/engine.py's extension-based dispatch recognises them."""
+    downloaded: List[Tuple[str, str, str]] = []
+    for key in sorted(keys):
+        local_name = key[len(s3_prefix):].replace("/", "__")
+        local_path = os.path.join(tmp_dir, local_name)
+        try:
+            s3.download_file(S3_BUCKET, key, local_path)
+        except Exception as e:
+            print(f"[s3-ingest] download failed for {key}: {e}")
+            continue
+        downloaded.append((key, local_name, local_path))
+
+    entries: List[Tuple[str, str, Any]] = []
+    for key, local_name, local_path in downloaded:
+        try:
+            ds = pydicom.dcmread(local_path, force=True)
+            _ = ds.Modality  # cheap sanity check this is a real DICOM dataset
+        except Exception:
+            continue
+        used_name = local_name
+        if not local_name.lower().endswith((".dcm", ".dicom", ".ima")):
+            used_name = local_name + ".dcm"
+            os.replace(local_path, os.path.join(tmp_dir, used_name))
+        entries.append((key, used_name, ds))
+    return len(downloaded), entries
+
+
+def normalize_for_viewer(case_id: str, tmp_dir: str, image_entries: List[Tuple[str, str, Any]]):
+    """Upload the case's images to uploads/dicom/<case_id>/ as one file per
+    slice (splitting multi-frame files; single-frame files are copied, and
+    transcoded if compressed, exactly as the manual flow does). Returns
+    (s3_key_of_first_file, file_names) or None if nothing could be produced.
+    Raises if an upload fails, so the case is recorded as an error rather
+    than left half-converted."""
+    from s3_storage import build_key, upload_local_file
+
+    out_dir = os.path.join(tmp_dir, "_normalized")
+    os.makedirs(out_dir, exist_ok=True)
+
+    files: List[Tuple[str, str]] = []  # (upload_name, local_path)
+    for _key, local_name, ds in image_entries:
+        stem = safe_stem(os.path.splitext(local_name)[0])
+        src = os.path.join(tmp_dir, local_name)
+        if is_multiframe(ds):
+            try:
+                frames = expand_to_single_frames(ds, stem)
+            except Exception as e:
+                print(f"[s3-ingest] {case_id}: cannot split multi-frame {local_name}: {e}")
+                continue
+            for name, frame_ds in frames:
+                path = os.path.join(out_dir, name)
+                save_dicom(frame_ds, path)
+                files.append((name, path))
+        else:
+            try:
+                from dicom_transcode import transcode_dicom_if_compressed
+                transcode_dicom_if_compressed(src)
+            except Exception as e:
+                print(f"[s3-ingest] {case_id}: transcode check failed for {local_name}: {e}")
+            files.append((f"{stem}.dcm", src))
+
+    if not files:
+        return None
+    files.sort()
+    keys = [build_key("dicom", case_id, name) for name, _ in files]
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(lambda pair: upload_local_file(pair[1][1], pair[0]), zip(keys, files)))
+    print(f"[s3-ingest] {case_id}: uploaded {len(keys)} slice files to {posixpath.dirname(keys[0])}/")
+    return keys[0], [name for name, _ in files]
 
 
 def _list_case_groups() -> Dict[Tuple[str, str], Dict[str, Any]]:
@@ -110,47 +194,27 @@ def scan_once() -> None:
 def _process_case(client_folder: str, case_folder: str, s3_prefix: str, keys: List[str]) -> None:
     tmp_dir = tempfile.mkdtemp(prefix="s3ingest_")
     try:
-        downloaded: List[Tuple[str, str, str]] = []  # (s3_key, local_name, local_path)
-        for key in sorted(keys):
-            rel = key[len(s3_prefix):]
-            local_name = rel.replace("/", "__")
-            local_path = os.path.join(tmp_dir, local_name)
-            try:
-                s3.download_file(S3_BUCKET, key, local_path)
-            except Exception as e:
-                print(f"[s3-ingest] download failed for {key}: {e}")
-                continue
-            downloaded.append((key, local_name, local_path))
+        downloaded_count, dicom_entries = load_dicom_entries(s3_prefix, keys, tmp_dir)
 
-        if not downloaded:
+        if not downloaded_count:
             crud.mark_case(s3_prefix=s3_prefix, client_folder=client_folder, case_folder=case_folder,
                             status="empty", file_count=0, error_message="No files could be downloaded from S3")
             return
 
-        # Identify which downloaded files are actually DICOM by content, not
-        # extension — MRI machine exports commonly have no/odd extensions.
-        # Normalise the local filename so qc/engine.py's extension-based
-        # dispatch (run_file_qc / generate_case_thumbnail) recognises them.
-        dicom_entries: List[Tuple[str, str, Any]] = []  # (s3_key, local_name, pydicom Dataset)
-        for key, local_name, local_path in downloaded:
-            ds = None
-            try:
-                ds = pydicom.dcmread(local_path, force=True)
-                _ = ds.Modality  # cheap sanity check this is a real image-level DICOM dataset
-            except Exception:
-                ds = None
-            if ds is None:
-                continue
-            used_name = local_name
-            if not local_name.lower().endswith((".dcm", ".dicom", ".ima")):
-                used_name = local_name + ".dcm"
-                os.replace(local_path, os.path.join(tmp_dir, used_name))
-            dicom_entries.append((key, used_name, ds))
-
         if not dicom_entries:
             crud.mark_case(s3_prefix=s3_prefix, client_folder=client_folder, case_folder=case_folder,
-                            status="empty", file_count=len(downloaded),
+                            status="empty", file_count=downloaded_count,
                             error_message="No readable DICOM files found in this folder")
+            return
+
+        # Scanners also send presentation states, raw data and reports — DICOM
+        # objects with no pixels. They aren't images: keep them out of QC (they
+        # would always "fail" the pixel check), thumbnails and the viewer.
+        image_entries = [e for e in dicom_entries if is_image(e[2])]
+        if not image_entries:
+            crud.mark_case(s3_prefix=s3_prefix, client_folder=client_folder, case_folder=case_folder,
+                            status="empty", file_count=len(dicom_entries),
+                            error_message="Only non-image DICOM found (presentation states / raw data)")
             return
 
         org = crud.resolve_org_for_folder(client_folder)
@@ -168,8 +232,15 @@ def _process_case(client_folder: str, case_folder: str, s3_prefix: str, keys: Li
             print(f"[s3-ingest] no org match for client folder '{client_folder}' — case left unprocessed")
             return
 
-        primary_key, _primary_local_name, primary_ds = dicom_entries[0]
+        _primary_key, _primary_local_name, primary_ds = image_entries[0]
         meta = extract_case_metadata(primary_ds)
+
+        # Both viewers derive the case's file list from s3_key's parent folder
+        # and list it recursively. Scanners nest each series in its own folder,
+        # so store the deepest folder common to ALL image files (as a "folder/"
+        # prefix) instead of one file's key — otherwise only one series loads.
+        # (Replaced below if the case needs multi-frame splitting.)
+        case_s3_key = common_folder_prefix([k for k, _, _ in image_entries])
 
         from organization.router import _gen_case_id  # lazy: avoid importing the router at module load
         case_id = _gen_case_id()
@@ -189,14 +260,14 @@ def _process_case(client_folder: str, case_folder: str, s3_prefix: str, keys: Li
             "age": meta.get("age"),
             "gender": meta.get("gender"),
             "study_date_str": meta.get("study_date_str"),
-            "image_file_names": [key[len(s3_prefix):] for key, _, _ in dicom_entries],
+            "image_file_names": [key[len(s3_prefix):] for key, _, _ in image_entries],
             "images_dir": s3_prefix,
             "priority_text": "Routine",
             "modality_text": meta.get("modality_text"),
             "study_type_text": meta.get("study_type_text"),
             "referring_doctor": meta.get("referring_doctor"),
         }
-        local_names = [name for _, name, _ in dicom_entries]
+        local_names = [name for _, name, _ in image_entries]
 
         thumb_filename = None
         try:
@@ -236,9 +307,23 @@ def _process_case(client_folder: str, case_folder: str, s3_prefix: str, keys: Li
             qc_crud.insert_returned_case_from_meta(case_meta=case_meta, reason=rollup["reason"][:1000])
             crud.mark_case(s3_prefix=s3_prefix, client_folder=client_folder, case_folder=case_folder,
                             status="qc_failed", case_id=case_id, org_id=org.get("org_id"),
-                            file_count=len(dicom_entries), error_message=rollup["reason"][:1000])
+                            file_count=len(image_entries), error_message=rollup["reason"][:1000])
             print(f"[s3-ingest] {case_id}: QC failed, flagged on org dashboard — {rollup['reason'][:200]}")
             return
+
+        # Enhanced multi-frame files (one file = a whole series) can't be shown
+        # by the viewer, which counts one file as one slice. Split them into
+        # one file per slice under uploads/dicom/<case_id>/ — the same flat
+        # layout the manual flow's cases use. The machine's originals stay put.
+        # Also done when the folder holds non-image DICOM (presentation states,
+        # raw data): the viewer lists every .dcm it finds and shows each of
+        # those as an empty series that fails to load.
+        if any(is_multiframe(ds) for _, _, ds in image_entries) or len(image_entries) < len(dicom_entries):
+            normalized = normalize_for_viewer(case_id, tmp_dir, image_entries)
+            if normalized:
+                case_s3_key, case_meta["image_file_names"] = normalized
+            else:
+                print(f"[s3-ingest] {case_id}: multi-frame split produced no files; viewing originals in place")
 
         row_id = qc_crud.insert_bulk_upload_after_qc(
             case_meta=case_meta, qc_status=rollup["status"], qc_summary=rollup["reason"][:500],
@@ -284,12 +369,12 @@ def _process_case(client_folder: str, case_folder: str, s3_prefix: str, keys: Li
                         cur.execute(
                             "UPDATE radiology_schema.rad_scans "
                             "SET s3_key=%s, s3_bucket=%s, storage_type='s3' WHERE case_id=%s",
-                            (primary_key, S3_BUCKET, case_id),
+                            (case_s3_key, S3_BUCKET, case_id),
                         )
                         cur.execute(
                             "UPDATE organization_schema.bulk_uploads "
                             "SET s3_key=%s, s3_bucket=%s, storage_type='s3' WHERE case_id=%s",
-                            (primary_key, S3_BUCKET, case_id),
+                            (case_s3_key, S3_BUCKET, case_id),
                         )
                     conn.commit()
                     conn.close()
@@ -298,7 +383,7 @@ def _process_case(client_folder: str, case_folder: str, s3_prefix: str, keys: Li
 
         crud.mark_case(s3_prefix=s3_prefix, client_folder=client_folder, case_folder=case_folder,
                         status="processed", case_id=case_id, org_id=org.get("org_id"),
-                        file_count=len(dicom_entries))
-        print(f"[s3-ingest] processed {case_id} from {s3_prefix} ({len(dicom_entries)} files)")
+                        file_count=len(image_entries))
+        print(f"[s3-ingest] processed {case_id} from {s3_prefix} ({len(image_entries)} image files)")
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
