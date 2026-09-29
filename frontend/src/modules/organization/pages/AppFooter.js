@@ -15,7 +15,7 @@ export default function AppFooter() {
           <NavLink to="/organization/terms" className="org-footer-link">Terms &amp; Conditions</NavLink>
         </nav>
 
-        <span className="org-footer-copy">&copy; 2026 GenPhase AI Inc. All rights reserved.</span>
+        <span className="org-footer-copy">&copy; 2026 Genphase Technologies Private Limited. All rights reserved.</span>
       </div>
     </footer>
   );

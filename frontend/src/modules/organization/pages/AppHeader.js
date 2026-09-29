@@ -6,7 +6,6 @@ import {
 import CIcon from "@coreui/icons-react";
 import { cilUser, cilAccountLogout, cilSettings } from "@coreui/icons";
 import { useNavigate, NavLink } from "react-router-dom";
-import GoogleTranslateSwitcher from "../../../shared/components/GoogleTranslateSwitcher";
 import "./AppHeader.css";
 
 /* =========================================================================
@@ -231,8 +230,6 @@ const Header = () => {
               </svg>
             )}
           </button>
-
-          <GoogleTranslateSwitcher />
 
           {/* Notification Bell */}
           <div className="hdr-notif-wrap" ref={notifRef}>

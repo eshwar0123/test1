@@ -675,7 +675,6 @@ export default function Dashboard() {
       ? `${wfCrit} critical · ${wfUrgent} urgent`
       : `${k.routine_queue?.urgent || 0} urgent  ·  ${k.routine_queue?.stat || 0} STAT`;
 
-    const pendSub  = `SLA breach: ${k.pending_overdue?.sla_breach || 0}  ·  Critical: ${k.pending_overdue?.critical || 0}`;
     return [
       {
         label: "Completed Cases",
@@ -694,7 +693,6 @@ export default function Dashboard() {
       {
         label: "Pending / Overdue",
         value: String(k.pending_overdue?.count || 0),
-        sub:   isTh ? `การละเมิด SLA: ${k.pending_overdue?.sla_breach || 0}  ·  วิกฤต: ${k.pending_overdue?.critical || 0}` : pendSub,
         ...KPI_META["Pending / Overdue"],
         bar:   pct(k.pending_overdue?.count || 0),
       },
@@ -1630,15 +1628,17 @@ export default function Dashboard() {
                 {k.value}
               </div>
 
-              <div
-                style={{
-                  fontSize: 15,
-                  color: "rgba(255,255,255,0.55)",
-                  marginBottom: 16,
-                }}
-              >
-                {k.sub}
-              </div>
+              {k.sub && (
+                <div
+                  style={{
+                    fontSize: 15,
+                    color: "rgba(255,255,255,0.55)",
+                    marginBottom: 16,
+                  }}
+                >
+                  {k.sub}
+                </div>
+              )}
 
               <div
                 style={{
@@ -3654,15 +3654,12 @@ export default function Dashboard() {
             <div style={{
               padding: "12px 24px",
               borderTop: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "#e2e8f0"}`,
-              display: "flex", alignItems: "center", justifyContent: "space-between",
+              display: "flex", alignItems: "center",
               flexShrink: 0,
               background: isDark ? "rgba(15,23,42,0.98)" : "#f8fafc",
             }}>
               <span style={{ fontSize: 12, color: textMuted }}>
                 Showing {PENDING_OVERDUE_CASES.length} pending / overdue case{PENDING_OVERDUE_CASES.length === 1 ? "" : "s"} · {new Date().toLocaleDateString(undefined, { day:"2-digit", month:"short", year:"numeric" })}
-              </span>
-              <span style={{ fontSize: 12, color: textMuted }}>
-                Critical &amp; SLA Breach cases require immediate escalation
               </span>
             </div>
           </div>
