@@ -10,3 +10,11 @@
   width: 100% !important;
   height: 100% !important;
 }
+
+/* Cornerstone3D's WindowLevel tool injects its own custom cursor icon (a
+   brightness/sun glyph) directly onto the viewport element while active,
+   overriding the wrapper's own cursor style. Force a normal pointer instead. */
+.cornerstone3d-viewport,
+.cornerstone3d-viewport canvas {
+  cursor: default !important;
+}

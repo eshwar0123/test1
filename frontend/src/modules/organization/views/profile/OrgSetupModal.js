@@ -131,28 +131,31 @@ const OrgSetupModal = ({ onComplete, onBack }) => {
       authToken = auth?.token || null
     } catch {}
 
-    if (authToken) {
-      try {
-        const res = await fetch('/api/organization/org-profile', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${authToken}`,
-          },
-          body: JSON.stringify(payload),
-        })
-        const j = await res.json().catch(() => null)
-        if (!res.ok || !j?.ok) {
-          console.error('[OrgSetupModal] save failed:', res.status, j)
-          alert('Could not save profile to server: ' + (j?.detail || `HTTP ${res.status}`))
-          return
-        }
-        console.log('[OrgSetupModal] saved to DB:', j.data)
-      } catch (err) {
-        console.error('[OrgSetupModal] network error:', err)
-        alert('Network error while saving profile: ' + err.message)
+    if (!authToken) {
+      alert('You are not logged in — please sign in again before saving your profile.')
+      return
+    }
+
+    try {
+      const res = await fetch('/api/organization/org-profile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(payload),
+      })
+      const j = await res.json().catch(() => null)
+      if (!res.ok || !j?.ok) {
+        console.error('[OrgSetupModal] save failed:', res.status, j)
+        alert('Could not save profile to server: ' + (j?.detail || `HTTP ${res.status}`))
         return
       }
+      console.log('[OrgSetupModal] saved to DB:', j.data)
+    } catch (err) {
+      console.error('[OrgSetupModal] network error:', err)
+      alert('Network error while saving profile: ' + err.message)
+      return
     }
 
     // Mirror to localStorage so Profile.js + AppHeader (which read from

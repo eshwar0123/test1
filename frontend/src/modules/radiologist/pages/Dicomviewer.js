@@ -234,7 +234,6 @@
   const {
     fileUrl, filename, seriesFiles, patientName, patientAge, patientSex, caseId, clientId,
     priority, status, study, modality: caseModality, referredBy, location: caseLocation, waitMins,
-    history: caseHistory,
   } = hasRouterState ? location.state : (queryState || {});
 
     const [loading, setLoading] = useState(true);
@@ -932,7 +931,13 @@
         const uid =
           layoutMode === "compare2x2" || useMultiGrid
             ? compareViewportSeries?.[slot]
-            : mprViewportSeries?.[slot] || currentSeriesUid;
+            // volMpr always reformats a single series (currentSeriesUid, the
+            // same one useVolumeMprLoader reads) — mprViewportSeries belongs
+            // to the separate stack-based mpr3 mode and goes stale across
+            // volMpr series switches, so it must not win here.
+            : layoutMode === "volMpr"
+              ? currentSeriesUid
+              : mprViewportSeries?.[slot] || currentSeriesUid;
         const grp = seriesGrouping?.series?.find?.((s) => s.seriesUid === uid);
         return {
           studyDescription: std?.studyDescription || study || null,
@@ -1619,20 +1624,113 @@
     // Capture current viewport as base64 PNG (for AI analysis)
     const captureViewportBase64 = () => {
       let canvas = null;
+      let vp = null;
+
       if (isCornerstoneNifti) {
         const slot = activeNiftiSlot;
-        const vp = renderingEngineRef.current?.getViewport?.(`NIFTI_SLOT_${slot}`);
+        vp = renderingEngineRef.current?.getViewport?.(`NIFTI_SLOT_${slot}`);
+
+        if (!vp) {
+          try {
+            const allVps = renderingEngineRef.current?.getViewports?.() || [];
+            vp = allVps.find(
+              (v) =>
+                (v.id || "").startsWith("NIFTI_SLOT_") &&
+                v.getCanvas?.()
+            ) || null;
+          } catch (e) {
+            console.warn("[MedGamma Capture] NIfTI viewport enumeration failed:", e);
+          }
+        }
+
         canvas = vp?.getCanvas?.() || null;
+
       } else if (isNifti) {
-        const el = document.querySelector(`canvas[data-nifti-plane="${niftiPlane}"]`);
+        const el = document.querySelector(
+          `canvas[data-nifti-plane="${niftiPlane}"]`
+        );
         canvas = el instanceof HTMLCanvasElement ? el : null;
+
       } else if (isCornerstoneDicom) {
-        const vp = getActiveDicomViewport();
+        // First try the normal active viewport.
+        vp = getActiveDicomViewport();
+
+        // If the expected viewport is unavailable, enumerate the actual
+        // Cornerstone viewports and use the first one containing images.
+        if (!vp) {
+          try {
+            const engine = renderingEngineRef.current;
+            const allVps = engine?.getViewports?.() || [];
+
+            vp =
+              allVps.find(
+                (v) =>
+                  v?.getCanvas?.() &&
+                  (
+                    (v.getImageIds?.()?.length || 0) > 0 ||
+                    v.getCurrentImageId?.()
+                  )
+              ) || null;
+
+            if (vp) {
+              console.log(
+                "[MedGamma Capture] Fallback viewport:",
+                vp.id
+              );
+            }
+          } catch (e) {
+            console.warn(
+              "[MedGamma Capture] Viewport enumeration failed:",
+              e
+            );
+          }
+        }
+
         canvas = vp?.getCanvas?.() || null;
+
+        // Last DOM-level fallback: use the canvas belonging to a
+        // Cornerstone viewport element if getCanvas() is unavailable.
+        if (!canvas && vp?.element) {
+          const domCanvas = vp.element.querySelector?.("canvas");
+          if (domCanvas instanceof HTMLCanvasElement) {
+            canvas = domCanvas;
+          }
+        }
       }
-      if (!canvas) return null;
-      const dataUrl = canvas.toDataURL("image/png");
-      return dataUrl.split(",")[1];
+
+      if (!canvas || !canvas.width || !canvas.height) {
+        console.warn("[MedGamma Capture] No usable viewport canvas found", {
+          isCornerstoneDicom,
+          isCornerstoneNifti,
+          activeDicomSlot,
+          activeNiftiSlot,
+          viewportId: vp?.id || null,
+          canvasWidth: canvas?.width || 0,
+          canvasHeight: canvas?.height || 0,
+        });
+        return null;
+      }
+
+      try {
+        const dataUrl = canvas.toDataURL("image/png");
+        const base64 = dataUrl.split(",")[1];
+
+        if (!base64) {
+          console.warn("[MedGamma Capture] Canvas produced empty base64");
+          return null;
+        }
+
+        console.log(
+          "[MedGamma Capture] Captured viewport:",
+          vp?.id || "DOM canvas",
+          `${canvas.width}x${canvas.height}`
+        );
+
+        return base64;
+      } catch (e) {
+        console.error("[MedGamma Capture] Canvas capture failed:", e);
+        return null;
+      }
     };
 
     const waitFrames = async (count = 2) => {
@@ -3991,7 +4089,6 @@
                   referredBy={referredBy}
                   caseLocation={caseLocation}
                   waitMins={waitMins}
-                  history={caseHistory}
                   chatMessages={chatMessages}
                   onChatFile={onChatFile}
                   chatInput={chatInput}
@@ -4418,7 +4515,6 @@
                   referredBy={referredBy}
                   caseLocation={caseLocation}
                   waitMins={waitMins}
-                  history={caseHistory}
                   chatMessages={chatMessages}
                   onChatFile={onChatFile}
                   chatInput={chatInput}

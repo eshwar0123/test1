@@ -140,6 +140,11 @@ const TAGS = {
   imageOrientationPatient: "x00200037",
   imagePositionPatient:    "x00200032",
   frameOfReferenceUID:     "x00200052",
+  pixelSpacing:            "x00280030",
+  bitsAllocated:           "x00280100",
+  bitsStored:              "x00280101",
+  highBit:                 "x00280102",
+  pixelRepresentation:     "x00280103",
 };
 
 const readString = (ds, tag) => {
@@ -273,6 +278,11 @@ const parseHeader = async (url) => {
     imageOrientationPatient: iop,
     imagePositionPatient:    readFloatArray(ds, TAGS.imagePositionPatient),
     frameOfReferenceUID:     readString(ds, TAGS.frameOfReferenceUID),
+    pixelSpacing:            readFloatArray(ds, TAGS.pixelSpacing),
+    bitsAllocated:           readNumber(ds, TAGS.bitsAllocated),
+    bitsStored:              readNumber(ds, TAGS.bitsStored),
+    highBit:                 readNumber(ds, TAGS.highBit),
+    pixelRepresentation:     readNumber(ds, TAGS.pixelRepresentation),
     plane:              detectPlaneFromIop(iop),
   };
 };
@@ -316,6 +326,11 @@ const seriesMetaFrom = (p) => ({
   columns:           p.columns,
   imageOrientationPatient: p.imageOrientationPatient,
   frameOfReferenceUID:     p.frameOfReferenceUID,
+  pixelSpacing:            p.pixelSpacing,
+  bitsAllocated:           p.bitsAllocated,
+  bitsStored:              p.bitsStored,
+  highBit:                 p.highBit,
+  pixelRepresentation:     p.pixelRepresentation,
 });
 
 /* ─── Sort instances by patient position along the slice normal ─── */
@@ -405,6 +420,11 @@ const groupBySeries = (parsed) => {
     if (!g.plane && p.plane) g.plane = p.plane;
     if (!g.imageOrientationPatient && p.imageOrientationPatient) g.imageOrientationPatient = p.imageOrientationPatient;
     if (!g.frameOfReferenceUID && p.frameOfReferenceUID) g.frameOfReferenceUID = p.frameOfReferenceUID;
+    if (!g.pixelSpacing && p.pixelSpacing) g.pixelSpacing = p.pixelSpacing;
+    if (g.bitsAllocated == null && p.bitsAllocated != null) g.bitsAllocated = p.bitsAllocated;
+    if (g.bitsStored == null && p.bitsStored != null) g.bitsStored = p.bitsStored;
+    if (g.highBit == null && p.highBit != null) g.highBit = p.highBit;
+    if (g.pixelRepresentation == null && p.pixelRepresentation != null) g.pixelRepresentation = p.pixelRepresentation;
   }
 
   // ── Per-series: drop derived extras, sort, log a breakdown ──
@@ -475,6 +495,11 @@ const groupBySeries = (parsed) => {
     positions:           g.instances.map((i) => (Array.isArray(i.ipp) ? i.ipp : null)),
     iop:                 g.imageOrientationPatient || null,
     frameOfReferenceUID: g.frameOfReferenceUID || null,
+    pixelSpacing:        g.pixelSpacing || null,
+    bitsAllocated:       g.bitsAllocated ?? null,
+    bitsStored:          g.bitsStored ?? null,
+    highBit:             g.highBit ?? null,
+    pixelRepresentation: g.pixelRepresentation ?? null,
     isScout:             isScoutDescription(g.seriesDescription),
     isImageSeries:       true,
   }));

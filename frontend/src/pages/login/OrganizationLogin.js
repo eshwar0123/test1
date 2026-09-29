@@ -108,6 +108,14 @@ const OrganizationLogin = () => {
     else                         navigate(from||"/radiologist/dashboard",  {replace:true})
   }
 
+  // org_profile/avatarUrl are cached, un-namespaced blobs from a previous
+  // session's org setup — must be wiped before a new user's data lands here,
+  // otherwise the new login renders the previous org's name/logo/email.
+  const clearStaleOrgSession = () => {
+    localStorage.removeItem("org_profile")
+    localStorage.removeItem("avatarUrl")
+  }
+
   const handleLogin = async (e) => {
     e.preventDefault(); setError('')
     try {
@@ -115,6 +123,7 @@ const OrganizationLogin = () => {
       if (res.data.message !== "Login successful") { setError("Invalid credentials"); return }
       const token = res.data.access_token||res.data.token
       if (!token) { setError("Login failed: token missing"); return }
+      clearStaleOrgSession()
       localStorage.setItem("auth",JSON.stringify({
         isLoggedIn:true, token, role:res.data.role,
         userId:res.data.user_id||res.data.id,
@@ -138,6 +147,7 @@ const OrganizationLogin = () => {
         if (backendRes.data.needs_registration) { navigate("/signup",{state:{prefillEmail:gEmail}}); return }
         const token = backendRes.data.access_token||backendRes.data.token
         if (!token) { setError("Google login failed: token missing"); return }
+        clearStaleOrgSession()
         localStorage.setItem("token",token)
         localStorage.setItem("auth",JSON.stringify({
           isLoggedIn:true, token, role:backendRes.data.role,

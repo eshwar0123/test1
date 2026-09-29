@@ -14,6 +14,10 @@ import "./AppHeader.css";
  *  Pulls JWT from localStorage.auth.token; no cookies.
  * ======================================================================= */
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8100";
+// Uploaded files (logos, etc.) are served by the backend outside the /api
+// proxy prefix (e.g. /uploads/... not /api/uploads/...), so strip a
+// trailing /api segment when building static asset URLs.
+const STATIC_BASE = API_BASE.replace(/\/api\/?$/, "");
 
 const getToken = () => {
   try {
@@ -73,7 +77,7 @@ const Header = () => {
   const buildLogoUrl = (logoPath) => {
     if (!logoPath) return "";
     if (/^https?:\/\//i.test(logoPath)) return logoPath;
-    return `${API_BASE}/${logoPath.replace(/^\/+/, "")}`;
+    return `${STATIC_BASE}/${logoPath.replace(/^\/+/, "")}`;
   };
 
   const loadOrgProfile = async () => {
@@ -169,6 +173,7 @@ const Header = () => {
   const handleLogout = () => {
     localStorage.removeItem("auth");
     localStorage.removeItem("avatarUrl");
+    localStorage.removeItem("org_profile");
     navigate("/login");
   };
 
@@ -305,11 +310,7 @@ const Header = () => {
                       onError={() => { localStorage.removeItem("avatarUrl"); setAvatarUrl(""); }}
                     />
                   ) : (
-                    <img
-                      src="/hv_logo.png"
-                      alt="avatar"
-                      style={{ width: "100%", height: "100%", objectFit: "contain", padding: 4, background: "#ffffff" }}
-                    />
+                    <span>{(orgName || userName || "O")[0].toUpperCase()}</span>
                   )}
                 </div>
               </button>
@@ -323,14 +324,10 @@ const Header = () => {
                       ) : avatarUrl ? (
                         <img src={avatarUrl} alt="avatar" />
                       ) : (
-                        <img
-                          src="/hv_logo.png"
-                          alt="avatar"
-                          style={{ width: "100%", height: "100%", objectFit: "contain", padding: 5, background: "#ffffff" }}
-                        />
+                        <span>{(orgName || userName || "O")[0].toUpperCase()}</span>
                       )}
                     </div>
-                    <div>
+                    <div className="hdr-avatar-info">
                       <div className="hdr-avatar-name">{orgName || userName || "Organization"}</div>
                       <div className="hdr-avatar-email">{userEmail || auth?.email || ""}</div>
                     </div>
