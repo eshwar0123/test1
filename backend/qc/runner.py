@@ -214,6 +214,20 @@ def run_qc_for_case(case_meta: dict) -> None:
         else:
             # --- 3b. QC passed ---
 
+            # ── Study date-time from the DICOM header (stored as created_at) ──
+            if not case_meta.get("study_datetime_str"):
+                try:
+                    from machine_ingest.dicom_meta import study_datetime_from_file
+                    for _fn in filenames:
+                        _fp = os.path.join(img_dir_a, _fn)
+                        if os.path.exists(_fp) and _fn.lower().endswith(".dcm"):
+                            _dt = study_datetime_from_file(_fp)
+                            if _dt:
+                                case_meta["study_datetime_str"] = _dt
+                                break
+                except Exception as _sd_err:
+                    print(f"[runner] study datetime extraction failed (non-fatal): {_sd_err}")
+
             # ── Upload files to S3 (non-fatal — local fallback if S3 fails) ──
             primary_s3_key = None
             s3_uploaded_paths = []  # track which local files were uploaded OK

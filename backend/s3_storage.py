@@ -68,3 +68,18 @@ def delete_object(s3_key: str) -> bool:
         return True
     except ClientError:
         return False
+
+
+HISTORY_FOLDER = "history"
+HISTORY_MAX_BYTES = int(os.getenv("HISTORY_MAX_UPLOAD_BYTES", str(50 * 1024 * 1024)))
+
+
+def upload_history_file(file_obj: BinaryIO, case_id: str, filename: str,
+                        content_type: Optional[str] = None) -> str:
+    """Upload a patient-history attachment to s3://<bucket>/uploads/history/<case_id>/<uid>_<name>
+    and return the S3 key (stored in organization_schema.bulk_uploads.history_path)."""
+    key = build_key(HISTORY_FOLDER, case_id, filename)
+    ctype = content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    upload_fileobj(file_obj, key, ctype)
+    return key
+

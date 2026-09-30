@@ -352,6 +352,36 @@ def get_upload_by_id(row_id: int, user_id) -> Optional[Dict[str, Any]]:
     )
 
 
+_HISTORY_COL_READY = False
+
+
+def ensure_history_path_column() -> None:
+    """Idempotently make sure bulk_uploads.history_path exists (one DDL per process)."""
+    global _HISTORY_COL_READY
+    if _HISTORY_COL_READY:
+        return
+    _exec("ALTER TABLE organization_schema.bulk_uploads ADD COLUMN IF NOT EXISTS history_path TEXT")
+    _HISTORY_COL_READY = True
+
+
+def set_history_path(case_id: str, user_id, history_path: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Store (or clear, with None) the S3 key of the case's history attachment.
+    Returns {"id", "old_path"} (old_path = value before the update) or None if no such case."""
+    ensure_history_path_column()
+    return _one(
+        """
+        UPDATE organization_schema.bulk_uploads AS b
+           SET history_path = %s
+          FROM (SELECT id, history_path AS old_path
+                  FROM organization_schema.bulk_uploads
+                 WHERE case_id = %s AND user_id = %s) AS o
+         WHERE b.id = o.id
+        RETURNING b.id, o.old_path
+        """,
+        (history_path, case_id, str(user_id)),
+    )
+
+
 def get_upload_by_case_id(case_id: str, user_id) -> Optional[Dict[str, Any]]:
     """Used by the Active Worklist "Edit" form — that table only carries
     case_id (it's sourced from rad_scans, not bulk_uploads), so lookups
@@ -377,6 +407,7 @@ def get_upload_by_case_id(case_id: str, user_id) -> Optional[Dict[str, Any]]:
         "study_date":             str(row["study_date"]) if row.get("study_date") else None,
         "referring_doctor":       row.get("referring_doctor"),
         "history":                row.get("history"),
+        "history_path":           row.get("history_path"),
     }
 
 
@@ -756,7 +787,9 @@ def list_active_rad_scans_for_org(org_id: str, org_user_id) -> List[Dict[str, An
             rs.assigned_rad_id,
             r.first_name,
             r.last_name,
-            bu.uploaded_at
+            bu.uploaded_at,
+            bu.subject_id,
+            bu.created_at AS bu_created_at
         FROM radiology_schema.rad_scans rs
         LEFT JOIN radiology_schema.radiologists r
                ON r.rad_id = rs.assigned_rad_id

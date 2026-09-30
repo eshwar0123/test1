@@ -476,6 +476,8 @@ export default function Dashboard() {
   const [pendingOverdueModal, setPendingOverdueModal] = useState(false);
   const [modalityStudyModal, setModalityStudyModal] = useState(null); // selected modality item | null
   const [downloadingCase, setDownloadingCase] = useState(null);
+  const [downloadingFmt, setDownloadingFmt]   = useState(null); // "pdf" | "word" | null
+  useEffect(() => { if (downloadingCase === null) setDownloadingFmt(null); }, [downloadingCase]);
 
   // ── Active Worklist "Edit" modal — edits organization_schema.bulk_uploads
   // by case_id, then propagates the change into rad_scans + reports. ────────
@@ -668,14 +670,8 @@ export default function Dashboard() {
 
     // Case Queue — prefer workflow cases count (from case_workflow table) when loaded
     const wfTotal   = Array.isArray(wfCases) ? wfCases.length : null;
-    const wfCrit    = wfTotal !== null ? wfCases.filter(c => c.priority === "STAT" || c.priority === "Critical").length : null;
-    const wfUrgent  = wfTotal !== null ? wfCases.filter(c => c.priority === "Urgent").length : null;
     const queueCount = wfTotal !== null ? wfTotal : (k.routine_queue?.count || 0);
-    const queueSub   = wfTotal !== null
-      ? `${wfCrit} critical · ${wfUrgent} urgent`
-      : `${k.routine_queue?.urgent || 0} urgent  ·  ${k.routine_queue?.stat || 0} STAT`;
 
-    const pendSub  = `SLA breach: ${k.pending_overdue?.sla_breach || 0}  ·  Critical: ${k.pending_overdue?.critical || 0}`;
     return [
       {
         label: "Completed Cases",
@@ -687,14 +683,14 @@ export default function Dashboard() {
       {
         label: "Case Queue",
         value: String(queueCount),
-        sub:   isTh ? `${wfCrit ?? k.routine_queue?.urgent ?? 0} เร่งด่วน  ·  ${wfUrgent ?? k.routine_queue?.stat ?? 0} เร่งด่วนพิเศษ` : queueSub,
+        sub:   "",
         ...KPI_META["Case Queue"],
         bar:   pct(queueCount),
       },
       {
         label: "Pending / Overdue",
         value: String(k.pending_overdue?.count || 0),
-        sub:   isTh ? `การละเมิด SLA: ${k.pending_overdue?.sla_breach || 0}  ·  วิกฤต: ${k.pending_overdue?.critical || 0}` : pendSub,
+        sub:   "",
         ...KPI_META["Pending / Overdue"],
         bar:   pct(k.pending_overdue?.count || 0),
       },
@@ -812,6 +808,8 @@ export default function Dashboard() {
         priority:    w.priority,
         pColor:      pc,
         id:          w.case_id,
+        patientId:   w.patient_id || "—",
+        studyTime:   w.study_time || "—",
         patientName: (w.patient_name || "").trim() || "—",
         mod:         w.modality,
         mColor:      ms.color,
@@ -983,6 +981,9 @@ export default function Dashboard() {
           referringDoctor: d.referring_doctor || "",
           history:          d.history || "",
         },
+        historyFileName: d.history_file_name || null,
+        historyUrl:      d.history_url || null,
+        historyFile:     null,   // newly picked File (uploaded on Save)
       });
     } catch (e) {
       setEditModal({ caseId, loading: false, saving: false, error: e?.message || "Failed to load case", form: null });
@@ -1020,6 +1021,19 @@ export default function Dashboard() {
       if (!res.ok || !json?.ok) {
         throw new Error(json?.detail || `HTTP ${res.status}`);
       }
+      // Upload the newly picked history attachment (if any) to S3.
+      if (editModal.historyFile) {
+        const fd = new FormData();
+        fd.append("history_file", editModal.historyFile, editModal.historyFile.name);
+        const up = await fetch(
+          `${API_BASE_DASH}/organization/uploads/by-case/${encodeURIComponent(editModal.caseId)}/history-file`,
+          { method: "POST", headers: tok ? { Authorization: `Bearer ${tok}` } : {}, body: fd },
+        );
+        const upJson = await up.json().catch(() => null);
+        if (!up.ok || !upJson?.ok) {
+          throw new Error(`Details saved, but history file upload failed: ${upJson?.detail || `HTTP ${up.status}`}`);
+        }
+      }
       setEditModal(null);
       // Refresh the dashboard so the edited row reflects immediately.
       const reloadTok = readToken();
@@ -1041,6 +1055,7 @@ export default function Dashboard() {
   // so users on a fresh org always see something.
   const handleDownloadCase = async (caseItem) => {
     setDownloadingCase(caseItem.caseId);
+    setDownloadingFmt("pdf");
     setDashToast(null);
 
     const isFallback = !dashData;
@@ -1188,6 +1203,240 @@ export default function Dashboard() {
       setTimeout(() => setDashToast(null), 4000);
     } finally {
       setDownloadingCase(null);
+    }
+  };
+
+  // Download the radiologist's report as a real Word document (.docx), built
+  // with the `docx` library from the saved report text (technique / findings /
+  // impression / opinions) plus the radiologist's signature image from their
+  // profile (radiology profile → signature_path).
+  const handleDownloadWord = async (caseItem) => {
+    setDownloadingCase(caseItem.caseId);
+    setDownloadingFmt("word");
+    setDashToast(null);
+    try {
+      const cacheRes = await fetch(
+        `${API_BASE_DASH}/radiology/reports/${encodeURIComponent(caseItem.caseId)}/ai-cache`,
+      );
+      const rep = (await cacheRes.json().catch(() => null))?.data;
+      if (!rep || !(rep.technique || rep.findings || rep.impression || rep.opinions ||
+                    rep.ai_technique || rep.ai_findings || rep.ai_impression || rep.ai_opinions)) {
+        throw new Error("No report content available yet for this case.");
+      }
+
+      // ── Radiologist profile: qualification, designation, signature image ──
+      let qualification = "";
+      let designation = "";
+      let radName = "";
+      let dmcNo = "";
+      let sigData = null;   // { data: ArrayBuffer, type: "png"|"jpg"|"gif", width, height }
+      if (rep.user_id) {
+        try {
+          const profRes = await fetch(`${API_BASE_DASH}/radiology/profile/${encodeURIComponent(rep.user_id)}`);
+          const prof = (await profRes.json().catch(() => null))?.data;
+          qualification = prof?.qualification || "";
+          designation = prof?.designation || "";
+          radName = `${prof?.first_name || ""} ${prof?.last_name || ""}`.trim();
+          dmcNo = prof?.dmc_no || "";
+          if (prof?.signature_path) {
+            // Directory part of signature_path isn't reliable — rebuild from the filename.
+            const fname = String(prof.signature_path).split(/[\\/]/).pop();
+            const ext = (fname.split(".").pop() || "").toLowerCase();
+            const type = ext === "jpg" || ext === "jpeg" ? "jpg" : ext === "gif" ? "gif" : ext === "png" ? "png" : null;
+            if (fname && type) {
+              const sigRes = await fetch(`/uploads/radiologist/signature/${encodeURIComponent(fname)}`);
+              if (sigRes.ok) {
+                const blob = await sigRes.blob();
+                const buf = await blob.arrayBuffer();
+                let w = 180, h = 50;
+                try {
+                  const bmp = await createImageBitmap(blob);
+                  const scale = Math.min(180 / bmp.width, 60 / bmp.height, 1);
+                  w = Math.max(1, Math.round(bmp.width * scale));
+                  h = Math.max(1, Math.round(bmp.height * scale));
+                  bmp.close?.();
+                } catch (_e) { /* keep default size */ }
+                sigData = { data: buf, type, width: w, height: h };
+              }
+            }
+          }
+        } catch (_e) { /* signature is optional — sign-off text still renders */ }
+      }
+
+      const { Document, Packer, Paragraph, TextRun, ImageRun, AlignmentType } = await import("docx");
+
+      // ── Report sections may be plain text or editor HTML → paragraphs ──
+      const htmlToParagraphs = (raw) => {
+        const src = String(raw ?? "").trim();
+        if (!src) return [new Paragraph({ children: [new TextRun("—")] })];
+        if (!/<[a-z][\s\S]*>/i.test(src)) {
+          return src.split(/\r?\n/).map((line) =>
+            new Paragraph({ spacing: { after: 80 }, children: [new TextRun(line)] }));
+        }
+        const doc = new DOMParser().parseFromString(src, "text/html");
+        const out = [];
+        const runsOf = (node, fmt = {}) => {
+          const runs = [];
+          node.childNodes.forEach((n) => {
+            if (n.nodeType === 3) {
+              const t = n.textContent.replace(/\s+/g, " ");
+              if (t) runs.push(new TextRun({ text: t, ...fmt }));
+            } else if (n.nodeType === 1) {
+              const tag = n.tagName.toLowerCase();
+              if (tag === "br") { runs.push(new TextRun({ text: "", break: 1 })); return; }
+              if (["ul", "ol", "p", "div", "li", "h1", "h2", "h3", "h4", "table"].includes(tag)) return;
+              const f = { ...fmt };
+              if (tag === "b" || tag === "strong") f.bold = true;
+              if (tag === "i" || tag === "em") f.italics = true;
+              if (tag === "u") f.underline = {};
+              runs.push(...runsOf(n, f));
+            }
+          });
+          return runs;
+        };
+        const walk = (node, prefix = "", fmt = {}) => {
+          node.childNodes.forEach((n, idx) => {
+            if (n.nodeType === 3) {
+              const t = n.textContent.trim();
+              if (t) out.push(new Paragraph({ spacing: { after: 80 }, children: [new TextRun({ text: prefix + t, ...fmt })] }));
+              return;
+            }
+            if (n.nodeType !== 1) return;
+            const tag = n.tagName.toLowerCase();
+            if (tag === "ul" || tag === "ol") {
+              let i = 0;
+              n.childNodes.forEach((li) => {
+                if (li.nodeType !== 1) return;
+                i += 1;
+                const bullet = tag === "ol" ? `${i}. ` : "• ";
+                out.push(new Paragraph({
+                  spacing: { after: 60 }, indent: { left: 360 },
+                  children: [new TextRun(bullet), ...runsOf(li, fmt)],
+                }));
+              });
+            } else if (["p", "div", "h1", "h2", "h3", "h4", "li"].includes(tag)) {
+              const heading = tag.startsWith("h");
+              const hasBlockChild = Array.from(n.children).some((c) =>
+                ["p", "div", "ul", "ol", "h1", "h2", "h3", "h4"].includes(c.tagName.toLowerCase()));
+              if (hasBlockChild) {
+                walk(n, prefix, fmt);
+              } else {
+                const runs = runsOf(n, heading ? { ...fmt, bold: true } : fmt);
+                if (runs.length) out.push(new Paragraph({ spacing: { after: 80 }, children: runs }));
+              }
+            } else {
+              const runs = runsOf({ childNodes: [n] }, fmt);
+              if (runs.length) out.push(new Paragraph({ spacing: { after: 80 }, children: runs }));
+            }
+          });
+        };
+        walk(doc.body);
+        return out.length ? out : [new Paragraph({ children: [new TextRun("—")] })];
+      };
+
+      // Same content as the PDF report, in a plain layout.
+      const modalityLabel = { XR: "XRAY", US: "ULTRASOUND", NM: "NUCLEAR MEDICINE", PET: "PET" }[
+        String(caseItem.modality || "").toUpperCase()] || String(caseItem.modality || "").toUpperCase();
+      const studyUpper = String(caseItem.studyType || "").toUpperCase();
+      const reportTitle = (studyUpper.startsWith(modalityLabel) ? studyUpper : `${modalityLabel} ${studyUpper}`).trim() || "RADIOLOGY REPORT";
+
+      const ageRaw = rep.patient_age ?? "";
+      const ageStr = ageRaw !== "" && ageRaw !== null
+        ? (/[a-z]$/i.test(String(ageRaw)) ? String(ageRaw) : `${ageRaw}y`)
+        : "-";
+      const ageSex = `${ageStr} / ${rep.patient_sex || "-"}`;
+
+      const fmtDate = (v) => {
+        const d = v ? new Date(v) : null;
+        if (!d || isNaN(d)) return null;
+        return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+      };
+      const studyDate = fmtDate(rep.scan_datetime) || caseItem.completedAt || "-";
+
+      const infoLine = (label, value) =>
+        new Paragraph({
+          spacing: { after: 40 },
+          children: [
+            new TextRun({ text: `${label}: `, bold: true }),
+            new TextRun(String(value || "-")),
+          ],
+        });
+
+      const sectionTitle = (text) =>
+        new Paragraph({
+          spacing: { before: 240, after: 80 },
+          children: [new TextRun({ text, bold: true, size: 24 })],
+        });
+
+      // Same field → heading mapping as the PDF template:
+      //   Technique ← technique, REPORT ← findings, ADVICE ← impression, Impression ← opinions
+      const technique  = rep.technique  || rep.ai_technique;
+      const findings   = rep.findings   || rep.ai_findings;
+      const advice     = rep.impression || rep.ai_impression;
+      const impression = rep.opinions   || rep.ai_opinions;
+
+      const displayName = `Dr. ${(radName || String(caseItem.assignedTo || "")).replace(/^\s*dr\.?\s*/i, "")}`.trim();
+      const sigLine = (text, bold = false) =>
+        new Paragraph({ spacing: { after: 20 }, children: [new TextRun({ text, bold })] });
+
+      const signature = [sectionTitle("Signature")];
+      if (sigData) {
+        signature.push(new Paragraph({
+          spacing: { after: 60 },
+          children: [new ImageRun({
+            data: sigData.data,
+            type: sigData.type,
+            transformation: { width: sigData.width, height: sigData.height },
+          })],
+        }));
+      }
+      signature.push(sigLine(displayName, true));
+      if (dmcNo) signature.push(sigLine(`DMC No: ${dmcNo}`, true));
+      if (qualification) signature.push(sigLine(qualification));
+      if (designation) signature.push(sigLine(designation));
+
+      const docx = new Document({
+        creator: "ONIX",
+        title: `Radiology Report - ${caseItem.caseId}`,
+        styles: { default: { document: { run: { font: "Arial", size: 22 } } } },
+        sections: [{
+          properties: { page: { margin: { top: 1000, bottom: 1000, left: 1100, right: 1100 } } },
+          children: [
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 240 },
+              children: [new TextRun({ text: reportTitle, bold: true, size: 28 })],
+            }),
+            infoLine("Patient ID", caseItem.caseId),
+            infoLine("Age / Sex", ageSex),
+            infoLine("Patient Name", rep.patient_name || caseItem.patientName),
+            infoLine("Study Date", studyDate),
+            infoLine("Referring Doctor", rep.referring_doctor),
+            infoLine("Investigation", rep.clinical_indication),
+            sectionTitle("Technique"),  ...htmlToParagraphs(technique),
+            sectionTitle("REPORT"),     ...htmlToParagraphs(findings),
+            sectionTitle("ADVICE"),     ...htmlToParagraphs(advice),
+            sectionTitle("Impression"), ...htmlToParagraphs(impression),
+            ...signature,
+          ],
+        }],
+      });
+
+      const blob = await Packer.toBlob(docx);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${caseItem.caseId}_report.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+      setDashToast({ kind: "error", text: e?.message || "Could not generate Word report" });
+      setTimeout(() => setDashToast(null), 4000);
+    } finally {
+      setDownloadingCase(null);
+      setDownloadingFmt(null);
     }
   };
 
@@ -1800,11 +2049,12 @@ export default function Dashboard() {
                 <tr style={{ background: tblHeadBg }}>
                   {[
                     "Priority",
-                    "Case ID",
+                    "Patient ID",
                     "Patient Name",
                     "Modality",
                     "Study Type",
-                    "Time Stamp",
+                    "Study Time",
+                    "Uploaded At",
                     "Assigned To",
                     "Status",
                     "Edit",
@@ -1844,7 +2094,7 @@ export default function Dashboard() {
               <tbody>
                 {filteredWL.length === 0 ? (
                   <tr>
-                    <td colSpan={10} style={{
+                    <td colSpan={11} style={{
                       padding: "32px 18px",
                       textAlign: "center",
                       fontSize: 14,
@@ -1906,7 +2156,7 @@ export default function Dashboard() {
                           whiteSpace: "nowrap",
                         }}
                       >
-                        {r.id}
+                        {r.patientId}
                       </td>
 
                       {/* Patient Name */}
@@ -1948,6 +2198,17 @@ export default function Dashboard() {
                         }}
                       >
                         {r.study}
+                      </td>
+
+                      <td
+                        style={{
+                          ...mono,
+                          padding: "13px 18px",
+                          fontSize: 15,
+                          color: textSec,
+                        }}
+                      >
+                        {r.studyTime}
                       </td>
 
                       <td
@@ -2905,6 +3166,40 @@ export default function Dashboard() {
                         />
                       </div>
 
+                      <div style={{ marginTop: 16, marginBottom: 4 }}>
+                        <label style={fieldLabelStyle}>
+                          History File <span style={{ fontWeight: 400, opacity: 0.6 }}>(optional · image, PDF, Word, any file · max 50 MB)</span>
+                        </label>
+                        <input
+                          type="file"
+                          style={{ ...inputStyle, padding: "8px 10px" }}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0] || null;
+                            if (file && file.size > 50 * 1024 * 1024) {
+                              setEditModal((m) => ({ ...m, historyFile: null, error: "History file exceeds the 50 MB limit" }));
+                              e.target.value = "";
+                              return;
+                            }
+                            setEditModal((m) => ({ ...m, historyFile: file, error: null }));
+                          }}
+                        />
+                        {editModal.historyFile ? (
+                          <div style={{ marginTop: 6, fontSize: 12.5, opacity: 0.8 }}>
+                            Selected: {editModal.historyFile.name}
+                            {editModal.historyFileName ? " (will replace the current file)" : ""}
+                          </div>
+                        ) : editModal.historyFileName ? (
+                          <div style={{ marginTop: 6, fontSize: 12.5, opacity: 0.8 }}>
+                            Current file:{" "}
+                            {editModal.historyUrl ? (
+                              <a href={editModal.historyUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#3b82f6" }}>
+                                {editModal.historyFileName}
+                              </a>
+                            ) : editModal.historyFileName}
+                          </div>
+                        ) : null}
+                      </div>
+
                       {editModal.error && (
                         <div style={{ marginTop: 12, fontSize: 13, color: "#f87171" }}>{editModal.error}</div>
                       )}
@@ -3096,43 +3391,59 @@ export default function Dashboard() {
                       <td style={{ padding: "12px 16px", fontSize: 13, color: textPri, fontWeight: 500, whiteSpace: "nowrap" }}>
                         {c.assignedTo}
                       </td>
-                      {/* Download */}
+                      {/* Download — PDF / Word */}
                       <td style={{ padding: "12px 16px" }}>
-                        <button
-                          onClick={() => handleDownloadCase(c)}
-                          disabled={downloadingCase === c.caseId}
-                          style={{
-                            ...sg,
-                            display: "inline-flex", alignItems: "center", gap: 6,
-                            padding: "7px 14px", borderRadius: 8, border: "none",
-                            background: downloadingCase === c.caseId
-                              ? "rgba(52,211,153,0.15)"
-                              : "linear-gradient(135deg,#065f46,#059669)",
-                            color: downloadingCase === c.caseId ? "#34d399" : "#fff",
-                            fontSize: 12, fontWeight: 700, cursor: downloadingCase === c.caseId ? "wait" : "pointer",
-                            whiteSpace: "nowrap",
-                            transition: "opacity 0.2s",
-                            boxShadow: downloadingCase === c.caseId ? "none" : "0 2px 8px rgba(5,150,105,0.35)",
-                          }}
-                        >
-                          {downloadingCase === c.caseId ? (
-                            <>
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ animation: "spin 1s linear infinite" }}>
-                                <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-                              </svg>
-                              Downloading…
-                            </>
-                          ) : (
-                            <>
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                                <polyline points="7 10 12 15 17 10"/>
-                                <line x1="12" y1="15" x2="12" y2="3"/>
-                              </svg>
-                              Download
-                            </>
-                          )}
-                        </button>
+                        {(() => {
+                          const busy = downloadingCase === c.caseId;
+                          const iconBtn = {
+                            width: 30, height: 30, padding: 3, borderRadius: 8,
+                            border: "1px solid rgba(148,163,184,0.45)",
+                            background: "#fff", display: "inline-flex",
+                            alignItems: "center", justifyContent: "center",
+                            cursor: busy ? "wait" : "pointer",
+                            opacity: busy ? 0.55 : 1,
+                            boxShadow: "0 1px 4px rgba(0,0,0,0.15)",
+                          };
+                          return (
+                            <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
+                              <span style={{ ...sg, fontSize: 12, fontWeight: 700, color: textPri }}>
+                                {busy ? (downloadingFmt === "word" ? "Preparing Word…" : "Preparing PDF…") : "Download"}
+                              </span>
+                              <div style={{ display: "flex", gap: 8 }}>
+                                <button
+                                  type="button"
+                                  title="Download report as PDF"
+                                  aria-label="Download report as PDF"
+                                  onClick={() => handleDownloadCase(c)}
+                                  disabled={busy}
+                                  style={iconBtn}
+                                >
+                                  <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M6 2h8l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" fill="#fff" stroke="#e11d2e" strokeWidth="1.6" strokeLinejoin="round"/>
+                                    <path d="M14 2v5h5" fill="none" stroke="#e11d2e" strokeWidth="1.6" strokeLinejoin="round"/>
+                                    <rect x="2" y="12" width="15" height="7" rx="1.5" fill="#e11d2e"/>
+                                    <text x="9.5" y="17.6" textAnchor="middle" fontSize="5.6" fontWeight="800" fontFamily="Arial, sans-serif" fill="#fff">PDF</text>
+                                  </svg>
+                                </button>
+                                <button
+                                  type="button"
+                                  title="Download report as Word document"
+                                  aria-label="Download report as Word document"
+                                  onClick={() => handleDownloadWord(c)}
+                                  disabled={busy}
+                                  style={iconBtn}
+                                >
+                                  <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+                                    <rect x="9" y="4" width="13" height="16" rx="1.5" fill="#fff" stroke="#2b579a" strokeWidth="1.4"/>
+                                    <path d="M12 8h8M12 11h8M12 14h8M12 17h8" stroke="#2b579a" strokeWidth="1.3"/>
+                                    <path d="M2 5.2 12 3.5v17L2 18.8z" fill="#2b579a"/>
+                                    <text x="6.6" y="15" textAnchor="middle" fontSize="8.5" fontWeight="800" fontFamily="Arial, sans-serif" fill="#fff">W</text>
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </td>
                     </tr>
                   ))}
@@ -3288,9 +3599,6 @@ export default function Dashboard() {
                 <div style={{ fontSize: 28, fontWeight: 700, color: "#fff", fontFamily: "'DM Mono',monospace", lineHeight: 1 }}>
                   {WORKFLOW_CASES.length} Cases
                 </div>
-                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.6)", marginTop: 4 }}>
-                  {wfByTab.Critical.length} critical · {wfByTab.Urgent.length} urgent · {new Date().toLocaleDateString(undefined, { day:"2-digit", month:"short", year:"numeric" })}
-                </div>
               </div>
 
               {/* ── Priority tab buttons (top-right) ── */}
@@ -3440,9 +3748,6 @@ export default function Dashboard() {
             }}>
               <span style={{ fontSize: 12, color: textMuted }}>
                 Showing {wfTabRows.length} {queueTab.toLowerCase()} case{wfTabRows.length === 1 ? "" : "s"} · {new Date().toLocaleDateString(undefined, { day:"2-digit", month:"short", year:"numeric" })}
-              </span>
-              <span style={{ fontSize: 12, color: textMuted }}>
-                Cases auto-assigned from workflow · click View to open scan
               </span>
             </div>
           </div>
@@ -3598,9 +3903,6 @@ export default function Dashboard() {
             }}>
               <span style={{ fontSize: 12, color: textMuted }}>
                 Showing {PENDING_OVERDUE_CASES.length} pending / overdue case{PENDING_OVERDUE_CASES.length === 1 ? "" : "s"} · {new Date().toLocaleDateString(undefined, { day:"2-digit", month:"short", year:"numeric" })}
-              </span>
-              <span style={{ fontSize: 12, color: textMuted }}>
-                Critical &amp; SLA Breach cases require immediate escalation
               </span>
             </div>
           </div>

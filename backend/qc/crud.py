@@ -199,7 +199,9 @@ def insert_bulk_upload_after_qc(
           referring_doctor,
           history,
           subject_id,
-          qc_status, qc_summary, qc_ran_at
+          qc_status, qc_summary, qc_ran_at,
+          uploaded_at,
+          created_at
         ) VALUES (
           %s, %s, %s,
           %s,
@@ -211,7 +213,9 @@ def insert_bulk_upload_after_qc(
           %s, %s,
           %s,
           %s,
-          %s, %s, %s, NOW()
+          %s, %s, %s, NOW(),
+          (NOW() AT TIME ZONE 'Asia/Kolkata'),   -- uploaded_at: IST wall-clock (column is timestamp without tz)
+          COALESCE(%s::timestamp, (NOW() AT TIME ZONE 'Asia/Kolkata'))   -- created_at: study time from the DICOM
         ) RETURNING id
         """,
         (
@@ -238,9 +242,25 @@ def insert_bulk_upload_after_qc(
             case_meta.get("subject_id"),
             qc_status,
             qc_summary,
+            case_meta.get("study_datetime_str"),
         ),
     )
-    return int(row["id"]) if row else None
+    new_id = int(row["id"]) if row else None
+
+    # Patient-history attachment (already uploaded to S3 by the router).
+    # Separate UPDATE so a missing column can never break the main insert.
+    hist = case_meta.get("history_path")
+    if new_id and hist:
+        try:
+            from organization.crud import ensure_history_path_column
+            ensure_history_path_column()
+            _exec(
+                "UPDATE organization_schema.bulk_uploads SET history_path = %s WHERE id = %s",
+                (hist, new_id),
+            )
+        except Exception as e:
+            print(f"[qc] could not store history_path for {case_meta.get('case_id')}: {e}")
+    return new_id
 
 
 def insert_returned_case_from_meta(case_meta: Dict[str, Any], reason: str) -> int:

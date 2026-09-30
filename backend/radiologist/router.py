@@ -966,6 +966,58 @@ def get_or_create_report(case_id: str, user_id: str):
         conn.close()
 
 
+@router.get("/cases/{case_id}/history")
+def get_case_history(case_id: str, user=Depends(get_current_user)):
+    """Patient history for the viewer's Metadata tab: the typed history text
+    plus (if the org attached one) a short-lived link to the history file."""
+    conn = get_conn()
+    try:
+        from psycopg2.extras import RealDictCursor
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                "SELECT history FROM radiology_schema.rad_scans WHERE case_id = %s LIMIT 1",
+                (case_id,),
+            )
+            rs = cur.fetchone() or {}
+            hist_text = rs.get("history")
+            hist_key = None
+            study_time = None
+            try:
+                cur.execute(
+                    """SELECT history, history_path, created_at
+                         FROM organization_schema.bulk_uploads
+                        WHERE case_id = %s
+                        ORDER BY id DESC LIMIT 1""",
+                    (case_id,),
+                )
+                bu = cur.fetchone() or {}
+                hist_text = bu.get("history") or hist_text
+                hist_key = bu.get("history_path")
+                ca = bu.get("created_at")
+                if ca is not None:
+                    study_time = ca.strftime("%Y-%m-%d %H:%M") if hasattr(ca, "strftime") else str(ca)
+            except Exception:
+                # history_path column not created yet — no file attached
+                conn.rollback()
+    finally:
+        conn.close()
+
+    file_name = file_url = None
+    if hist_key:
+        base = hist_key.rsplit("/", 1)[-1]
+        file_name = base.split("_", 1)[1] if "_" in base else base
+        try:
+            from s3_storage import presigned_download
+            file_url = presigned_download(hist_key)
+        except Exception as e:
+            print(f"[history] presign failed for {hist_key}: {e}")
+    return {
+        "success": True,
+        "data": {"history": hist_text, "history_file_name": file_name, "history_url": file_url,
+                 "study_time": study_time},
+    }
+
+
 @router.get("/reports/{case_id}/ai-cache")
 def get_ai_cache(case_id: str):
     """Return any saved report content for this case, regardless of who saved it.
@@ -990,7 +1042,9 @@ def get_ai_cache(case_id: str):
                 """
                 SELECT ai_technique, ai_findings, ai_impression, ai_opinions,
                        technique,    findings,    impression,    opinions,
-                       status, case_id, updated_at, user_id
+                       status, case_id, updated_at, user_id,
+                       patient_name, patient_age, patient_sex,
+                       referring_doctor, scan_datetime, clinical_indication
                 FROM radiology_schema.reports
                 WHERE case_id = %s
                   AND (ai_technique IS NOT NULL
@@ -1011,7 +1065,38 @@ def get_ai_cache(case_id: str):
             return {"success": True, "data": None}
 
         # Prefer ai_* fields when populated; fall back to main columns.
-        ai_t, ai_f, ai_i, ai_o, m_t, m_f, m_i, m_o, status, c_id, updated_at, report_uid = row
+        (ai_t, ai_f, ai_i, ai_o, m_t, m_f, m_i, m_o, status, c_id, updated_at, report_uid,
+         p_name, p_age, p_sex, ref_doc, scan_dt, clin_ind) = row
+
+        # The reports row can be missing patient details (e.g. never snapshotted
+        # from the scan) — fill any blanks from the case's rad_scans record.
+        if not (p_name and p_age not in (None, "") and p_sex and ref_doc and scan_dt and clin_ind):
+            try:
+                with conn.cursor() as cur2:
+                    cur2.execute(
+                        """
+                        SELECT patient_name, patient_age, patient_sex,
+                               referring_doctor, scan_date, modality_study_type
+                          FROM radiology_schema.rad_scans
+                         WHERE case_id = %s
+                         ORDER BY scan_date DESC NULLS LAST
+                         LIMIT 1
+                        """,
+                        (case_id,),
+                    )
+                    rs_row = cur2.fetchone()
+                if rs_row:
+                    p_name   = p_name   or rs_row[0]
+                    p_age    = p_age if p_age not in (None, "") else rs_row[1]
+                    p_sex    = p_sex    or rs_row[2]
+                    ref_doc  = ref_doc  or rs_row[3]
+                    scan_dt  = scan_dt  or rs_row[4]
+                    clin_ind = clin_ind or rs_row[5]
+            except Exception as e:
+                print(f"[ai-cache] rad_scans fallback failed for {case_id}: {e}")
+                try: conn.rollback()
+                except Exception: pass
+
         return {
             "success": True,
             "data": {
@@ -1032,6 +1117,13 @@ def get_ai_cache(case_id: str):
                 # designation — needed to render a real signature image, not just
                 # the "Electronically signed by <name>" text line.
                 "user_id":       str(report_uid) if report_uid else None,
+                # Patient block used by the org dashboard's Word export (mirrors the PDF header table).
+                "patient_name":        p_name,
+                "patient_age":         p_age,
+                "patient_sex":         p_sex,
+                "referring_doctor":    ref_doc,
+                "scan_datetime":       scan_dt.isoformat() if hasattr(scan_dt, "isoformat") else (str(scan_dt) if scan_dt else None),
+                "clinical_indication": clin_ind,
             },
         }
     finally:

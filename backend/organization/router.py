@@ -85,6 +85,28 @@ def _decode_data_url(data_url: str):
         return None, None
 
 
+def _store_history_file(uf, case_id: str) -> str:
+    """Upload a patient-history attachment (any file type) to
+    s3://onix-s3/uploads/history/<case_id>/... and return the S3 key.
+    Raises ValueError for empty/oversized files, RuntimeError on S3 failure."""
+    from s3_storage import upload_history_file, HISTORY_MAX_BYTES
+    name = os.path.basename((getattr(uf, "filename", "") or "").replace("\\", "/"))
+    if not name:
+        raise ValueError("history file has no name")
+    f = uf.file
+    f.seek(0, os.SEEK_END)
+    size = f.tell()
+    f.seek(0)
+    if size == 0:
+        raise ValueError("history file is empty")
+    if size > HISTORY_MAX_BYTES:
+        raise ValueError(f"history file exceeds {HISTORY_MAX_BYTES // (1024 * 1024)} MB limit")
+    try:
+        return upload_history_file(f, case_id, name, getattr(uf, "content_type", None))
+    except Exception as e:
+        raise RuntimeError(f"S3 upload failed: {e}")
+
+
 def _save_files_to_subject_dir(subject_id: str, files: List[UploadFile],
                                 base_dir: str = BULK_DIR):
     subject_dir = os.path.join(base_dir, subject_id)
@@ -541,7 +563,8 @@ async def bulk_submit(
             files_by_name[base] = uf
 
     generated_ids = []
-    for c in case_list:
+    history_errors = []
+    for idx, c in enumerate(case_list):
         # subject_id comes from the Excel sheet; case_id is server-generated.
         subject_id = str(c.get("subject_id") or "").strip() or str(uuid.uuid4())
         case_id    = _gen_case_id()
@@ -562,6 +585,15 @@ async def bulk_submit(
             saved_names.append(os.path.basename(fname))
 
         rel_dir = os.path.relpath(subject_dir, os.getcwd()).replace("\\", "/")
+
+        # Optional patient-history attachment: multipart part "history_file_<index>"
+        history_key = None
+        hf = form.get(f"history_file_{idx}")
+        if hf is not None and hasattr(hf, "filename") and hf.filename:
+            try:
+                history_key = _store_history_file(hf, case_id)
+            except Exception as e:
+                history_errors.append({"case_id": case_id, "error": str(e)})
 
         # Build the full metadata dict; no DB insert here.
         # QC runs first → on pass: qc_cases → bulk_uploads → workflow → rad_scans.
@@ -585,6 +617,7 @@ async def bulk_submit(
             "study_type_text":  c.get("study_type"),
             "referring_doctor":  c.get("referring_doctor"),
             "history":          c.get("history"),
+            "history_path":     history_key,
         }
         generated_ids.append(case_id)
         bg_tasks.add_task(run_qc_for_case, case_meta)
@@ -594,6 +627,7 @@ async def bulk_submit(
         "upload_id": upload_id,
         "inserted": len(generated_ids),
         "ids": generated_ids,
+        "history_errors": history_errors,
     }
 
 
@@ -611,6 +645,7 @@ def single_submit(
     study_date:   Optional[str] = Form(None),
     referring_doctor: Optional[str] = Form(None),
     history:      Optional[str] = Form(None),
+    history_file: Optional[UploadFile] = File(None),
     files: List[UploadFile] = File(default=[]),
     user=Depends(get_current_user),
 ):
@@ -629,6 +664,14 @@ def single_submit(
 
     upload_id          = str(uuid.uuid4())
     rel_dir, saved     = _save_files_to_subject_dir(case_id, files, base_dir=BULK_DIR)
+
+    history_key = None
+    history_error = None
+    if history_file is not None and history_file.filename:
+        try:
+            history_key = _store_history_file(history_file, case_id)
+        except Exception as e:
+            history_error = str(e)
 
     case_meta = {
         "upload_id":        upload_id,
@@ -650,9 +693,11 @@ def single_submit(
         "study_type_text":  study_type,
         "referring_doctor": referring_doctor,
         "history":          history,
+        "history_path":     history_key,
     }
     bg_tasks.add_task(run_qc_for_case, case_meta)
-    return {"ok": True, "case_id": case_id, "upload_id": upload_id, "images": len(saved)}
+    return {"ok": True, "case_id": case_id, "upload_id": upload_id, "images": len(saved),
+            "history_error": history_error}
 
 
 # 4)  EDIT  (metadata + remove files)
@@ -712,6 +757,60 @@ def get_upload_by_case(case_id: str, user=Depends(get_current_user)):
     row = crud.get_upload_by_case_id(case_id, user_id)
     if not row:
         raise HTTPException(404, "Case not found")
+    _attach_history_links(row)
+    return {"ok": True, "data": row}
+
+
+def _attach_history_links(row: dict) -> None:
+    """Add history_file_name + a short-lived presigned history_url to a case dict."""
+    key = row.get("history_path")
+    row["history_file_name"] = None
+    row["history_url"] = None
+    if not key:
+        return
+    base = key.rsplit("/", 1)[-1]
+    # stored as "<10-hex uid>_<name>" — hide the uid prefix from the UI
+    row["history_file_name"] = base.split("_", 1)[1] if "_" in base else base
+    try:
+        from s3_storage import presigned_download
+        row["history_url"] = presigned_download(key)
+    except Exception as e:
+        print(f"[history] presign failed for {key}: {e}")
+
+
+@router.post("/uploads/by-case/{case_id}/history-file")
+def upload_history_file_for_case(
+    case_id: str,
+    history_file: UploadFile = File(...),
+    user=Depends(get_current_user),
+):
+    """Attach / replace the patient-history file of a case (Active Worklist edit)."""
+    user_id = user.get("user_id")
+    if not user_id:
+        raise HTTPException(401, "Invalid token payload")
+    if not crud.get_upload_by_case_id(case_id, user_id):
+        raise HTTPException(404, "Case not found")
+
+    try:
+        key = _store_history_file(history_file, case_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except RuntimeError as e:
+        raise HTTPException(502, str(e))
+
+    res = crud.set_history_path(case_id, user_id, key)
+    if not res:
+        raise HTTPException(404, "Case not found")
+
+    old = res.get("old_path")
+    if old and old != key:
+        try:
+            from s3_storage import delete_object
+            delete_object(old)
+        except Exception:
+            pass
+    row = {"history_path": key}
+    _attach_history_links(row)
     return {"ok": True, "data": row}
 
 
@@ -877,6 +976,14 @@ def _fmt_ts(ts) -> Optional[str]:
         return ts.strftime("%d %b %Y, %H:%M")
     except Exception:
         return str(ts)
+
+
+def _sort_key_ts(ts) -> float:
+    """Epoch seconds for sorting; 0.0 when missing/unparseable."""
+    try:
+        return ts.timestamp() if ts else 0.0
+    except Exception:
+        return 0.0
 
 
 def _now_matching(dt) -> datetime:
@@ -1075,6 +1182,13 @@ def dashboard_cases(user=Depends(get_current_user)):
         deduped_rows.append(r)
     rows = deduped_rows
 
+    # Most recent first: completed cases by completion time, open cases by
+    # submission time (the completed / queue / pending lists inherit this order).
+    rows.sort(
+        key=lambda r: _sort_key_ts(r.get("completed_at") or r.get("submitted_at")),
+        reverse=True,
+    )
+
     completed: List[dict] = []
     routine:   List[dict] = []
     pending:   List[dict] = []
@@ -1252,14 +1366,17 @@ def dashboard_cases(user=Depends(get_current_user)):
 
                 worklist.append({
                     "case_id":     rs.get("case_id"),
+                    "patient_id":  (str(rs.get("subject_id") or "").strip()) or "—",
+                    "study_time":  _fmt_ts(rs.get("bu_created_at")) or "—",
                     "patient_name": (rs.get("patient_name") or "").strip() or "—",
                     "priority":    priority,
                     "modality":    modality,
                     "modality_raw": rs.get("scan_type"),
                     "study_type":  rs.get("modality_study_type") or rs.get("scan_type") or "—",
                     "site":        _site_for_rad(rad_name) or rs.get("ref_organisation") or profile.get("org_name") or "—",
-                    "received_at": rs.get("uploaded_at").strftime("%d %b %Y") if rs.get("uploaded_at") else "—",
+                    "received_at": rs.get("uploaded_at").strftime("%d %b %Y, %H:%M") if rs.get("uploaded_at") else "—",
                     "uploaded_at": _fmt_ts(scan_date),
+                    "_sort_ts":    _sort_key_ts(rs.get("uploaded_at") or scan_date),
                     "tat_left":    tat_left,
                     "assigned_to": rad_name,
                     "wl_status":   wl_status,
@@ -1270,14 +1387,11 @@ def dashboard_cases(user=Depends(get_current_user)):
                 # Skip the bad row but keep building the rest of the worklist
                 print(f"[dashboard] skipping rad_scan row {rs.get('case_id')}: {row_err}")
 
-        # Sort: priority (STAT first) then most recent. No row cap — the
-        # frontend handles overflow with a scrollable container.
-        priority_rank = {"STAT": 0, "Urgent": 1, "Routine": 2}
-        worklist = sorted(
-            worklist,
-            key=lambda r: (priority_rank.get(r["priority"], 9), r.get("uploaded_at") or ""),
-            reverse=False,
-        )
+        # Sort: most recent case first. No row cap — the frontend handles
+        # overflow with a scrollable container.
+        worklist.sort(key=lambda r: r.get("_sort_ts") or 0.0, reverse=True)
+        for r in worklist:
+            r.pop("_sort_ts", None)
     except Exception as e:
         # Belt-and-suspenders: if anything in the loop scaffolding itself
         # explodes, surface it but still return a usable response.
@@ -1480,6 +1594,9 @@ def workflow_cases(user=Depends(get_current_user)):
         traceback.print_exc()
         # Return the error text so the browser console can show it (not sensitive)
         return {"ok": False, "cases": [], "error": str(exc), "org_id": org_id}
+
+    # Most recent first (the query orders by case_id for DISTINCT ON).
+    rows = sorted(rows, key=lambda r: _sort_key_ts(r.get("created_at")), reverse=True)
 
     cases = []
     for r in rows:

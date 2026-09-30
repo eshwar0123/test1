@@ -260,6 +260,7 @@ def _process_case(client_folder: str, case_folder: str, s3_prefix: str, keys: Li
             "age": meta.get("age"),
             "gender": meta.get("gender"),
             "study_date_str": meta.get("study_date_str"),
+            "study_datetime_str": meta.get("study_datetime_str"),
             "image_file_names": [key[len(s3_prefix):] for key, _, _ in image_entries],
             "images_dir": s3_prefix,
             "priority_text": "Routine",

@@ -315,6 +315,8 @@ export default function Upload() {
     priority: "Routine", modality: "CT", study_type: "", study_date: "",
     referring_doctor: "", history: "",
   });
+  const [spHistoryFile, setSpHistoryFile] = useState(null);
+  const spHistoryInputRef = useRef(null);
   const [spFiles, setSpFiles] = useState([]);
   const [spSubmitting, setSpSubmitting] = useState(false);
   const spFilesInputRef  = useRef(null);
@@ -408,6 +410,7 @@ export default function Upload() {
       file_name:    matchedNames[0] || null,
       matched_files:    matchedNames,
       _matchedFileObjs: spFiles,   // File objects — required by handleBulkSubmit
+      _historyFileObj:  spHistoryFile,   // optional history attachment -> S3 uploads/history
     };
 
     // Dedup by subject_id — if user re-adds the same ID, replace the earlier entry
@@ -421,6 +424,8 @@ export default function Upload() {
             priority: "Routine", modality: "CT", study_type: "", study_date: "",
             referring_doctor: "", history: "" });
     setSpFiles([]);
+    setSpHistoryFile(null);
+    if (spHistoryInputRef.current) spHistoryInputRef.current.value = "";
     setActiveTab("records");
     showBanner("success",
       `✓ Added ${newRow.subject_id} to Patient Records. Click Submit on the Patient Records tab to save to the database.`);
@@ -662,11 +667,19 @@ export default function Upload() {
       fd.append("cases", JSON.stringify(cases));
       if (excelFile) fd.append("excel", excelFile, excelFile.name);
       for (const f of uniqueFiles.values()) fd.append("files", f, f.name);
+      previewRows.forEach((r, i) => {
+        if (r._historyFileObj) fd.append(`history_file_${i}`, r._historyFileObj, r._historyFileObj.name);
+      });
 
       setProgress(45);
       const d = await api("/organization/uploads/bulk-submit", { method: "POST", body: fd });
       setProgress(100);
-      showBanner("success", `✓ Successfully submitted ${d.inserted} patient record${d.inserted === 1 ? "" : "s"} to the database.`);
+      if (d.history_errors && d.history_errors.length) {
+        showBanner("error", `Submitted, but ${d.history_errors.length} history file(s) failed to upload: ` +
+          d.history_errors.map((x) => `${x.case_id} (${x.error})`).join("; "), 10000);
+      } else {
+        showBanner("success", `✓ Successfully submitted ${d.inserted} patient record${d.inserted === 1 ? "" : "s"} to the database.`);
+      }
       resetBulk();
       await loadRecords();
       setActiveTab("history");   // jump to History so user sees what was just saved
@@ -916,6 +929,25 @@ export default function Upload() {
                       value={sp.history || ""}
                       onChange={handleSpChange}
                       placeholder="Enter patient's clinical / medical history"
+                    />
+                  </div>
+
+                  <div className="org-upload-form-group">
+                    <label>History File <span style={{ color: "#94a3b8", fontWeight: 400 }}>(optional · image, PDF, Word, any file · max 50 MB)</span></label>
+                    <input
+                      ref={spHistoryInputRef}
+                      className="org-upload-input"
+                      type="file"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] || null;
+                        if (file && file.size > 50 * 1024 * 1024) {
+                          showBanner("error", "History file exceeds the 50 MB limit");
+                          e.target.value = "";
+                          setSpHistoryFile(null);
+                          return;
+                        }
+                        setSpHistoryFile(file);
+                      }}
                     />
                   </div>
 

@@ -39,6 +39,7 @@
     "core-js": "^3.46.0",
     "cornerstone-wado-image-loader": "^4.13.2",
     "dicom-parser": "^1.8.21",
+    "docx": "^8.5.0",
     "fabric": "^7.1.0",
     "gl-matrix": "^3.4.3",
     "hammerjs": "^2.0.8",

@@ -71,6 +71,45 @@ def format_study_date(raw: Any) -> Optional[str]:
     return None
 
 
+def format_study_datetime(date_raw: Any, time_raw: Any) -> Optional[str]:
+    """DICOM date (YYYYMMDD) + time (HHMMSS[.ffffff]) -> 'YYYY-MM-DD HH:MM:SS',
+    or None if there is no usable date. A missing/garbled time becomes 00:00:00."""
+    d = str(date_raw or "").strip()
+    if not (len(d) == 8 and d.isdigit()):
+        return None
+    t = str(time_raw or "").strip().split(".")[0].replace(":", "")
+    t = (t + "000000")[:6] if t.isdigit() else "000000"
+    hh, mm, ss = int(t[0:2]), int(t[2:4]), int(t[4:6])
+    if hh > 23 or mm > 59 or ss > 59:
+        hh = mm = ss = 0
+    return f"{d[0:4]}-{d[4:6]}-{d[6:8]} {hh:02d}:{mm:02d}:{ss:02d}"
+
+
+def study_datetime_from_dataset(ds) -> Optional[str]:
+    """When the study was taken, from the DICOM tags: StudyDate/StudyTime,
+    falling back to Acquisition / Content / Series date+time."""
+    for date_tag, time_tag in (
+        ("StudyDate", "StudyTime"),
+        ("AcquisitionDate", "AcquisitionTime"),
+        ("ContentDate", "ContentTime"),
+        ("SeriesDate", "SeriesTime"),
+    ):
+        val = format_study_datetime(getattr(ds, date_tag, None), getattr(ds, time_tag, None))
+        if val:
+            return val
+    return None
+
+
+def study_datetime_from_file(path: str) -> Optional[str]:
+    """Read only the header of a DICOM file and return its study date-time."""
+    try:
+        import pydicom
+        ds = pydicom.dcmread(path, stop_before_pixels=True, force=True)
+        return study_datetime_from_dataset(ds)
+    except Exception:
+        return None
+
+
 def map_dicom_modality(raw: Any) -> Optional[str]:
     s = str(raw or "").strip().upper()
     if not s:
@@ -91,9 +130,11 @@ def extract_case_metadata(ds) -> Dict[str, Any]:
         or age_from_birth_date(getattr(ds, "PatientBirthDate", None), getattr(ds, "StudyDate", None)),
         "gender": normalise_gender(getattr(ds, "PatientSex", None)),
         "study_date_str": format_study_date(getattr(ds, "StudyDate", None)),
+        "study_datetime_str": study_datetime_from_dataset(ds),
         "modality_text": map_dicom_modality(getattr(ds, "Modality", None)),
         "study_type_text": (study_desc or body_part or None),
         "referring_doctor": normalise_person_name(getattr(ds, "ReferringPhysicianName", None)),
         "accession_number": (str(getattr(ds, "AccessionNumber", "") or "").strip() or None),
         "study_instance_uid": (str(getattr(ds, "StudyInstanceUID", "") or "").strip() or None),
     }
+
