@@ -2147,37 +2147,6 @@ export default function Dashboard() {
                 <div style={{ ...sg, fontSize:13, letterSpacing:"1.8px", color:isDark?"rgba(255,255,255,0.4)":"rgba(0,0,0,0.4)",  fontWeight:700, marginTop:3 }}>Validation</div>
               </div>
 
-              {/* Slide toggle — Uploaded files | Report  (matches Values/Interactive View pill style) */}
-              <div
-                style={{
-                  display: "inline-flex",
-                  padding: 4,
-                  borderRadius: 14,
-                  background: isDark ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.35)",
-                  border: `1px solid ${isDark ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.55)"}`,
-                  flexShrink: 0,
-                }}
-              >
-                {[["upload","Uploaded files"],["report","Report"]].map(([mode,label])=>{
-                  const isActive = qcCardMode === mode;
-                  return (
-                    <button key={mode}
-                      type="button"
-                      onClick={()=>setQcCardMode(mode)}
-                      style={{
-                        border: "none",
-                        background: isActive ? "#2563eb" : "transparent",
-                        color:      isActive ? "#ffffff" : (isDark ? "#cbd5e1" : "#2563eb"),
-                        padding: "9px 16px",
-                        borderRadius: 10,
-                        fontSize: 15,
-                        fontWeight: 700,
-                        cursor: "pointer",
-                      }}
-                    >{label}</button>
-                  );
-                })}
-              </div>
             </div>
 
             {/* metric rows — 4 for Upload mode, 3 for Report mode (no Image QC) */}
@@ -2298,37 +2267,6 @@ export default function Dashboard() {
                   {/* Modal header — single compact row */}
                   <div style={{padding:"10px 20px",borderBottom:`1px solid ${mBdr}`,display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
                     <span style={{fontSize:18,fontWeight:700,color:tP,flex:1,whiteSpace:"nowrap"}}>Quality Check</span>
-                    {/* Slide toggle in modal — matches Values/Interactive View pill style */}
-                    <div
-                      style={{
-                        display: "inline-flex",
-                        padding: 4,
-                        borderRadius: 14,
-                        background: isDark ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.35)",
-                        border: `1px solid ${isDark ? "rgba(255,255,255,0.18)" : "rgba(226,232,240,0.9)"}`,
-                        flexShrink: 0,
-                      }}
-                    >
-                      {[["upload","Uploaded files"],["report","Report"]].map(([mode,label])=>{
-                        const isAct = (!isUpload&&mode==="report")||(isUpload&&mode==="upload");
-                        return (
-                          <button key={mode}
-                            type="button"
-                            onClick={()=>{ setMode(mode); setQcCardMode(mode); }}
-                            style={{
-                              border: "none",
-                              background: isAct ? "#2563eb" : "transparent",
-                              color:      isAct ? "#ffffff" : (isDark ? "#cbd5e1" : "#2563eb"),
-                              padding: "7px 14px",
-                              borderRadius: 10,
-                              fontSize: 15,
-                              fontWeight: 700,
-                              cursor: "pointer",
-                            }}
-                          >{label}</button>
-                        );
-                      })}
-                    </div>
                     <button onClick={()=>setQcModal(null)} style={{background:"transparent",border:"none",color:tS,width:26,height:26,cursor:"pointer",fontSize:24,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,lineHeight:1,borderRadius:4}}>×</button>
                   </div>
                   {/* 4 Tabs */}

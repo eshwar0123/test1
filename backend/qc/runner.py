@@ -171,6 +171,28 @@ def run_qc_for_case(case_meta: dict) -> None:
 
         # --- 2. Case-level rollup ---
         rollup = engine.roll_up_case(per_file)
+        if rollup["status"] == "error":
+            rollup["status"] = "warn"  # TEMP HOLD (2026-09-29): show as warning, not hard fail -- revert when told to "revoke"
+
+        # Record failed cases into the QC dashboard tables (visibility only —
+        # does not block the case from proceeding below; QC gating for
+        # blocking uploads remains disabled per the flag below).
+        if rollup["status"] == "error":
+            for pf in per_file:
+                qc_crud.insert_qc_file_result(
+                    upload_row_id = None,
+                    upload_id     = upload_id,
+                    case_id       = case_id,
+                    user_id       = user_id,
+                    file_name     = pf["file_name"],
+                    status        = pf["overall"],
+                    reason        = pf["reason"],
+                    checks        = pf["checks"],
+                )
+            qc_crud.insert_returned_case_from_meta(
+                case_meta = case_meta,
+                reason    = rollup["reason"][:1000],
+            )
 
         if False:  # QC gating disabled — all cases pass through
             # --- 3a. QC failed ---

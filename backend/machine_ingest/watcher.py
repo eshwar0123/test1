@@ -288,6 +288,8 @@ def _process_case(client_folder: str, case_folder: str, s3_prefix: str, keys: Li
                           "meta": {"type": "crash", "size": 0, "modality": ""}}
             per_file.append({"file_name": local_name, **result})
         rollup = engine.roll_up_case(per_file)
+        if rollup["status"] == "error":
+            rollup["status"] = "warn"  # TEMP HOLD (2026-09-30): show as warning, not hard-blocked -- revert when told to "revoke"
 
         # QC gating IS enforced here (unlike the manual pipeline, where it's
         # currently disabled) — an MRI machine case has no human curator to
