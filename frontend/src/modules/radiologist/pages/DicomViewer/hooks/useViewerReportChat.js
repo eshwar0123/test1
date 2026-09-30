@@ -147,6 +147,33 @@ function toIsoIfPossible(dateTimeText) {
   return isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+// Reports built from the Templates panel don't use the ".report-answer.block"
+// markup — each section is a bold <p> heading followed by an editable <div>.
+// Return the body HTML of the first heading matching one of `names`.
+function templateSectionHtml(reportRoot, names) {
+  const want = names.map((n) => n.toLowerCase());
+  const heads = Array.from(reportRoot.querySelectorAll("p"));
+  for (const h of heads) {
+    const t = (h.textContent || "").replace(/[:：]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+    if (!want.includes(t)) continue;
+    const next = h.nextElementSibling;
+    if (next && next.tagName === "DIV") return next.innerHTML;
+  }
+  return "";
+}
+
+// A template section that still only holds its prompt labels
+// (e.g. "Disc at L1-L2: ") has no real content — treat it as empty.
+function nonEmptyTemplateText(md) {
+  const t = safeText(md);
+  if (!t) return null;
+  const hasContent = t
+    .split(/\n+/)
+    .map((l) => l.replace(/\*+/g, "").trim())
+    .some((l) => l && !/^[^:]{0,80}:\s*$/.test(l));
+  return hasContent ? t : null;
+}
+
 function extractReportFields(reportRoot) {
   if (!reportRoot) return null;
 
@@ -165,6 +192,21 @@ function extractReportFields(reportRoot) {
     if (t.startsWith("(") && t.endsWith(")")) return null;
     return t;
   };
+
+  // Template-built report (no .report-answer.block sections): read sections by heading.
+  if (blocks.length === 0) {
+    const sec = (names) => nonEmptyTemplateText(htmlToMarkdown(templateSectionHtml(reportRoot, names)));
+    return {
+      referring_doctor: refDoctor,
+      scan_datetime: toIsoIfPossible(scanText),
+      // Investigation cell; fall back to the Clinical History text
+      clinical_indication: clinical || sec(["Clinical History"]),
+      technique: sec(["Technique", "Sequences"]),
+      findings: sec(["Study reveals", "Findings", "Report"]),
+      impression: sec(["Impression"]),
+      opinions: sec(["Clinical Advice", "Advice", "Recommendation", "Recommendations"]),
+    };
+  }
 
   return {
     referring_doctor: refDoctor,

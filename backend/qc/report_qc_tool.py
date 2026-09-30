@@ -264,14 +264,14 @@ def run_pixel_check(f):
         rep_msg = "Report date/time not recorded — required for TAT and SLA audit"
     results.append(Check("Pixel Check · Report date & time", rep_ok, "error", rep_msg, rep_date or None))
 
+    # Referring doctor is optional: a blank/placeholder value no longer fails QC.
     ref    = f.get("referringDoctor","").strip()
     ref_ok = bool(ref) and ref.lower() not in PLACEHOLDERS
     results.append(Check(
-        "Pixel Check · Referring doctor & facility", ref_ok, "error",
+        "Pixel Check · Referring doctor & facility", True, "error",
         f'Referring doctor: "{ref}"' if ref_ok
-        else (f'Placeholder: "{ref}"' if ref
-              else "Referring doctor not provided — determines delivery destination"),
-        ref or None))
+        else "Referring doctor not provided (optional)",
+        ref if ref_ok else None))
 
     return results
 
