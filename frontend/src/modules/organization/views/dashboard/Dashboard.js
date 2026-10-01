@@ -610,6 +610,7 @@ export default function Dashboard() {
     }
     return {
       caseId:        c.case_id,
+      patientId:     (c.subject_id || "").toString().trim() || "—",
       patientName:   (c.patient_name || "").trim() || "—",
       uploadedAt:    c.uploaded_at || "—",
       modality:      c.modality    || "—",
@@ -633,6 +634,7 @@ export default function Dashboard() {
     const pc = priorityColor(c.priority);
     return {
       caseId:         c.case_id,
+      patientId:      c.patient_id || "—",
       patientName:    (c.patient_name || "").trim() || "—",
       uploadedAt:     c.uploaded_at || "—",
       completedAt:    c.completed_at || "—",
@@ -642,7 +644,9 @@ export default function Dashboard() {
       studyType:      c.study_type,
       priority:       c.priority,
       priorityColor:  pc,
-      assignedTo:     c.assigned_to || "Unassigned",
+      assignedTo:     c.assigned_to
+        ? (/^\s*dr\b\.?/i.test(c.assigned_to) ? c.assigned_to : `Dr. ${c.assigned_to}`)
+        : "Unassigned",
       status:         c.status || null,            // routine queue
       pendingStatus:  c.pending_status || null,    // pending/overdue
       hasReport:      !!c.has_report,
@@ -1048,6 +1052,19 @@ export default function Dashboard() {
     }
   };
 
+  // Downloaded report file name:  <Patient ID>_<Patient Name (no age)>_<Study Type>.<ext>
+  const reportFileName = (caseItem, ext) => {
+    const clean = (v) => String(v ?? "")
+      .replace(/[\\/:*?"<>|]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    // "AISHWARIYA KHURANA 33/F" / "NARENDER KUMAR 34Y/M" -> drop the trailing age/sex
+    const name = clean(caseItem.patientName).replace(/\s+\d{1,3}\s*[YMWD]?\s*[\/-]?\s*[MFO]?\s*$/i, "").trim();
+    const parts = [clean(caseItem.patientId && caseItem.patientId !== "—" ? caseItem.patientId : caseItem.caseId), name, clean(caseItem.studyType)]
+      .filter((x) => x && x !== "—");
+    return `${parts.join("_") || "report"}.${ext}`;
+  };
+
   // Download the radiologist's PDF report for a case from the backend.
   // Falls back to a generated text-stub blob when:
   //   - we're on the static fallback data (no live API yet), or
@@ -1115,7 +1132,7 @@ export default function Dashboard() {
                   <div style="font-family:Arial, sans-serif; color:#111827;">
                     <h2 style="margin:0 0 12px; font-size:16px;">Radiology Report</h2>
                     <table style="width:100%; border-collapse:collapse; font-size:12px;">
-                      <tr><td style="font-weight:700; width:150px; padding:3px 0;">Case ID</td><td>: ${caseItem.caseId}</td></tr>
+                      <tr><td style="font-weight:700; width:150px; padding:3px 0;">Patient ID</td><td>: ${caseItem.patientId && caseItem.patientId !== "—" ? caseItem.patientId : caseItem.caseId}</td></tr>
                       <tr><td style="font-weight:700; padding:3px 0;">Study Type</td><td>: ${caseItem.studyType}</td></tr>
                       <tr><td style="font-weight:700; padding:3px 0;">Modality</td><td>: ${caseItem.modality}</td></tr>
                       <tr><td style="font-weight:700; padding:3px 0;">Priority</td><td>: ${caseItem.priority}</td></tr>
@@ -1137,7 +1154,7 @@ export default function Dashboard() {
                     </div>
                   </div>
                 `;
-                await downloadReportPdfFromHtml({ bodyHtml, caseId: caseItem.caseId });
+                await downloadReportPdfFromHtml({ bodyHtml, caseId: caseItem.caseId, fileName: reportFileName(caseItem, "pdf") });
                 setDownloadingCase(null);
                 return;
               }
@@ -1156,7 +1173,7 @@ export default function Dashboard() {
         const url  = URL.createObjectURL(blob);
         const anchor = document.createElement("a");
         anchor.href = url;
-        anchor.download = `${caseItem.caseId}_report.pdf`;
+        anchor.download = reportFileName(caseItem, "pdf");
         document.body.appendChild(anchor);
         anchor.click();
         document.body.removeChild(anchor);
@@ -1180,7 +1197,7 @@ export default function Dashboard() {
       <div style="font-family:Arial, sans-serif; color:#111827;">
         <h2 style="margin:0 0 12px; font-size:16px;">Radiology Report</h2>
         <table style="width:100%; border-collapse:collapse; font-size:12px;">
-          <tr><td style="font-weight:700; width:150px; padding:3px 0;">Case ID</td><td>: ${caseItem.caseId}</td></tr>
+          <tr><td style="font-weight:700; width:150px; padding:3px 0;">Patient ID</td><td>: ${caseItem.patientId && caseItem.patientId !== "—" ? caseItem.patientId : caseItem.caseId}</td></tr>
           <tr><td style="font-weight:700; padding:3px 0;">Study Type</td><td>: ${caseItem.studyType}</td></tr>
           <tr><td style="font-weight:700; padding:3px 0;">Modality</td><td>: ${caseItem.modality}</td></tr>
           <tr><td style="font-weight:700; padding:3px 0;">Priority</td><td>: ${caseItem.priority}</td></tr>
@@ -1197,7 +1214,7 @@ export default function Dashboard() {
     `;
 
     try {
-      await downloadReportPdfFromHtml({ bodyHtml, caseId: caseItem.caseId });
+      await downloadReportPdfFromHtml({ bodyHtml, caseId: caseItem.caseId, fileName: reportFileName(caseItem, "pdf") });
     } catch (e) {
       setDashToast({ kind: "error", text: e?.message || "Could not generate report PDF" });
       setTimeout(() => setDashToast(null), 4000);
@@ -1407,7 +1424,7 @@ export default function Dashboard() {
               spacing: { after: 240 },
               children: [new TextRun({ text: reportTitle, bold: true, size: 28 })],
             }),
-            infoLine("Patient ID", caseItem.caseId),
+            infoLine("Patient ID", caseItem.patientId && caseItem.patientId !== "—" ? caseItem.patientId : caseItem.caseId),
             infoLine("Age / Sex", ageSex),
             infoLine("Patient Name", rep.patient_name || caseItem.patientName),
             infoLine("Study Date", studyDate),
@@ -1426,7 +1443,7 @@ export default function Dashboard() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${caseItem.caseId}_report.docx`;
+      a.download = reportFileName(caseItem, "docx");
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -3294,8 +3311,8 @@ export default function Dashboard() {
               {/* Stats badges */}
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                 {[
-                  { label: isTh ? "เร่งด่วนพิเศษ" : "STAT",    value: COMPLETED_CASES.filter(c => c.priority === "STAT").length,    color: "#f87171" },
-                  { label: isTh ? "เร่งด่วน" : "Urgent",        value: COMPLETED_CASES.filter(c => c.priority === "Urgent").length,  color: "#fbbf24" },
+                  // STAT is treated the same as Urgent
+                  { label: isTh ? "เร่งด่วน" : "Urgent",        value: COMPLETED_CASES.filter(c => c.priority === "STAT" || c.priority === "Urgent").length,  color: "#fbbf24" },
                   { label: isTh ? "ปกติ" : "Routine",           value: COMPLETED_CASES.filter(c => c.priority === "Routine").length, color: "#34d399" },
                   { label: isTh ? "TAT เฉลี่ย" : "Avg TAT",    value: dashData?.kpis?.completed?.avg_tat_hours != null ? `${dashData.kpis.completed.avg_tat_hours}h` : "—", color: "#60a5fa" },
                 ].map(s => (
@@ -3324,7 +3341,7 @@ export default function Dashboard() {
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead style={{ position: "sticky", top: 0, zIndex: 1 }}>
                   <tr style={{ background: isDark ? "rgba(15,23,42,0.98)" : "#f8fafc" }}>
-                    {["Case ID", "Patient Name", "Uploaded", "Modality", "Study Type", "Priority", "Completed", "Assigned To", "Download"].map(h => (
+                    {["Patient ID", "Patient Name", "Uploaded", "Modality", "Study Type", "Priority", "Completed", "Assigned To", "Download"].map(h => (
                       <th key={h} style={{
                         ...sg,
                         fontSize: 11, letterSpacing: "1.2px", fontWeight: 700,
@@ -3346,7 +3363,7 @@ export default function Dashboard() {
                     }}>
                       {/* Case ID */}
                       <td style={{ ...mono, padding: "12px 16px", fontSize: 13, fontWeight: 600, color: "#34d399", whiteSpace: "nowrap" }}>
-                        {c.caseId}
+                        {c.patientId}
                       </td>
                       {/* Patient Name */}
                       <td style={{ padding: "12px 16px", fontSize: 13, color: textPri, fontWeight: 500, whiteSpace: "nowrap" }}>
@@ -3658,7 +3675,7 @@ export default function Dashboard() {
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead style={{ position: "sticky", top: 0, zIndex: 1 }}>
                     <tr style={{ background: isDark ? "rgba(15,23,42,0.98)" : "#f8fafc" }}>
-                      {["Case ID", "Patient Name", "Uploaded", "Modality", "Study Type", "Priority", "Status", "Radiologist"].map(h => (
+                      {["Patient ID", "Patient Name", "Uploaded", "Modality", "Study Type", "Priority", "Status", "Radiologist"].map(h => (
                         <th key={h} style={{
                           ...sg,
                           fontSize: 11, letterSpacing: "1.2px", fontWeight: 700,
@@ -3682,7 +3699,7 @@ export default function Dashboard() {
                         }}>
                           {/* Case ID */}
                           <td style={{ ...mono, padding: "12px 16px", fontSize: 13, fontWeight: 600, color: "#60a5fa", whiteSpace: "nowrap" }}>
-                            {c.caseId}
+                            {c.patientId}
                           </td>
                           {/* Patient Name */}
                           <td style={{ padding: "12px 16px", fontSize: 13, color: textPri, fontWeight: 500, whiteSpace: "nowrap" }}>

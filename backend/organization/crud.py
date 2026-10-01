@@ -693,10 +693,23 @@ def get_org_profile_basics(user_id) -> Optional[Dict[str, Any]]:
     )
 
 
+_REPORTS_COMPLETED_COL_READY = False
+
+
+def _ensure_reports_completed_at_column() -> None:
+    """radiology_schema.reports.completed_at must exist before the dashboard joins it."""
+    global _REPORTS_COMPLETED_COL_READY
+    if _REPORTS_COMPLETED_COL_READY:
+        return
+    _exec("ALTER TABLE radiology_schema.reports ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP")
+    _REPORTS_COMPLETED_COL_READY = True
+
+
 def list_submissions_for_org(org_id: str) -> List[Dict[str, Any]]:
     """All case submissions for the given org, newest first.
        Pulls every column the dashboard needs in a single round-trip.
        LEFT JOINs bulk_uploads on case_id to get patient_name."""
+    _ensure_reports_completed_at_column()
     return _all(
         """
         SELECT
@@ -725,9 +738,19 @@ def list_submissions_for_org(org_id: str) -> List[Dict[str, Any]]:
             cs.turnaround_seconds,
             cs.result_file_path,
             cs.diagnosed_file_path,
-            COALESCE(bu.patient_name, '') AS patient_name
+            COALESCE(bu.patient_name, '') AS patient_name,
+            bu.subject_id,
+            bu.uploaded_at AS bu_uploaded_at,
+            rep.completed_at AS report_completed_at
         FROM admin_schema.case_submission cs
         LEFT JOIN organization_schema.bulk_uploads bu ON bu.case_id = cs.case_id
+        LEFT JOIN LATERAL (
+            SELECT r.completed_at
+              FROM radiology_schema.reports r
+             WHERE r.case_id = cs.case_id AND r.completed_at IS NOT NULL
+             ORDER BY r.completed_at DESC
+             LIMIT 1
+        ) rep ON TRUE
         WHERE cs.org_id = %s
         ORDER BY cs.submitted_at DESC NULLS LAST, cs.id DESC
         """,
@@ -848,6 +871,7 @@ def list_workflow_cases_for_org(org_id: str, org_user_id: str = None) -> List[Di
             COALESCE(cw.assignment_status,    'assigned')  AS status,
             COALESCE(cw.patient_name, bu.patient_name, '') AS patient_name,
             cw.created_at,
+            bu.uploaded_at                                 AS bu_uploaded_at,
             cw.radiologist_name                            AS full_rad_name,
             bu.image_file_names,
             bu.uploaded_images_path,
@@ -892,6 +916,7 @@ def list_workflow_cases_for_org(org_id: str, org_user_id: str = None) -> List[Di
                 COALESCE(cw.assignment_status, 'assigned')                           AS status,
                 COALESCE(cw.patient_name, rs.patient_name, bu.patient_name, '')      AS patient_name,
                 cw.created_at,
+                bu.uploaded_at                                                       AS bu_uploaded_at,
                 cw.radiologist_name                                                  AS full_rad_name,
                 bu.image_file_names,
                 bu.uploaded_images_path,

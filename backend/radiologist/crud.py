@@ -90,6 +90,16 @@ def _ensure_dmc_no_column(conn: connection) -> None:
     conn.commit()
 
 
+def _ensure_reports_completed_at_column(conn: connection) -> None:
+    """Lazily adds radiology_schema.reports.completed_at if it doesn't exist."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "ALTER TABLE radiology_schema.reports "
+            "ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP"
+        )
+    conn.commit()
+
+
 def _ensure_reports_sync_trigger(conn: connection) -> None:
     """Lazily installs a DB-level trigger that backfills reports.referring_doctor
     and reports.history from the matching rad_scans row whenever either is left
@@ -1036,6 +1046,7 @@ def mark_report_completed(
     Raises ValueError if no report row exists for (case_id, user_id).
     """
     _ensure_reports_sync_trigger(conn)
+    _ensure_reports_completed_at_column(conn)
     with conn.cursor() as cur:
         cur.execute(
             "SELECT 1 FROM radiology_schema.reports WHERE case_id=%s AND user_id=%s",
@@ -1043,6 +1054,23 @@ def mark_report_completed(
         )
         if not cur.fetchone():
             raise ValueError("Report not found")
+
+        # completed_at = the moment the report was finished/submitted, in IST.
+        # Works whether the column is timestamp (IST wall-clock) or timestamptz.
+        cur.execute(
+            """
+            SELECT data_type FROM information_schema.columns
+             WHERE table_schema='radiology_schema' AND table_name='reports'
+               AND column_name='completed_at'
+            """
+        )
+        _dt = (cur.fetchone() or [""])[0]
+        _now_expr = "NOW()" if _dt == "timestamp with time zone" else "(NOW() AT TIME ZONE 'Asia/Kolkata')"
+        cur.execute(
+            f"UPDATE radiology_schema.reports SET completed_at = {_now_expr} "
+            "WHERE case_id = %s AND user_id = %s",
+            (case_id, str(user_id)),
+        )
 
         cur.execute(
             """

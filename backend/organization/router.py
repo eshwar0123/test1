@@ -1115,13 +1115,16 @@ def _build_case_row(sub: dict) -> dict:
     priority = _norm_priority(sub.get("priority_type"))
     return {
         "case_id":      sub.get("case_id"),
+        "patient_id":   (str(sub.get("subject_id") or "").strip()) or "—",
         "patient_name": (sub.get("patient_name") or "").strip() or "—",
         "modality":     modality,
         "modality_raw": sub.get("modality_type"),
         "study_type":   sub.get("study_type") or "—",
         "priority":     priority,
-        "uploaded_at":  _fmt_ts(sub.get("submitted_at")),
-        "completed_at": _fmt_ts(sub.get("completed_at") or sub.get("finalized_at")),
+        # Same source as the Active Worklist "Uploaded At" (bulk_uploads.uploaded_at)
+        "uploaded_at":  _fmt_ts(sub.get("bu_uploaded_at") or sub.get("submitted_at")),
+        # Prefer the radiologist's report completion time (reports.completed_at)
+        "completed_at": _fmt_ts(sub.get("report_completed_at") or sub.get("completed_at") or sub.get("finalized_at")),
         "assigned_to":  sub.get("radiologist_name") or None,
         "review_status":  sub.get("review_status"),
         "final_status":   sub.get("final_status"),
@@ -1185,7 +1188,7 @@ def dashboard_cases(user=Depends(get_current_user)):
     # Most recent first: completed cases by completion time, open cases by
     # submission time (the completed / queue / pending lists inherit this order).
     rows.sort(
-        key=lambda r: _sort_key_ts(r.get("completed_at") or r.get("submitted_at")),
+        key=lambda r: _sort_key_ts(r.get("report_completed_at") or r.get("completed_at") or r.get("submitted_at")),
         reverse=True,
     )
 
@@ -1596,7 +1599,7 @@ def workflow_cases(user=Depends(get_current_user)):
         return {"ok": False, "cases": [], "error": str(exc), "org_id": org_id}
 
     # Most recent first (the query orders by case_id for DISTINCT ON).
-    rows = sorted(rows, key=lambda r: _sort_key_ts(r.get("created_at")), reverse=True)
+    rows = sorted(rows, key=lambda r: _sort_key_ts(r.get("bu_uploaded_at") or r.get("created_at")), reverse=True)
 
     cases = []
     for r in rows:
@@ -1637,7 +1640,8 @@ def workflow_cases(user=Depends(get_current_user)):
             "modality":         modality,
             "study_type":       r.get("study_type") or "—",
             "status":           status_display,
-            "uploaded_at":      _fmt_ts(r.get("created_at")),
+            # Same source as the Active Worklist "Uploaded At" (bulk_uploads.uploaded_at).
+            "uploaded_at":      _fmt_ts(r.get("bu_uploaded_at") or r.get("created_at")),
             "rad_first_name":   rad_full,
             "rad_last_name":    "",
             "subject_id":       r.get("subject_id") or "",
