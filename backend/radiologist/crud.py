@@ -91,12 +91,24 @@ def _ensure_dmc_no_column(conn: connection) -> None:
 
 
 def _ensure_reports_completed_at_column(conn: connection) -> None:
-    """Lazily adds radiology_schema.reports.completed_at if it doesn't exist."""
+    """Lazily adds radiology_schema.reports.completed_at (plain TIMESTAMP holding
+    IST wall-clock time). If the column ever exists as timestamptz it is converted
+    to an IST timestamp, so completed_at is always stored and read as IST."""
     with conn.cursor() as cur:
         cur.execute(
             "ALTER TABLE radiology_schema.reports "
             "ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP"
         )
+        cur.execute('''DO $$
+BEGIN
+  IF (SELECT data_type FROM information_schema.columns
+       WHERE table_schema='radiology_schema' AND table_name='reports'
+         AND column_name='completed_at') = 'timestamp with time zone' THEN
+    ALTER TABLE radiology_schema.reports
+      ALTER COLUMN completed_at TYPE timestamp
+      USING completed_at AT TIME ZONE 'Asia/Kolkata';
+  END IF;
+END $$;''')
     conn.commit()
 
 
@@ -1055,19 +1067,11 @@ def mark_report_completed(
         if not cur.fetchone():
             raise ValueError("Report not found")
 
-        # completed_at = the moment the report was finished/submitted, in IST.
-        # Works whether the column is timestamp (IST wall-clock) or timestamptz.
+        # completed_at = the moment the report was finished/submitted, stored as
+        # IST wall-clock time (column is a plain TIMESTAMP — see the ensure above).
         cur.execute(
-            """
-            SELECT data_type FROM information_schema.columns
-             WHERE table_schema='radiology_schema' AND table_name='reports'
-               AND column_name='completed_at'
-            """
-        )
-        _dt = (cur.fetchone() or [""])[0]
-        _now_expr = "NOW()" if _dt == "timestamp with time zone" else "(NOW() AT TIME ZONE 'Asia/Kolkata')"
-        cur.execute(
-            f"UPDATE radiology_schema.reports SET completed_at = {_now_expr} "
+            "UPDATE radiology_schema.reports "
+            "SET completed_at = (NOW() AT TIME ZONE 'Asia/Kolkata') "
             "WHERE case_id = %s AND user_id = %s",
             (case_id, str(user_id)),
         )

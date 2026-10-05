@@ -1280,7 +1280,10 @@ export default function Dashboard() {
         } catch (_e) { /* signature is optional — sign-off text still renders */ }
       }
 
-      const { Document, Packer, Paragraph, TextRun, ImageRun, AlignmentType } = await import("docx");
+      const {
+        Document, Packer, Paragraph, TextRun, ImageRun, AlignmentType,
+        Table, TableRow, TableCell, WidthType, BorderStyle,
+      } = await import("docx");
 
       // ── Report sections may be plain text or editor HTML → paragraphs ──
       const htmlToParagraphs = (raw) => {
@@ -1288,7 +1291,14 @@ export default function Dashboard() {
         if (!src) return [new Paragraph({ children: [new TextRun("—")] })];
         if (!/<[a-z][\s\S]*>/i.test(src)) {
           return src.split(/\r?\n/).map((line) =>
-            new Paragraph({ spacing: { after: 80 }, children: [new TextRun(line)] }));
+            new Paragraph({
+              spacing: { after: 80 },
+              // render **bold** markers instead of showing the asterisks
+              children: line.split(/(\*\*[^*]+\*\*)/).filter(Boolean).map((part) =>
+                /^\*\*[^*]+\*\*$/.test(part)
+                  ? new TextRun({ text: part.slice(2, -2), bold: true })
+                  : new TextRun(part)),
+            }));
         }
         const doc = new DOMParser().parseFromString(src, "text/html");
         const out = [];
@@ -1358,10 +1368,10 @@ export default function Dashboard() {
       const reportTitle = (studyUpper.startsWith(modalityLabel) ? studyUpper : `${modalityLabel} ${studyUpper}`).trim() || "RADIOLOGY REPORT";
 
       const ageRaw = rep.patient_age ?? "";
-      const ageStr = ageRaw !== "" && ageRaw !== null
-        ? (/[a-z]$/i.test(String(ageRaw)) ? String(ageRaw) : `${ageRaw}y`)
-        : "-";
-      const ageSex = `${ageStr} / ${rep.patient_sex || "-"}`;
+      const sexRaw = String(rep.patient_sex || "").trim();
+      const sexStr = /^m(ale)?$/i.test(sexRaw) ? "Male" : /^f(emale)?$/i.test(sexRaw) ? "Female" : (sexRaw || "-");
+      const ageStr = ageRaw !== "" && ageRaw !== null ? String(ageRaw).replace(/y$/i, "") : "-";
+      const ageSex = `${ageStr}/${sexStr}`;
 
       const fmtDate = (v) => {
         const d = v ? new Date(v) : null;
@@ -1370,13 +1380,26 @@ export default function Dashboard() {
       };
       const studyDate = fmtDate(rep.scan_datetime) || caseItem.completedAt || "-";
 
-      const infoLine = (label, value) =>
-        new Paragraph({
-          spacing: { after: 40 },
-          children: [
-            new TextRun({ text: `${label}: `, bold: true }),
-            new TextRun(String(value || "-")),
-          ],
+      // Bordered two-column header grid (same layout as the PDF report).
+      const thin = { style: BorderStyle.SINGLE, size: 6, color: "222222" };
+      const cellBorders = { top: thin, bottom: thin, left: thin, right: thin };
+      const infoCell = (label, value) =>
+        new TableCell({
+          borders: cellBorders,
+          width: { size: 4853, type: WidthType.DXA },
+          margins: { top: 100, bottom: 100, left: 140, right: 140 },
+          children: [new Paragraph({
+            children: [
+              new TextRun({ text: `${label}: `, bold: true }),
+              new TextRun(String(value || "")),
+            ],
+          })],
+        });
+      const infoGrid = (rows) =>
+        new Table({
+          width: { size: 9706, type: WidthType.DXA },
+          columnWidths: [4853, 4853],
+          rows: rows.map(([l, r]) => new TableRow({ children: [infoCell(...l), infoCell(...r)] })),
         });
 
       const sectionTitle = (text) =>
@@ -1424,16 +1447,15 @@ export default function Dashboard() {
               spacing: { after: 240 },
               children: [new TextRun({ text: reportTitle, bold: true, size: 28 })],
             }),
-            infoLine("Patient ID", caseItem.patientId && caseItem.patientId !== "—" ? caseItem.patientId : caseItem.caseId),
-            infoLine("Age / Sex", ageSex),
-            infoLine("Patient Name", rep.patient_name || caseItem.patientName),
-            infoLine("Study Date", studyDate),
-            infoLine("Referring Doctor", rep.referring_doctor),
-            infoLine("Investigation", rep.clinical_indication),
+            infoGrid([
+              [["Patient Id", caseItem.patientId && caseItem.patientId !== "—" ? caseItem.patientId : caseItem.caseId], ["Study Date", studyDate]],
+              [["Patient Name", rep.patient_name || caseItem.patientName], ["Referring Doctor", rep.referring_doctor]],
+              [["Age / Sex", ageSex], ["Investigation", rep.clinical_indication]],
+            ]),
             sectionTitle("Technique"),  ...htmlToParagraphs(technique),
             sectionTitle("REPORT"),     ...htmlToParagraphs(findings),
-            sectionTitle("ADVICE"),     ...htmlToParagraphs(advice),
             sectionTitle("Impression"), ...htmlToParagraphs(impression),
+            sectionTitle("ADVICE"),     ...htmlToParagraphs(advice),
             ...signature,
           ],
         }],

@@ -4060,6 +4060,8 @@
                   saveReportToDb={saveReportToDb}
                   setLatestReportVersionHtml={setLatestReportVersionHtml}
                   reportData={reportData}
+                  dicomStudyDateTime={[dicomOverlayMeta?.studyDate, dicomOverlayMeta?.studyTime].filter(Boolean).join(" ")}
+                  dicomPatientId={dicomOverlayMeta?.patientId || ""}
                   submitReport={submitReport}
                   backendUrl={BACKEND_URL}
                   currentUserId={currentUserId}
@@ -4487,6 +4489,8 @@
                   saveReportToDb={saveReportToDb}
                   setLatestReportVersionHtml={setLatestReportVersionHtml}
                   reportData={reportData}
+                  dicomStudyDateTime={[dicomOverlayMeta?.studyDate, dicomOverlayMeta?.studyTime].filter(Boolean).join(" ")}
+                  dicomPatientId={dicomOverlayMeta?.patientId || ""}
                   submitReport={submitReport}
                   backendUrl={BACKEND_URL}
                   currentUserId={currentUserId}

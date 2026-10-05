@@ -982,9 +982,11 @@ def get_case_history(case_id: str, user=Depends(get_current_user)):
             hist_text = rs.get("history")
             hist_key = None
             study_time = None
+            # created_at / history are fetched on their own so a missing
+            # history_path column can't wipe out the study time.
             try:
                 cur.execute(
-                    """SELECT history, history_path, created_at
+                    """SELECT history, created_at
                          FROM organization_schema.bulk_uploads
                         WHERE case_id = %s
                         ORDER BY id DESC LIMIT 1""",
@@ -992,13 +994,37 @@ def get_case_history(case_id: str, user=Depends(get_current_user)):
                 )
                 bu = cur.fetchone() or {}
                 hist_text = bu.get("history") or hist_text
-                hist_key = bu.get("history_path")
                 ca = bu.get("created_at")
                 if ca is not None:
                     study_time = ca.strftime("%Y-%m-%d %H:%M") if hasattr(ca, "strftime") else str(ca)
+            except Exception as e:
+                print(f"[history] bulk_uploads lookup failed for {case_id}: {e}")
+                conn.rollback()
+            try:
+                cur.execute(
+                    """SELECT history_path
+                         FROM organization_schema.bulk_uploads
+                        WHERE case_id = %s
+                        ORDER BY id DESC LIMIT 1""",
+                    (case_id,),
+                )
+                hist_key = (cur.fetchone() or {}).get("history_path")
             except Exception:
                 # history_path column not created yet — no file attached
                 conn.rollback()
+            if not study_time:
+                # No bulk_uploads row (e.g. machine-ingested case): use the scan's own date.
+                try:
+                    cur.execute(
+                        """SELECT scan_date FROM radiology_schema.rad_scans
+                            WHERE case_id = %s ORDER BY scan_date DESC LIMIT 1""",
+                        (case_id,),
+                    )
+                    sd = (cur.fetchone() or {}).get("scan_date")
+                    if sd is not None:
+                        study_time = sd.strftime("%Y-%m-%d %H:%M") if hasattr(sd, "strftime") else str(sd)
+                except Exception:
+                    conn.rollback()
     finally:
         conn.close()
 
@@ -1385,7 +1411,7 @@ def mark_report_completed_endpoint(case_id: str, user_id: str):
                         %s, %s,
                         %s, %s,
                         'submitted', 'submitted',
-                        NOW(), NOW(), NOW(), NOW()
+                        NOW(), (NOW() AT TIME ZONE 'Asia/Kolkata'), NOW(), NOW()
                     )
                 """, (
                     _cw_id, str(_wf_id), str(_up_id), case_id,

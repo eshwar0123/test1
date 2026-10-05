@@ -390,6 +390,8 @@ export default function ViewerSidePanel({
   saveReportToDb,
   setLatestReportVersionHtml,
   reportData,
+  dicomStudyDateTime = "", // DICOM StudyDate + StudyTime, e.g. "2026-10-03 19:10:33"
+  dicomPatientId = "",     // DICOM PatientID (viewer overlay)
   submitReport,
   qcStage = "idle",
   pdfPreviewUrl,
@@ -573,9 +575,10 @@ export default function ViewerSidePanel({
   const fillTemplateMetadata = (editor) => {
     if (!editor) return;
 
+    const headerTables = [];
     // ── Built-in template header: drop the "ORGANIZATION NAME" placeholder and
-    // use  Patient Name / Age / Sex / Date & Time / Referring Doctor / Investigation
-    // (no Case Id). Custom (uploaded-report) templates keep their own header.
+    // rebuilt below as a two-column grid (Patient Id / Name / Age-Sex | Study Date /
+    // Referring Doctor / Investigation). Custom (uploaded-report) templates keep their own header.
     try {
       editor.querySelectorAll("p").forEach((p) => {
         if ((p.textContent || "").trim().toUpperCase() === "ORGANIZATION NAME") p.remove();
@@ -585,23 +588,8 @@ export default function ViewerSidePanel({
         return ((td && td.textContent) || "").replace(/[:：]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
       };
       editor.querySelectorAll("table").forEach((table) => {
-        const rows = Array.from(table.querySelectorAll("tr"));
-        const byLabel = {};
-        rows.forEach((tr) => { byLabel[labelOf(tr)] = tr; });
-        const caseRow = byLabel["case id"];
-        if (!caseRow || !byLabel["age / sex"]) return;          // not the built-in header table
-        if (!byLabel["patient name"]) {                         // add Patient Name (clone the Case Id row)
-          const nameRow = caseRow.cloneNode(true);
-          nameRow.querySelector("td").textContent = "Patient Name";
-          const valCell = nameRow.querySelectorAll("td")[2];
-          if (valCell) valCell.textContent = "";
-          byLabel["patient name"] = nameRow;
-        }
-        caseRow.remove();
-        delete byLabel["case id"];
-        const order = ["patient name", "age / sex", "date & time", "referring doctor", "investigation"];
-        const tbody = table.tBodies[0] || table;
-        order.forEach((k) => { if (byLabel[k]) tbody.appendChild(byLabel[k]); });
+        const labels = Array.from(table.querySelectorAll("tr")).map(labelOf);
+        if (labels.includes("case id") && labels.includes("age / sex")) headerTables.push(table);   // built-in header table
       });
     } catch (_e) { /* header tidy-up is best-effort */ }
 
@@ -621,8 +609,9 @@ export default function ViewerSidePanel({
     } catch (_e) { /* history fill is best-effort */ }
 
     const pad = (n) => String(n).padStart(2, "0");
-    // Date & Time: bulk_uploads.created_at (study time) first, then the report's saved scan time.
-    let scanText = (caseHistory?.study_time || "").toString().trim();
+    // Date & Time: the DICOM study date/time first (same as the viewer overlay), then
+    // bulk_uploads.created_at, then the report's saved scan time.
+    let scanText = (dicomStudyDateTime || caseHistory?.study_time || "").toString().trim();
     if (!scanText && reportData?.scan_datetime) {
       const d = new Date(reportData.scan_datetime);
       if (!isNaN(d.getTime())) {
@@ -633,6 +622,23 @@ export default function ViewerSidePanel({
     const ageText = patientAge ? `${patientAge}Y` : "";
     const investigation =
       reportData?.clinical_indication || [study].filter(Boolean).join(" ") || "";
+
+    // ── Built-in template header → bordered two-column grid.
+    try {
+      const escH = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const dm = scanText.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      const studyDate = dm ? `${dm[3]}/${dm[2]}/${dm[1]}` : scanText;
+      const cell = (label, value, cls) =>
+        `<td style="border:1px solid #222;padding:8px 10px;width:50%;vertical-align:middle;"><b>${label}:</b> ` +
+        `<span${cls ? ` class="${cls}"` : ""} contenteditable="true">${escH(value)}</span></td>`;
+      const gridHtml =
+        `<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px;table-layout:fixed;">` +
+        `<tr>${cell("Patient Id", dicomPatientId || caseId || "")}${cell("Study Date", studyDate, "report-scan-editor")}</tr>` +
+        `<tr>${cell("Patient Name", patientName || "")}${cell("Referring Doctor", reportData?.referring_doctor || "", "report-ref-doctor")}</tr>` +
+        `<tr>${cell("Age / Sex", ageText || sexText ? `${patientAge || "-"}/${sexText || "-"}` : "")}${cell("Investigation", investigation, "report-clinical-indication")}</tr>` +
+        `</table>`;
+      headerTables.forEach((table) => { table.outerHTML = gridHtml; });
+    } catch (_e) { /* header grid is best-effort */ }
 
     // label regex -> { value, cls (class read back by extractReportFields on save) }
     const rules = [
@@ -654,7 +660,7 @@ export default function ViewerSidePanel({
       const hasSig = !!(rp.signatureUrl || rp.name);
       if (hasSig) {
         const card =
-          `<div style="display:flex;justify-content:flex-end;margin-top:10px;width:100%;">` +
+          `<div class="report-sign-section" style="display:flex;justify-content:flex-end;margin-top:10px;width:100%;">` +
             `<div style="min-width:260px;text-align:center;display:flex;flex-direction:column;align-items:center;">` +
               `<div style="font-size:13px;font-weight:700;margin:0 0 6px;">Signature</div>` +
               (rp.signatureUrl

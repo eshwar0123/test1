@@ -986,6 +986,13 @@ def _sort_key_ts(ts) -> float:
         return 0.0
 
 
+def _completed_ist(sub: dict):
+    """Completion time of a case as an IST wall-clock datetime (or None).
+    Both reports.completed_at and case_submission.completed_at are stored as
+    IST wall-clock time, so no timezone shifting is applied here."""
+    return sub.get("report_completed_at") or sub.get("completed_at") or sub.get("finalized_at") or None
+
+
 def _now_matching(dt) -> datetime:
     """Return a 'now' value with the same timezone-awareness as `dt`, so
     subtraction never raises 'can't subtract offset-naive and offset-aware'.
@@ -1124,7 +1131,7 @@ def _build_case_row(sub: dict) -> dict:
         # Same source as the Active Worklist "Uploaded At" (bulk_uploads.uploaded_at)
         "uploaded_at":  _fmt_ts(sub.get("bu_uploaded_at") or sub.get("submitted_at")),
         # Prefer the radiologist's report completion time (reports.completed_at)
-        "completed_at": _fmt_ts(sub.get("report_completed_at") or sub.get("completed_at") or sub.get("finalized_at")),
+        "completed_at": _fmt_ts(_completed_ist(sub)),
         "assigned_to":  sub.get("radiologist_name") or None,
         "review_status":  sub.get("review_status"),
         "final_status":   sub.get("final_status"),
@@ -1188,7 +1195,7 @@ def dashboard_cases(user=Depends(get_current_user)):
     # Most recent first: completed cases by completion time, open cases by
     # submission time (the completed / queue / pending lists inherit this order).
     rows.sort(
-        key=lambda r: _sort_key_ts(r.get("report_completed_at") or r.get("completed_at") or r.get("submitted_at")),
+        key=lambda r: _sort_key_ts(_completed_ist(r) or r.get("submitted_at")),
         reverse=True,
     )
 

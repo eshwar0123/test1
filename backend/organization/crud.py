@@ -702,6 +702,17 @@ def _ensure_reports_completed_at_column() -> None:
     if _REPORTS_COMPLETED_COL_READY:
         return
     _exec("ALTER TABLE radiology_schema.reports ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP")
+    # completed_at holds IST wall-clock time; convert if it was ever created as timestamptz.
+    _exec('''DO $$
+BEGIN
+  IF (SELECT data_type FROM information_schema.columns
+       WHERE table_schema='radiology_schema' AND table_name='reports'
+         AND column_name='completed_at') = 'timestamp with time zone' THEN
+    ALTER TABLE radiology_schema.reports
+      ALTER COLUMN completed_at TYPE timestamp
+      USING completed_at AT TIME ZONE 'Asia/Kolkata';
+  END IF;
+END $$;''')
     _REPORTS_COMPLETED_COL_READY = True
 
 

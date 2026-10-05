@@ -44,6 +44,42 @@ async function getHtml2Canvas() {
   return window?.html2canvas || null;
 }
 
+// The PDF is one tall html2canvas image sliced into A4 pages, so a block that
+// straddles a page boundary gets cut in half (e.g. the signature image on one
+// page and the doctor's name on the next). Before rendering, push any such
+// block down to the top of the next page with a spacer.
+const PDF_PAGE_PX = (794 * 297) / 210; // A4 page height at the 794px render width
+
+async function keepBlocksTogether(mount) {
+  const imgs = Array.from(mount.querySelectorAll("img"));
+  await Promise.all(
+    imgs.map((img) =>
+      img.complete ? null : new Promise((r) => { img.onload = img.onerror = r; })
+    )
+  );
+
+  const targets = [];
+  const add = (el) => { if (el && !targets.includes(el)) targets.push(el); };
+  mount.querySelectorAll(".report-sign-section").forEach(add);
+  mount.querySelectorAll('img[alt="Radiologist Signature"]').forEach((img) => {
+    if (!img.closest(".report-sign-section")) add(img.parentElement?.parentElement || img);
+  });
+
+  for (const el of targets) {
+    const mountTop = mount.getBoundingClientRect().top;
+    const r = el.getBoundingClientRect();
+    const top = r.top - mountTop;
+    const bottom = r.bottom - mountTop;
+    if (bottom - top >= PDF_PAGE_PX) continue; // taller than a page — can't keep whole
+    const boundary = (Math.floor(top / PDF_PAGE_PX) + 1) * PDF_PAGE_PX;
+    if (bottom > boundary + 0.5) {
+      const spacer = document.createElement("div");
+      spacer.style.height = `${Math.ceil(boundary - top)}px`;
+      el.parentNode.insertBefore(spacer, el);
+    }
+  }
+}
+
 // ✅ NEW: blob -> base64
 export async function blobToBase64(blob) {
   return new Promise((resolve, reject) => {
@@ -86,6 +122,7 @@ export async function generateReportPdfBlobFromHtml({ bodyHtml, caseId }) {
     if (!JsPdf || !html2canvasFn) return null;
 
     await new Promise((r) => requestAnimationFrame(r));
+    await keepBlocksTogether(mount);
 
     const canvas = await html2canvasFn(mount, {
       scale: 2,
@@ -283,6 +320,18 @@ export function buildExportReportHtml({ reportRoot, formatDateTime }) {
     scanEditor.textContent = formatDateTime(new Date());
   }
 
+  // An empty "Clinical History" section shouldn't appear in the exported report:
+  // drop the heading and its (empty) body block.
+  holder.querySelectorAll("p").forEach((p) => {
+    const t = (p.textContent || "").replace(/[:：]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+    if (t !== "clinical history") return;
+    const body = p.nextElementSibling;
+    if (!body || body.tagName !== "DIV") return;
+    if ((body.textContent || "").trim() || body.querySelector("img")) return;
+    body.remove();
+    p.remove();
+  });
+
   return holder.innerHTML;
 }
 
@@ -320,7 +369,7 @@ export function openPrintReport(bodyHtml) {
   }, 200);
 }
 
-export async function downloadReportPdfFromHtml({ bodyHtml, caseId }) {
+export async function downloadReportPdfFromHtml({ bodyHtml, caseId, fileName }) {
   if (!bodyHtml) return;
 
   const mount = document.createElement("div");
@@ -350,6 +399,7 @@ export async function downloadReportPdfFromHtml({ bodyHtml, caseId }) {
     }
 
     await new Promise((r) => requestAnimationFrame(r));
+    await keepBlocksTogether(mount);
     const canvas = await html2canvasFn(mount, {
       scale: 2,
       useCORS: true,
@@ -377,7 +427,7 @@ export async function downloadReportPdfFromHtml({ bodyHtml, caseId }) {
     }
 
     const safeId = (caseId || "scan").toString().replace(/[^a-zA-Z0-9_-]+/g, "_");
-    pdf.save(`radiology_report_${safeId}.pdf`);
+    pdf.save(fileName || `radiology_report_${safeId}.pdf`);
   } finally {
     document.body.removeChild(mount);
   }

@@ -256,9 +256,9 @@ export default function DicomToolbar({
           <div style={{ position: "relative" }}>
             <button
               className="vtb-btn"
-              onClick={() => { if (!dicomGridSelected) return; const n = !showPlaneMenu; closeAllMenus(); if (n) setShowPlaneMenu(true); }}
+              onClick={() => { const n = !showPlaneMenu; closeAllMenus(); if (n) setShowPlaneMenu(true); }}
               title="Plane" aria-label="Plane"
-              style={{ background: "#1f2937", color: dicomGridSelected ? "#e5e7eb" : "#6b7280", border: "1px solid #1e2a3a", borderRadius: 6, padding: "8px 10px", display: "flex", alignItems: "center", gap: 6, cursor: dicomGridSelected ? "pointer" : "not-allowed" }}
+              style={{ background: "#1f2937", color: "#e5e7eb", border: "1px solid #1e2a3a", borderRadius: 6, padding: "8px 10px", display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
             >
               <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
                 <path d="M3 10a5 5 0 0 1 10 0" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />

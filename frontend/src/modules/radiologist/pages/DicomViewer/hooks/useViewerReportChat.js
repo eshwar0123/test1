@@ -131,6 +131,14 @@ function safeText(v) {
 function toIsoIfPossible(dateTimeText) {
   const t = safeText(dateTimeText);
   if (!t) return null;
+  // dd/mm/yyyy [hh:mm[:ss]] — the report header's Study Date format. Parse it
+  // explicitly; new Date("03/10/2026") would read it as March 10.
+  const dmy = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (dmy) {
+    const [, dd, mm, yyyy, hh = "0", mi = "0", ss = "0"] = dmy;
+    const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss));
+    return isNaN(d.getTime()) ? null : d.toISOString();
+  }
   if (t.includes("T")) {
     const d = new Date(t);
     return isNaN(d.getTime()) ? null : d.toISOString();
