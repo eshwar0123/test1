@@ -68,7 +68,14 @@ export const setGoogleLang = (target) => {
   window.location.reload();
 };
 
+// The language switcher is hidden on every page. Flip to true to bring it back.
+const SHOW_LANGUAGE_SWITCHER = false;
+
 export default function GoogleTranslateSwitcher() {
+  return SHOW_LANGUAGE_SWITCHER ? <LanguageSwitcherUI /> : null;
+}
+
+function LanguageSwitcherUI() {
   const [currentLang] = useState(() => getCurrentLang());
   const chip = currentLang === "th" ? "TH" : "EN";
 

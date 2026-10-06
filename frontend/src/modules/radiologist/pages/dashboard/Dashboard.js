@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   CCard,
   CCardBody,
@@ -12,19 +12,7 @@ import {
 
 import Calendar from "./Calendar";
 import CalendarModal from "./CalendarModal";
-import BodyScanOverview from "./BodyScanOverview";
 import ScanQueueDetailsModal from "./ScanQueueDetailsModal";
-import InteractiveBody from "./InteractiveBody";
-
-import {
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-} from "recharts";
 
 const OUTER_CARD_BG_SOLID = "rgba(30, 45, 80, 0.75)";
 const CALENDAR_OUTER_DARK_BG = "rgba(30, 65, 65, 0.75)";
@@ -75,113 +63,51 @@ const GLASS_MINI = {
 };
 const GLASS_INNER_HOVER = "rgba(219,234,254,0.62)";
 
-const MODALITIES = [
-  { key: "CT", label: "CT" },
-  { key: "MRI", label: "MRI" },
-  { key: "XRAY", label: "XRAY" },
-  { key: "OTHER", label: "OTHER" },
-];
-
-const queueData = {
-  pending: {
-    CT: {
-      modality: "CT",
-      count: 4,
-      items: [
-        { id: "P-CT-001", date: "2026-03-09", day: "Monday", scanType: "CT", fromTime: "08:00 AM", endTime: "12:00 PM", bodyPart: "Head", caseNumber: "CASE-CT-1001" },
-        { id: "P-CT-002", date: "2026-03-10", day: "Tuesday", scanType: "CT", fromTime: "09:00 AM", endTime: "01:00 PM", bodyPart: "Chest", caseNumber: "CASE-CT-1002" },
-        { id: "P-CT-003", date: "2026-03-11", day: "Wednesday", scanType: "CT", fromTime: "10:00 AM", endTime: "02:00 PM", bodyPart: "Abdomen", caseNumber: "CASE-CT-1003" },
-        { id: "P-CT-004", date: "2026-03-12", day: "Thursday", scanType: "CT", fromTime: "01:00 PM", endTime: "05:00 PM", bodyPart: "Spine", caseNumber: "CASE-CT-1004" },
-      ],
-    },
-    MRI: {
-      modality: "MRI",
-      count: 3,
-      items: [
-        { id: "P-MRI-001", date: "2026-03-09", day: "Monday", scanType: "MRI", fromTime: "08:30 AM", endTime: "12:30 PM", bodyPart: "Brain", caseNumber: "CASE-MRI-2001" },
-        { id: "P-MRI-002", date: "2026-03-10", day: "Tuesday", scanType: "MRI", fromTime: "11:00 AM", endTime: "03:00 PM", bodyPart: "Knee", caseNumber: "CASE-MRI-2002" },
-        { id: "P-MRI-003", date: "2026-03-11", day: "Wednesday", scanType: "MRI", fromTime: "02:00 PM", endTime: "06:00 PM", bodyPart: "Shoulder", caseNumber: "CASE-MRI-2003" },
-      ],
-    },
-    XRAY: {
-      modality: "XRAY",
-      count: 2,
-      items: [
-        { id: "P-XRAY-001", date: "2026-03-09", day: "Monday", scanType: "XRAY", fromTime: "09:00 AM", endTime: "01:00 PM", bodyPart: "Hand", caseNumber: "CASE-XRAY-3001" },
-        { id: "P-XRAY-002", date: "2026-03-10", day: "Tuesday", scanType: "XRAY", fromTime: "01:00 PM", endTime: "05:00 PM", bodyPart: "Leg", caseNumber: "CASE-XRAY-3002" },
-      ],
-    },
-    OTHER: {
-      modality: "OTHER",
-      count: 1,
-      items: [
-        { id: "P-OTH-001", date: "2026-03-11", day: "Wednesday", scanType: "OTHER", fromTime: "03:00 PM", endTime: "07:00 PM", bodyPart: "Whole Body", caseNumber: "CASE-OTH-4001" },
-      ],
-    },
-  },
-
-  assigned: {
-    CT: {
-      modality: "CT",
-      count: 4,
-      items: [
-        { id: "A-CT-001", date: "2026-03-09", day: "Monday", scanType: "CT", fromTime: "07:00 AM", endTime: "11:00 AM", bodyPart: "Abdomen", caseNumber: "CASE-ACT-5001" },
-        { id: "A-CT-002", date: "2026-03-10", day: "Tuesday", scanType: "CT", fromTime: "10:30 AM", endTime: "02:30 PM", bodyPart: "Chest", caseNumber: "CASE-ACT-5002" },
-        { id: "A-CT-003", date: "2026-03-11", day: "Wednesday", scanType: "CT", fromTime: "01:30 PM", endTime: "05:30 PM", bodyPart: "Head", caseNumber: "CASE-ACT-5003" },
-        { id: "A-CT-004", date: "2026-03-12", day: "Thursday", scanType: "CT", fromTime: "09:30 AM", endTime: "01:30 PM", bodyPart: "Pelvis", caseNumber: "CASE-ACT-5004" },
-      ],
-    },
-    MRI: {
-      modality: "MRI",
-      count: 3,
-      items: [
-        { id: "A-MRI-001", date: "2026-03-09", day: "Monday", scanType: "MRI", fromTime: "08:00 AM", endTime: "12:00 PM", bodyPart: "Spine", caseNumber: "CASE-AMRI-6001" },
-        { id: "A-MRI-002", date: "2026-03-10", day: "Tuesday", scanType: "MRI", fromTime: "12:00 PM", endTime: "04:00 PM", bodyPart: "Brain", caseNumber: "CASE-AMRI-6002" },
-        { id: "A-MRI-003", date: "2026-03-11", day: "Wednesday", scanType: "MRI", fromTime: "02:00 PM", endTime: "06:00 PM", bodyPart: "Shoulder", caseNumber: "CASE-AMRI-6003" },
-      ],
-    },
-    XRAY: {
-      modality: "XRAY",
-      count: 2,
-      items: [
-        { id: "A-XRAY-001", date: "2026-03-09", day: "Monday", scanType: "XRAY", fromTime: "07:30 AM", endTime: "11:30 AM", bodyPart: "Knee", caseNumber: "CASE-AXRAY-7001" },
-        { id: "A-XRAY-002", date: "2026-03-10", day: "Tuesday", scanType: "XRAY", fromTime: "11:00 AM", endTime: "03:00 PM", bodyPart: "Chest", caseNumber: "CASE-AXRAY-7002" },
-      ],
-    },
-    OTHER: {
-      modality: "OTHER",
-      count: 1,
-      items: [
-        { id: "A-OTH-001", date: "2026-03-11", day: "Wednesday", scanType: "OTHER", fromTime: "04:00 PM", endTime: "08:00 PM", bodyPart: "Whole Body", caseNumber: "CASE-AOTH-8001" },
-      ],
-    },
+const EMPTY_QUEUE = { total: 0, critical: 0, urgent: 0, stat: 0, routine: 0, items: [] };
+const EMPTY_SUMMARY = {
+  total: 0, ct: 0, mri: 0, xray: 0, other: 0,
+  tat: {
+    urgent:  { target_hours: 4,  avg_hours: null, done: 0, delta_hours: null },
+    routine: { target_hours: 24, avg_hours: null, done: 0, delta_hours: null },
   },
 };
 
-// Combine pending + assigned totals for the "Due today" and "Upcoming" cards
-const dueTodayTotal = Object.values(queueData.pending).reduce((sum, m) => sum + m.count, 0);
-
-// Upcoming = next 3 days assigned cases (Mar 14, 15, 16)
-const upcomingAssignedData = [
-  { id: "UP-CT-001",    date: "2026-03-14", day: "Saturday", scanType: "CT",    fromTime: "08:00 AM", endTime: "12:00 PM", bodyPart: "Chest",      caseNumber: "CASE-UP-CT-001"  },
-  { id: "UP-MRI-001",   date: "2026-03-14", day: "Saturday", scanType: "MRI",   fromTime: "09:30 AM", endTime: "01:30 PM", bodyPart: "Brain",      caseNumber: "CASE-UP-MRI-001" },
-  { id: "UP-XRAY-001",  date: "2026-03-14", day: "Saturday", scanType: "XRAY",  fromTime: "11:00 AM", endTime: "01:00 PM", bodyPart: "Hand",       caseNumber: "CASE-UP-XR-001"  },
-  { id: "UP-CT-002",    date: "2026-03-15", day: "Sunday",   scanType: "CT",    fromTime: "07:30 AM", endTime: "11:30 AM", bodyPart: "Abdomen",    caseNumber: "CASE-UP-CT-002"  },
-  { id: "UP-MRI-002",   date: "2026-03-15", day: "Sunday",   scanType: "MRI",   fromTime: "10:00 AM", endTime: "02:00 PM", bodyPart: "Knee",       caseNumber: "CASE-UP-MRI-002" },
-  { id: "UP-OTHER-001", date: "2026-03-15", day: "Sunday",   scanType: "OTHER", fromTime: "01:00 PM", endTime: "05:00 PM", bodyPart: "Whole Body", caseNumber: "CASE-UP-OTH-001" },
-  { id: "UP-CT-003",    date: "2026-03-16", day: "Monday",   scanType: "CT",    fromTime: "08:30 AM", endTime: "12:30 PM", bodyPart: "Spine",      caseNumber: "CASE-UP-CT-003"  },
-  { id: "UP-XRAY-002",  date: "2026-03-16", day: "Monday",   scanType: "XRAY",  fromTime: "09:00 AM", endTime: "11:00 AM", bodyPart: "Chest",      caseNumber: "CASE-UP-XR-002"  },
-  { id: "UP-MRI-003",   date: "2026-03-16", day: "Monday",   scanType: "MRI",   fromTime: "02:00 PM", endTime: "06:00 PM", bodyPart: "Shoulder",   caseNumber: "CASE-UP-MRI-003" },
+const MODALITY_ROWS = [
+  { key: "mri",   code: "MRI",   name: "Magnetic Resonance Imaging", color: "#8b5cf6" },
+  { key: "xray",  code: "XR",    name: "X-Ray / Radiography",        color: "#22b8d8" },
+  { key: "ct",    code: "CT",    name: "Computed Tomography",        color: "#3b82f6" },
+  { key: "other", code: "OTHER", name: "Other",                      color: "#94a3b8" },
 ];
-const upcomingTotal = upcomingAssignedData.length;
 
-// Flatten all pending items for the "Due today" modal
-const dueTodayItems = Object.values(queueData.pending).flatMap((m) =>
-  m.items.map((item) => ({ ...item, queueType: "pending" }))
-);
+const TAT_ROWS = [
+  { key: "urgent",  label: "Critical / Urgent", targetLabel: "≤ 4 hr" },
+  { key: "routine", label: "Routine",           targetLabel: "≤ 24 hr" },
+];
 
-// Upcoming items = next 3 days assigned cases
-const upcomingItems = upcomingAssignedData;
+const readAuth = () => {
+  try { return JSON.parse(localStorage.getItem("auth") || "{}"); } catch { return {}; }
+};
+
+const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const fmtTime = (iso) =>
+  iso ? new Date(iso).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "—";
+
+// Backend queue item → shape ScanQueueDetailsModal expects
+const toModalItem = (it) => {
+  const d = it.scan_date ? new Date(it.scan_date) : null;
+  return {
+    id: it.case_id,
+    case_id: it.case_id,
+    caseNumber: it.case_id,
+    date: d ? d.toISOString().slice(0, 10) : "—",
+    day: d ? DAYS[d.getDay()] : "",
+    scanType: it.scan_type,
+    bodyPart: it.body_part,
+    fromTime: fmtTime(it.scan_date),
+    endTime: "—",
+    priority: it.priority_type,
+  };
+};
 
 export default function Dashboard() {
   // Detect dark mode from parent .radiology-app.dark class
@@ -199,39 +125,46 @@ export default function Dashboard() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
-  const totals = useMemo(() => {
-    const overall = { CT: 60, MRI: 34, XRAY: 80, OTHER: 18 };
-    const today = { CT: 10, MRI: 6, XRAY: 7, OTHER: 1 };
+  const [summary, setSummary] = useState(EMPTY_SUMMARY);
+  const [queue, setQueue] = useState({ due_today: EMPTY_QUEUE, upcoming: EMPTY_QUEUE });
 
-    if (scanFilter === "today") return today;
-    if (scanFilter === "overall") return overall;
-
-    if (!fromDate || !toDate) return overall;
-
-    const days = clamp(daysBetween(fromDate, toDate) + 1, 1, 60);
-    const dailyBase = { CT: 2, MRI: 1, XRAY: 3, OTHER: 1 };
-
-    return {
-      CT: dailyBase.CT * days,
-      MRI: dailyBase.MRI * days,
-      XRAY: dailyBase.XRAY * days,
-      OTHER: dailyBase.OTHER * days,
-    };
+  const fetchSummary = useCallback(async () => {
+    const { userId } = readAuth();
+    if (!userId) return;
+    const qs = new URLSearchParams({ user_id: userId, range: scanFilter });
+    if (scanFilter === "custom") {
+      if (!fromDate || !toDate) return;
+      qs.set("date_from", fromDate);
+      qs.set("date_to", toDate);
+    }
+    try {
+      const res = await fetch(`/api/radiology/dashboard/assigned-summary?${qs}`);
+      const json = await res.json();
+      if (json.success) setSummary({ ...EMPTY_SUMMARY, ...json.data });
+    } catch (_) {}
   }, [scanFilter, fromDate, toDate]);
 
-  const completedCount = totals.CT + totals.MRI + totals.XRAY + totals.OTHER;
+  const fetchQueue = useCallback(async () => {
+    const { userId } = readAuth();
+    if (!userId) return;
+    try {
+      const res = await fetch(`/api/radiology/dashboard/scans-queue?user_id=${userId}`);
+      const json = await res.json();
+      if (json.success) setQueue(json.data);
+    } catch (_) {}
+  }, []);
 
-  const scanFilterLabel = useMemo(() => {
-    if (scanFilter === "overall") return "Overall";
-    if (scanFilter === "today") return "Today";
-    if (!fromDate || !toDate) return "Custom";
-    return `Custom (${fromDate} → ${toDate})`;
-  }, [scanFilter, fromDate, toDate]);
+  useEffect(() => { fetchSummary(); }, [fetchSummary]);
+  useEffect(() => {
+    fetchQueue();
+    const id = setInterval(() => { fetchQueue(); fetchSummary(); }, 30000);
+    return () => clearInterval(id);
+  }, [fetchQueue, fetchSummary]);
 
-  const [range, setRange] = useState("days");
-  const [activeModalityIdx, setActiveModalityIdx] = useState(0);
-  const [isHoveringChart, setIsHoveringChart] = useState(false);
-  const timerRef = useRef(null);
+  const dueTodayTotal = queue.due_today.total;
+  const todayLabel = new Date()
+    .toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" })
+    .replace(",", "");
 
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("17:00");
@@ -241,10 +174,6 @@ export default function Dashboard() {
   const [availabilitySlots, setAvailabilitySlots] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
-
-  const readAuth = () => {
-    try { return JSON.parse(localStorage.getItem("auth") || "{}"); } catch { return {}; }
-  };
 
   const fetchAvailability = useCallback(async () => {
     const { userId } = readAuth();
@@ -259,51 +188,8 @@ export default function Dashboard() {
   useEffect(() => {
     if (open) fetchAvailability();
   }, [open, fetchAvailability]);
-  const [bodyOverviewOpen, setBodyOverviewOpen] = useState(false);
-  const [bodyOverviewFullscreen, setBodyOverviewFullscreen] = useState(true);
   const [selectedQueueCard, setSelectedQueueCard] = useState(null);
   const [queueModalOpen, setQueueModalOpen] = useState(false);
-
-  useEffect(() => {
-    if (isHoveringChart) return;
-    timerRef.current = setInterval(() => {
-      setActiveModalityIdx((i) => (i + 1) % MODALITIES.length);
-    }, 3000);
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [isHoveringChart]);
-
-  const activeModality = MODALITIES[activeModalityIdx];
-
-  const chartData = useMemo(() => {
-    if (range === "days") {
-      return [
-        { label: "Day 1", CT: 2, MRI: 1, XRAY: 3, OTHER: 1 },
-        { label: "Day 2", CT: 3, MRI: 2, XRAY: 4, OTHER: 1 },
-        { label: "Day 3", CT: 4, MRI: 2, XRAY: 5, OTHER: 2 },
-        { label: "Day 4", CT: 5, MRI: 3, XRAY: 6, OTHER: 2 },
-        { label: "Day 5", CT: 6, MRI: 3, XRAY: 7, OTHER: 2 },
-        { label: "Day 6", CT: 7, MRI: 4, XRAY: 7, OTHER: 3 },
-        { label: "Day 7", CT: 8, MRI: 4, XRAY: 8, OTHER: 3 },
-      ];
-    }
-    if (range === "weeks") {
-      return [
-        { label: "Week 1", CT: 12, MRI: 8, XRAY: 16, OTHER: 4 },
-        { label: "Week 2", CT: 18, MRI: 9, XRAY: 20, OTHER: 6 },
-        { label: "Week 3", CT: 22, MRI: 12, XRAY: 24, OTHER: 7 },
-        { label: "Week 4", CT: 28, MRI: 14, XRAY: 30, OTHER: 9 },
-      ];
-    }
-    return [
-      { label: "Jan", CT: 60, MRI: 34, XRAY: 80, OTHER: 18 },
-      { label: "Feb", CT: 72, MRI: 40, XRAY: 92, OTHER: 20 },
-      { label: "Mar", CT: 85, MRI: 45, XRAY: 110, OTHER: 22 },
-      { label: "Apr", CT: 96, MRI: 48, XRAY: 120, OTHER: 25 },
-      { label: "May", CT: 110, MRI: 55, XRAY: 138, OTHER: 30 },
-      { label: "Jun", CT: 120, MRI: 60, XRAY: 150, OTHER: 32 },
-      { label: "Jul", CT: 130, MRI: 66, XRAY: 158, OTHER: 35 },
-    ];
-  }, [range]);
 
   const toYMD = (d) => {
     const y = d.getFullYear();
@@ -362,18 +248,7 @@ export default function Dashboard() {
       queueType: "pending",
       modality: "ALL",
       count: dueTodayTotal,
-      items: dueTodayItems,
-    });
-    setQueueModalOpen(true);
-  };
-
-  // "Upcoming" click → open modal with all assigned items
-  const handleUpcomingClick = () => {
-    setSelectedQueueCard({
-      queueType: "assigned",
-      modality: "ALL",
-      count: upcomingTotal,
-      items: upcomingItems,
+      items: queue.due_today.items.map(toModalItem),
     });
     setQueueModalOpen(true);
   };
@@ -405,7 +280,7 @@ export default function Dashboard() {
           {/* ── SCANS CARD ── */}
           <div style={{ ...scansOuterStyle, ...(isDark ? { background: OUTER_CARD_BG_SOLID } : GLASS_CARD_BLUE) }}>
             <div style={{ ...scansOuterTitleStyle, color: isDark ? "#fff" : "#1e3a5f" }}>Scans</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, flex: 1 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10, flex: 1 }}>
 
               {/* Due Today */}
               <button
@@ -416,38 +291,14 @@ export default function Dashboard() {
                 onMouseLeave={(e) => { e.currentTarget.style.background = isDark ? INNER_CARD_BG : GLASS_INNER.background; e.currentTarget.style.transform = "translateY(0)"; }}
               >
                 <div style={{ position: "absolute", top: -22, right: -22, width: 80, height: 80, borderRadius: "50%", background: isDark ? "rgba(255,255,255,0.06)" : "rgba(19,78,94,0.06)" }} />
-                <div style={{ fontSize: 11, fontWeight: 600, color: isDark ? MUTED_TEXT : "#6b7280", marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.8px" }}>Fri 13 Mar</div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: isDark ? MUTED_TEXT : "#6b7280", marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.8px" }}>{todayLabel}</div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: isDark ? LIGHT_TEXT : "#111827", marginBottom: 10 }}>Due today</div>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 5, marginBottom: 8 }}>
                   <span style={{ fontSize: 36, fontWeight: 700, color: isDark ? LIGHT_TEXT : "#134e5e" }}>{dueTodayTotal}</span>
                   <span style={{ fontSize: 14, color: isDark ? MUTED_TEXT : "#6b7280" }}>scans</span>
                 </div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  <div style={{ ...pillStyle, background: "rgba(239,68,68,0.1)", color: "#dc2626" }}><span style={{ ...dotStyle, background: "#ef4444" }} />2 critical</div>
-                  <div style={{ ...pillStyle, background: "rgba(245,158,11,0.1)", color: "#d97706" }}><span style={{ ...dotStyle, background: "#f59e0b" }} />3 urgent</div>
-                </div>
+                <QueuePills queue={queue.due_today} />
                 <div style={{ ...clickHintStyle, color: "#9ca3af" }}>Tap to view queue ›</div>
-              </button>
-
-              {/* Upcoming */}
-              <button
-                type="button"
-                onClick={handleUpcomingClick}
-                style={{ ...scanInnerCardStyle, ...(isDark ? { background: INNER_CARD_BG, borderColor: INNER_CARD_BORDER } : { ...GLASS_INNER, backdropFilter: "blur(10px)" }) }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = isDark ? INNER_CARD_BG_HOVER : GLASS_INNER_HOVER; e.currentTarget.style.transform = "translateY(-2px)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = isDark ? INNER_CARD_BG : GLASS_INNER.background; e.currentTarget.style.transform = "translateY(0)"; }}
-              >
-                <div style={{ position: "absolute", top: -22, right: -22, width: 80, height: 80, borderRadius: "50%", background: isDark ? "rgba(255,255,255,0.06)" : "rgba(19,78,94,0.06)" }} />
-                <div style={{ fontSize: 11, fontWeight: 600, color: isDark ? MUTED_TEXT : "#6b7280", marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.8px" }}>Next 3 days</div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: isDark ? LIGHT_TEXT : "#111827", marginBottom: 10 }}>Upcoming</div>
-                <div style={{ display: "flex", alignItems: "baseline", gap: 5, marginBottom: 8 }}>
-                  <span style={{ fontSize: 36, fontWeight: 700, color: isDark ? LIGHT_TEXT : "#134e5e" }}>{upcomingTotal}</span>
-                  <span style={{ fontSize: 14, color: isDark ? MUTED_TEXT : "#6b7280" }}>scans</span>
-                </div>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <div style={{ ...pillStyle, background: "rgba(59,130,246,0.1)", color: "#2563eb" }}><span style={{ ...dotStyle, background: "#3b82f6" }} />17 routine</div>
-                </div>
-                <div style={{ ...clickHintStyle, color: isDark ? "#9ca3af" : "#64748b" }}>Tap to view queue ›</div>
               </button>
 
             </div>
@@ -483,7 +334,7 @@ export default function Dashboard() {
         <div style={{ display: "flex", flexDirection: "column", gap: 14, alignSelf: "stretch", height: "100%" }}>
           <CCard style={{ ...(isDark ? { background: OUTER_CARD_BG_SOLID } : GLASS_CARD_BLUE), borderRadius: 14, overflow: "hidden", flex: 1, display: "flex", flexDirection: "column" }}>
             <div style={{ ...cardHeaderStyleRight, color: isDark ? "white" : "#1e3a5f" }}>
-              <span>Scans Completed</span>
+              <span>Assigned Scans</span>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                 <select value={scanFilter} onChange={(e) => setScanFilter(e.target.value)} style={selectStyle}>
                   <option value="overall">Overall</option>
@@ -504,18 +355,62 @@ export default function Dashboard() {
               <div style={{ display: "grid", gridTemplateColumns: "auto repeat(4, minmax(0, 1fr))", gap: 8, alignItems: "stretch" }}>
                 <div style={{ ...totalValueCardStyle, ...(isDark ? { background: INNER_CARD_BG, borderColor: INNER_CARD_BORDER } : GLASS_MINI) }}>
                   <div style={{ fontSize: 12, fontWeight: 800, color: isDark ? LIGHT_TEXT : "#111827", letterSpacing: "0.3px" }}>Total</div>
-                  <div style={{ fontSize: 10, fontWeight: 500, color: isDark ? MUTED_TEXT : "#6b7280", marginTop: 3 }}></div>
-                  <div style={{ fontSize: 26, fontWeight: 900, color: isDark ? LIGHT_TEXT : "#111827", lineHeight: 1, marginTop: 6 }}>{completedCount}</div>
+                  <div style={{ fontSize: 26, fontWeight: 900, color: isDark ? LIGHT_TEXT : "#111827", lineHeight: 1, marginTop: 6 }}>{summary.total}</div>
                 </div>
-                <SmallMiniStat label="CT" value={totals.CT} isDark={isDark} />
-                <SmallMiniStat label="MRI" value={totals.MRI} isDark={isDark} />
-                <SmallMiniStat label="XRAY" value={totals.XRAY} isDark={isDark} />
-                <SmallMiniStat label="OTHER" value={totals.OTHER} isDark={isDark} />
+                <SmallMiniStat label="CT" value={summary.ct} isDark={isDark} />
+                <SmallMiniStat label="MRI" value={summary.mri} isDark={isDark} />
+                <SmallMiniStat label="XRAY" value={summary.xray} isDark={isDark} />
+                <SmallMiniStat label="OTHER" value={summary.other} isDark={isDark} />
               </div>
 
-              {/* Interactive Body */}
-              <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", minHeight: 180 }}>
-                <InteractiveBody onClick={() => setBodyOverviewOpen(true)} isDark={isDark} />
+              {/* Cases by modality */}
+              <SectionTitle isDark={isDark}>Cases by modality</SectionTitle>
+              <div style={panelStyle(isDark)}>
+                {MODALITY_ROWS.map((m) => {
+                  const count = summary[m.key] || 0;
+                  const pct = summary.total ? Math.round((count / summary.total) * 100) : 0;
+                  return (
+                    <div key={m.key} style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 4px", borderBottom: isDark ? "1px solid rgba(159,196,255,0.12)" : "1px solid rgba(255,255,255,0.7)" }}>
+                      <span style={{ minWidth: 54, textAlign: "center", fontFamily: "monospace", fontSize: 12, fontWeight: 700, padding: "6px 8px", borderRadius: 8, color: m.color, background: `${m.color}26` }}>{m.code}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: isDark ? LIGHT_TEXT : "#111827", marginBottom: 6 }}>{m.name}</div>
+                        <div style={{ height: 4, borderRadius: 4, background: isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.07)" }}>
+                          <div style={{ width: `${pct}%`, height: "100%", borderRadius: 4, background: m.color, transition: "width .4s ease" }} />
+                        </div>
+                      </div>
+                      <span style={{ fontSize: 15, fontWeight: 800, color: isDark ? LIGHT_TEXT : "#111827", minWidth: 18, textAlign: "right" }}>{count}</span>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: m.color, minWidth: 40, textAlign: "right" }}>{pct}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* TAT performance */}
+              <SectionTitle isDark={isDark}>TAT performance</SectionTitle>
+              <div style={{ ...panelStyle(isDark), display: "flex", flexDirection: "column", gap: 8, padding: "10px 12px" }}>
+                {TAT_ROWS.map((r) => {
+                  const t = summary.tat?.[r.key] || {};
+                  const hasAvg = t.avg_hours !== null && t.avg_hours !== undefined;
+                  const hasDelta = t.delta_hours !== null && t.delta_hours !== undefined;
+                  const over = hasAvg && t.avg_hours > t.target_hours;
+                  const worsening = hasDelta && t.delta_hours > 0;
+                  // green: within target & not slowing · amber: within target but slowing · red: over target
+                  const accent = !hasAvg ? "#94a3b8" : over ? "#ef4444" : worsening ? "#f5b73b" : "#5fd0a0";
+                  return (
+                    <div key={r.key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 16px", borderRadius: 12, borderLeft: `4px solid ${accent}`, background: `${accent}22` }}>
+                      <div>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: isDark ? LIGHT_TEXT : "#111827" }}>{r.label}</div>
+                        <div style={{ fontSize: 13, color: isDark ? SUBTLE_TEXT : "#94a3b8", marginTop: 3 }}>Target {r.targetLabel}</div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontFamily: "monospace", fontSize: 20, fontWeight: 800, color: accent }}>{hasAvg ? `${t.avg_hours}h` : "–"}</div>
+                        <div style={{ fontSize: 13, color: isDark ? SUBTLE_TEXT : "#94a3b8", marginTop: 3 }}>
+                          {hasDelta && t.delta_hours !== 0 ? `${t.delta_hours < 0 ? "↓" : "↑"} ${Math.abs(t.delta_hours)}` : "\u00A0"}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </CCardBody>
           </CCard>
@@ -641,17 +536,53 @@ export default function Dashboard() {
         </CModalBody>
       </CModal>
 
-      {/* BODY OVERVIEW MODAL */}
-      <CModal visible={bodyOverviewOpen} onClose={() => setBodyOverviewOpen(false)} alignment="center" size={bodyOverviewFullscreen ? "fullscreen" : "xl"} backdrop="static" className="body-overview-modal">
-        <CModalBody style={{ padding: bodyOverviewFullscreen ? 18 : "34px 20px 18px", background: isDark ? "#1f2d45" : "#f8fafc", maxHeight: bodyOverviewFullscreen ? "100vh" : "88vh", minHeight: bodyOverviewFullscreen ? "100vh" : "auto", overflowY: "auto" }}>
-          <BodyScanOverview onClose={() => setBodyOverviewOpen(false)} isFullscreen={bodyOverviewFullscreen} onToggleFullscreen={() => setBodyOverviewFullscreen((prev) => !prev)} isDark={isDark} />
-        </CModalBody>
-      </CModal>
     </div>
   );
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
+
+function QueuePills({ queue }) {
+  if (!queue.total) {
+    return (
+      <div style={{ display: "flex", gap: 6 }}>
+        <div style={{ ...pillStyle, background: "rgba(107,114,128,0.14)", color: "#6b7280" }}>No scans</div>
+      </div>
+    );
+  }
+  const pills = [
+    ["stat", "stat", "#7c3aed"],
+    ["critical", "critical", "#ef4444"],
+    ["urgent", "urgent", "#f59e0b"],
+    ["routine", "routine", "#3b82f6"],
+  ].filter(([k]) => queue[k] > 0);
+  return (
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      {pills.map(([k, label, c]) => (
+        <div key={k} style={{ ...pillStyle, background: `${c}1a`, color: c }}>
+          <span style={{ ...dotStyle, background: c }} />{queue[k]} {label}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SectionTitle({ children, isDark }) {
+  return (
+    <div style={{ fontSize: 14, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: isDark ? LIGHT_TEXT : "#111827", marginTop: 4 }}>
+      {children}
+    </div>
+  );
+}
+
+const panelStyle = (isDark) => ({
+  borderRadius: 16,
+  padding: "8px 14px",
+  background: isDark ? INNER_CARD_BG : "rgba(255,255,255,0.42)",
+  backdropFilter: "blur(12px)",
+  WebkitBackdropFilter: "blur(12px)",
+  border: isDark ? `1px solid ${INNER_CARD_BORDER}` : "1px solid rgba(255,255,255,0.8)",
+});
 
 function SmallMiniStat({ label, value, isDark }) {
   const accentMap = {
@@ -668,7 +599,6 @@ function SmallMiniStat({ label, value, isDark }) {
         <span style={{ width: 7, height: 7, borderRadius: "50%", background: accent.dotColor, flexShrink: 0 }} />
         <span style={{ fontSize: 13, fontWeight: 800, color: isDark ? LIGHT_TEXT : "#111827", letterSpacing: "0.3px" }}>{label}</span>
       </div>
-      <div style={{ fontSize: 10, fontWeight: 500, color: isDark ? MUTED_TEXT : "#6b7280", marginTop: 3, lineHeight: 1.2 }}>{accent.subName}</div>
       <div style={{ fontSize: 22, fontWeight: 900, color: isDark ? LIGHT_TEXT : "#111827", lineHeight: 1, marginTop: 6 }}>{value}</div>
     </div>
   );

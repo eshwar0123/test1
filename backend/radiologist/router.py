@@ -7,7 +7,7 @@ import base64
 import random
 from dotenv import load_dotenv
 load_dotenv()
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 from typing import Optional, List, Any, Dict
 from auth.dependencies import get_current_user
@@ -3319,6 +3319,114 @@ def dashboard_scans_queue(user_id: str):
             "upcoming":  {"total": 0, "critical": 0, "urgent": 0,
                           "stat": 0, "routine": 0, "items": []},
         }}
+    finally:
+        cur.close()
+        conn.close()
+
+
+# Critical/Urgent also covers STAT and Critical priorities.
+_TAT_TARGETS_HRS = {"urgent": 4, "routine": 24}
+
+
+def _tat_group(priority: Optional[str]) -> str:
+    return "routine" if _norm_priority(priority) == "routine" else "urgent"
+
+
+@router.get("/dashboard/assigned-summary")
+def dashboard_assigned_summary(
+    user_id: str,
+    range: str = "overall",
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+):
+    """Assigned Scans panel for ONE radiologist: totals per modality + TAT per
+    priority group, with the change vs the previous comparable period.
+
+    range = overall | today | custom (custom needs date_from/date_to, YYYY-MM-DD).
+    Trend (delta_hours = current avg - previous avg; negative = faster):
+      today   -> vs yesterday
+      custom  -> vs the equally long window just before it
+      overall -> last 30 days vs the 30 days before that
+    """
+    try:
+        uid = UUID(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+
+    today = datetime.utcnow().date()
+    start = end = None
+    if range == "today":
+        start, end = today, today + timedelta(days=1)
+        prev = (start - timedelta(days=1), start)
+    elif range == "custom":
+        try:
+            start = datetime.strptime(date_from, "%Y-%m-%d").date()
+            end = datetime.strptime(date_to, "%Y-%m-%d").date() + timedelta(days=1)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid date_from/date_to")
+        prev = (start - (end - start), start)
+    else:
+        cur_trend = (today - timedelta(days=29), today + timedelta(days=1))
+        prev = (cur_trend[0] - timedelta(days=30), cur_trend[0])
+
+    # Window the trend's "current" side compares against `prev`.
+    trend_cur = (start, end) if start is not None else cur_trend
+
+    def _window(col, lo, hi):
+        if lo is None:
+            return "", []
+        return f" AND {col} >= %s AND {col} < %s", [lo, hi]
+
+    def _avg_hours(cur, lo, hi):
+        """{group: (done_count, avg_hours)} for this radiologist in [lo, hi)."""
+        w, wp = _window("submitted_at", lo, hi)
+        cur.execute(f"""
+            SELECT priority_type, COUNT(*), AVG(turnaround_seconds)
+            FROM admin_schema.case_submission
+            WHERE radiologist_user_id = %s {w}
+            GROUP BY priority_type
+        """, [str(uid)] + wp)
+        acc = {}
+        for priority, cnt, avg_s in cur.fetchall():
+            cnt = int(cnt or 0)
+            g = acc.setdefault(_tat_group(priority), [0, 0.0])
+            g[0] += cnt
+            g[1] += float(avg_s or 0) * cnt
+        return {k: (c, round(t / c / 3600, 1)) for k, (c, t) in acc.items() if c}
+
+    counts = {"ct": 0, "mri": 0, "xray": 0, "other": 0}
+    tat = {k: {"target_hours": v, "avg_hours": None, "done": 0, "delta_hours": None}
+           for k, v in _TAT_TARGETS_HRS.items()}
+
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        w, wp = _window("assigned_at", start, end)
+        cur.execute(f"""
+            SELECT modality_type, COUNT(*)
+            FROM admin_schema.case_workflow
+            WHERE radiologist_user_id = %s
+              AND assignment_status = 'assigned'
+              AND COALESCE(current_status, 'pending') NOT IN ('rejected', 'cancelled')
+              {w}
+            GROUP BY modality_type
+        """, [str(uid)] + wp)
+        for modality, cnt in cur.fetchall():
+            counts[_norm_modality(modality).lower()] += int(cnt or 0)
+
+        shown = _avg_hours(cur, start, end)          # headline number
+        now_w = _avg_hours(cur, *trend_cur) if start is None else shown
+        before = _avg_hours(cur, *prev)
+        for g in tat:
+            if g in shown:
+                tat[g]["done"], tat[g]["avg_hours"] = shown[g]
+            if g in now_w and g in before:
+                tat[g]["delta_hours"] = round(now_w[g][1] - before[g][1], 1)
+
+        return {"success": True, "data": {"total": sum(counts.values()), **counts, "tat": tat}}
+    except Exception as e:
+        print(f"[radiology/dashboard/assigned-summary] error: {e}")
+        return {"success": True, "data": {"total": 0, **{k: 0 for k in counts}, "tat": tat}}
     finally:
         cur.close()
         conn.close()

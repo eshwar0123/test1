@@ -1007,11 +1007,20 @@ export default function Repository1() {
     return next;
   }, [priorityFilter, statusFilter, modalityFilter, orgFilter, idFilter, cases]);
 
-  const grouped = useMemo(() => ({
-    stat:    filtered.filter(c => c.priority === 'stat'),
-    urgent:  filtered.filter(c => c.priority === 'urgent'),
-    routine: filtered.filter(c => c.priority === 'routine'),
-  }), [filtered]);
+  // Open cases (pending / reading / review) come first, grouped by priority.
+  // Completed cases are moved to their own section at the bottom.
+  const grouped = useMemo(() => {
+    const open = filtered.filter(c => c.status !== 'completed');
+    const done = filtered.filter(c => c.status === 'completed');
+    const by = (list, p) => list.filter(c => c.priority === p);
+    const rank = { stat: 0, urgent: 1, routine: 2 };
+    return {
+      stat: by(open, 'stat'),
+      urgent: by(open, 'urgent'),
+      routine: by(open, 'routine'),
+      completed: [...done].sort((a, b) => (rank[a.priority] ?? 3) - (rank[b.priority] ?? 3)),
+    };
+  }, [filtered]);
 
   const priorityOptions = [
     { value: 'all', label: 'All' },
@@ -1110,6 +1119,12 @@ export default function Repository1() {
             <>
               <GroupLabel label="ROUTINE" color="var(--r1-text-muted)" count={grouped.routine.length} />
               {grouped.routine.map(c => <CaseCard key={c.id} item={c} selected={selectedCase?.id === c.id} onSelect={setSelectedCase} />)}
+            </>
+          )}
+          {grouped.completed.length > 0 && (
+            <>
+              <GroupLabel label="COMPLETED" color="var(--r1-success, #16a34a)" count={grouped.completed.length} />
+              {grouped.completed.map(c => <CaseCard key={c.id} item={c} selected={selectedCase?.id === c.id} onSelect={setSelectedCase} />)}
             </>
           )}
           {filtered.length === 0 && (
