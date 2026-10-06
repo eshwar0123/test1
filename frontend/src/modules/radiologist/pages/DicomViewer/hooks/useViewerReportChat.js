@@ -648,7 +648,15 @@ export default function useViewerReportChat({
 
     const hospitalProfile = HOSPITAL_PROFILE(reportData);
     const radiologistProfile = RADIOLOGIST_PROFILE(reportData);
-    const title = `${caseModality || ""} ${study || ""}`.trim() || "Radiology Report";
+    // Don't repeat the modality when the study type already names it
+    // ("XRAY" + "XRAY CHEST PA VIEW" → "XRAY CHEST PA VIEW").
+    const modTxt = String(caseModality || "").trim();
+    const studyTxt = String(study || "").trim();
+    const studyTokens = studyTxt.toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
+    const modUp = modTxt.toUpperCase();
+    const studyHasModality =
+      !!modUp && (studyTokens.includes(modUp) || (modUp === "XRAY" && /X[\s-]?RAY/i.test(studyTxt)));
+    const title = (studyHasModality ? studyTxt : `${modTxt} ${studyTxt}`).trim() || "Radiology Report";
 
     el.innerHTML = getReportTemplateHtml({
       hospitalProfile,
@@ -668,14 +676,20 @@ export default function useViewerReportChat({
         root.querySelector(".report-ref-doctor").innerText = reportData.referring_doctor;
 
       if (reportData.scan_datetime) {
-        const d = new Date(reportData.scan_datetime);
-        if (!isNaN(d.getTime())) {
-          const pad = (n) => String(n).padStart(2, "0");
-          const val = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(
-            d.getHours()
-          )}:${pad(d.getMinutes())}`;
-          root.querySelector(".report-scan-editor").innerText = val;
+        // Study Date as dd/mm/yyyy. Take the date part of an ISO string as-is so a
+        // timezone offset can't shift the day.
+        const raw = String(reportData.scan_datetime);
+        const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        let val = m ? `${m[3]}/${m[2]}/${m[1]}` : "";
+        if (!val) {
+          const d = new Date(raw);
+          if (!isNaN(d.getTime())) {
+            const pad = (n) => String(n).padStart(2, "0");
+            val = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+          }
         }
+        const scanEl = root.querySelector(".report-scan-editor");
+        if (val && scanEl) scanEl.innerText = val;
       }
 
       if (reportData.clinical_indication)

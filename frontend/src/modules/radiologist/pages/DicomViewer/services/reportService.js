@@ -198,7 +198,8 @@ export function getReportTemplateHtml({
   caseId,
   title,
 }) {
-  const ageSex = `${patientAge ? `${patientAge}y` : "-"} / ${patientSex || "-"}`;
+  const sexLabel = /^m(ale)?$/i.test(String(patientSex || "").trim()) ? "Male" : /^f(emale)?$/i.test(String(patientSex || "").trim()) ? "Female" : (patientSex || "-");
+  const ageSex = `${String(patientAge || "-").replace(/y$/i, "")}/${sexLabel}`;
   return `
     <style>
       .report-shell { max-width: 900px; margin: 0 auto; border: 1px solid #d1d5db; border-radius: 10px; overflow: hidden; background: #fff; font-family: Arial, sans-serif; }
@@ -254,25 +255,17 @@ export function getReportTemplateHtml({
 
         <table class="patient-grid">
           <tr>
-            <td class="k">Patient ID</td>
-            <td class="v">${caseId || "-"}</td>
-            <td class="k">Age / Sex</td>
-            <td class="v">${ageSex}</td>
+            <td><b>Patient Id:</b> ${caseId || "-"}</td>
+            <td><b>Study Date:</b> <span class="report-answer report-scan-editor" contenteditable="true"></span></td>
           </tr>
           <tr>
-            <td class="k">Patient Name</td>
-            <td class="v">${patientName || "-"}</td>
-            <td class="k">Study Date</td>
-            <td class="v"><span class="report-answer report-scan-editor" contenteditable="true"></span></td>
+            <td><b>Patient Name:</b> ${patientName || "-"}</td>
+            <td><b>Referring Doctor:</b> <span class="report-answer report-ref-doctor" contenteditable="true"></span></td>
           </tr>
           <tr>
-            <td class="k">Referring Doctor</td>
-            <td class="v" colspan="3"><span class="report-answer report-ref-doctor" contenteditable="true"></span></td>
+            <td><b>Age / Sex:</b> ${ageSex}</td>
+            <td><b>Investigation:</b> <span class="report-answer report-clinical-indication" contenteditable="true"></span></td>
           </tr>
-        </table>
-
-        <table class="report-table">
-          <tr><td class="report-label">Investigation</td><td class="report-colon">:</td><td><span class="report-answer report-clinical-indication" contenteditable="true"></span></td></tr>
         </table>
 
         <div class="report-sec-title">Technique</div>
@@ -317,7 +310,8 @@ export function buildExportReportHtml({ reportRoot, formatDateTime }) {
   // "now" if still blank rather than shipping an empty cell in the exported PDF.
   const scanEditor = holder.querySelector(".report-scan-editor");
   if (scanEditor && !(scanEditor.textContent || "").trim()) {
-    scanEditor.textContent = formatDateTime(new Date());
+    const n = new Date();
+    scanEditor.textContent = `${String(n.getDate()).padStart(2, "0")}/${String(n.getMonth() + 1).padStart(2, "0")}/${n.getFullYear()}`;
   }
 
   // An empty "Clinical History" section shouldn't appear in the exported report:
