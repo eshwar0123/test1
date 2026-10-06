@@ -281,11 +281,11 @@ export function getReportTemplateHtml({
         <div class="report-sec-title">REPORT</div>
         <div class="report-answer block" contenteditable="true">(Organ/system-wise structured description)</div>
 
-        <div class="report-sec-title">ADVICE</div>
-        <div class="report-answer block report-advice-box" contenteditable="true">(Clear, concise, clinically actionable summary)</div>
-
         <div class="report-sec-title">Impression</div>
         <div class="report-answer block" contenteditable="true">(If any)</div>
+
+        <div class="report-sec-title">ADVICE</div>
+        <div class="report-answer block report-advice-box" contenteditable="true">(Clear, concise, clinically actionable summary)</div>
 
         <div class="report-sign-section">
           <div class="report-sec-title">Signature</div>

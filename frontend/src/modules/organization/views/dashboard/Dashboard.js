@@ -1408,12 +1408,13 @@ export default function Dashboard() {
           children: [new TextRun({ text, bold: true, size: 24 })],
         });
 
-      // Same field → heading mapping as the PDF template:
-      //   Technique ← technique, REPORT ← findings, ADVICE ← impression, Impression ← opinions
+      // Field → heading mapping (matches what the viewer saves: the Impression section
+      // goes to `impression`, the Clinical Advice / ADVICE section to `opinions`).
+      // Order: Technique, REPORT, Impression, ADVICE, Signature.
       const technique  = rep.technique  || rep.ai_technique;
       const findings   = rep.findings   || rep.ai_findings;
-      const advice     = rep.impression || rep.ai_impression;
-      const impression = rep.opinions   || rep.ai_opinions;
+      const impression = rep.impression || rep.ai_impression;
+      const advice     = rep.opinions   || rep.ai_opinions;
 
       const displayName = `Dr. ${(radName || String(caseItem.assignedTo || "")).replace(/^\s*dr\.?\s*/i, "")}`.trim();
       const sigLine = (text, bold = false) =>
