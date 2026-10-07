@@ -321,7 +321,10 @@
     const [qcStage, setQcStage] = useState("idle"); // idle | running | passed | failed
     const [pdfPreviewUrl, setPdfPreviewUrl] = useState(null);
     const [qcResult, setQcResult] = useState(null); // full QC payload from backend
-    const [showSidebar, setShowSidebar] = useState(true);
+    // Side panel starts closed on mobile so the scan is visible; the arrow toggle reopens it.
+    const [showSidebar, setShowSidebar] = useState(
+      () => !(typeof window !== "undefined" && window.matchMedia?.("(max-width: 768px)").matches)
+    );
 
     // MedSAM Segmentation
     const { isReady: medsamReady, segmentBox } = useMedSAMSegmentation();
@@ -400,6 +403,9 @@
 
     const lastAnatomyMsRef = useRef(0); // debounce pointer-mode clicks
     const pointerDownPosRef = useRef({ x: 0, y: 0 }); // drag-distance tracking
+    const swipeRef = useRef(null); // mobile one-finger vertical swipe → change slice
+    const pinchRef = useRef(null); // mobile two-finger pinch → zoom { dist, zoom, slot }
+    const lastTapRef = useRef({ t: 0, x: 0, y: 0 }); // mobile double-tap → zoom
     const [dicomTool, setDicomTool] = useState("none");
     const [dicomSliceBySlot, setDicomSliceBySlot] = useState({
       0: { current: 1, total: 1 },
@@ -3285,6 +3291,108 @@
     );
     const showNiftiTriPlanar = isNifti && !!niftiVol;
 
+    /* ─── Mobile touch gestures (DICOM) ─────────────────────────────
+      Active only on narrow screens and while no tool that needs touch-drag is
+      selected (none / zoom / crosshair):
+        • one-finger vertical swipe  → previous / next slice
+        • two-finger pinch           → zoom out / in
+        • double-tap (Zoom tool)     → toggle zoom in / reset */
+    const mobileGesturesOn =
+      isCornerstoneDicom &&
+      ["none", "zoom", "crosshair"].includes(dicomTool) &&
+      typeof window !== "undefined" &&
+      !!window.matchMedia?.("(max-width: 768px)").matches;
+
+    // Mobile: with no series list (single image, e.g. X-ray) the left strip renders
+    // nothing, so drop its reserved space and reopen tab entirely.
+    const hideEmptySeriesStripMobile =
+      typeof window !== "undefined" &&
+      !!window.matchMedia?.("(max-width: 768px)").matches &&
+      !(Array.isArray(seriesGrouping.series) && seriesGrouping.series.length > 0);
+
+    const slotAtPoint = (cx, cy) => {
+      if (!showDicomTriPlanar) return 0;
+      const hit = getVisibleDicomSlots().find((s) => {
+        const el = csCore.getEnabledElements?.()
+          ?.find((ee) => ee?.viewport?.id === getDicomViewportIdForSlot(s))
+          ?.viewport?.element;
+        const r = el?.getBoundingClientRect?.();
+        return r && cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom;
+      });
+      return hit != null ? hit : activeDicomSlot;
+    };
+    const viewportForSlot = (slot) =>
+      renderingEngineRef.current?.getViewport?.(getDicomViewportIdForSlot(slot)) || null;
+
+    const handleViewerTouchStart = (e) => {
+      if (!mobileGesturesOn) return;
+      if (e.touches.length === 2) {
+        const [a, b] = [e.touches[0], e.touches[1]];
+        const slot = slotAtPoint((a.clientX + b.clientX) / 2, (a.clientY + b.clientY) / 2);
+        const vp = viewportForSlot(slot);
+        swipeRef.current = null;
+        pinchRef.current = vp
+          ? {
+              dist: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1,
+              zoom: Number(vp.getZoom?.() ?? 1) || 1,
+              slot,
+            }
+          : null;
+        return;
+      }
+      pinchRef.current = null;
+      if (e.touches.length !== 1) { swipeRef.current = null; return; }
+      const t = e.touches[0];
+      swipeRef.current = { y: t.clientY, x0: t.clientX, y0: t.clientY, slot: slotAtPoint(t.clientX, t.clientY), moved: false };
+    };
+
+    const handleViewerTouchMove = (e) => {
+      if (!mobileGesturesOn) return;
+      const p = pinchRef.current;
+      if (p && e.touches.length === 2) {
+        const [a, b] = [e.touches[0], e.touches[1]];
+        const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1;
+        const vp = viewportForSlot(p.slot);
+        if (vp?.setZoom) {
+          vp.setZoom(Math.max(0.5, Math.min(12, p.zoom * (dist / p.dist))));
+          vp.render?.();
+        }
+        return;
+      }
+      const s = swipeRef.current;
+      if (!s || e.touches.length !== 1) { swipeRef.current = null; return; }
+      const t = e.touches[0];
+      if (Math.hypot(t.clientX - s.x0, t.clientY - s.y0) > 10) s.moved = true;
+      const STEP_PX = 28; // finger travel per slice
+      const dy = t.clientY - s.y;
+      if (Math.abs(dy) < STEP_PX) return;
+      const steps = Math.trunc(dy / STEP_PX);
+      // finger moves up (dy < 0) → next slice (+1)
+      scrollCornerstoneDicomBySlot(s.slot, steps > 0 ? -1 : 1);
+      s.y += (steps > 0 ? 1 : -1) * STEP_PX;
+    };
+
+    const handleViewerTouchEnd = (e) => {
+      const s = swipeRef.current;
+      swipeRef.current = null;
+      if (e.touches.length === 0) pinchRef.current = null;
+      if (!mobileGesturesOn || !s || s.moved || dicomTool !== "zoom") return;
+      // Double-tap with the Zoom tool: zoom in on the second tap, reset on the next.
+      const now = Date.now();
+      const last = lastTapRef.current;
+      const isDouble = now - last.t < 320 && Math.hypot(s.x0 - last.x, s.y0 - last.y) < 40;
+      lastTapRef.current = isDouble ? { t: 0, x: 0, y: 0 } : { t: now, x: s.x0, y: s.y0 };
+      if (!isDouble) return;
+      const vp = viewportForSlot(s.slot);
+      if (!vp) return;
+      if ((Number(vp.getZoom?.() ?? 1) || 1) > 1.05) {
+        vp.resetCamera?.();
+      } else {
+        vp.setZoom?.(2.5);
+      }
+      vp.render?.();
+    };
+
     /* ─── Keyboard slice scroll (single viewport) ───────────────────
       Up/Down arrows step through slices the same way the side scroll
       strip and prev/next buttons do — same slot-0 key single view always
@@ -3636,7 +3744,7 @@
                     panel is full-screen (grid track is 0px) — otherwise this
                     reservation pokes through the card's black background as a
                     stray vertical bar down the left edge. */
-                  paddingLeft: (showReport && reportViewerCollapsed) ? 0 : (showSeriesStrip ? 144 : 28),
+                  paddingLeft: (showReport && reportViewerCollapsed) || hideEmptySeriesStripMobile ? 0 : (showSeriesStrip ? 144 : 28),
                   boxSizing: "border-box",
                   /* Clip the toolbar/viewports when the column is collapsed to
                     zero width via the report panel's edge arrow. */
@@ -3761,7 +3869,16 @@
                       setAnatomyNote(null);
                       lookupAt?.(vp, [cx, cy]);
                     }}
-                    style={{ position: "relative", flex: 1, minHeight: 0, border: "1px solid #2b2b2b", borderRadius: 12, overflow: "hidden", background: "#000" }}>
+                    /* Mobile gestures: swipe = slice, pinch / double-tap = zoom
+                      (see handleViewerTouch* above). */
+                    onTouchStart={handleViewerTouchStart}
+                    onTouchMove={handleViewerTouchMove}
+                    onTouchEnd={handleViewerTouchEnd}
+                    onTouchCancel={handleViewerTouchEnd}
+                    style={{
+                      position: "relative", flex: 1, minHeight: 0, border: "1px solid #2b2b2b", borderRadius: 12, overflow: "hidden", background: "#000",
+                      touchAction: mobileGesturesOn ? "none" : undefined,
+                    }}>
 
                     {/* Minimap (visible only when zoomed) */}
                     <Minimap
@@ -4583,7 +4700,7 @@
             )}
 
             {/* ─── Series picker (left strip) ─────────────────────────── */}
-            {!isNifti && (showReport && reportViewerCollapsed ? null : (
+            {!isNifti && ((showReport && reportViewerCollapsed) || hideEmptySeriesStripMobile ? null : (
               <>
                 {/* Collapsed reopen tab */}
                 {!showSeriesStrip && (

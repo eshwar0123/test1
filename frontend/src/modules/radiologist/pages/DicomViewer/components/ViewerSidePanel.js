@@ -484,6 +484,18 @@ export default function ViewerSidePanel({
   // 'revealing' = beam descends, uncovers the (already-updated) editor content
   const [editPhase, setEditPhase] = useState("idle");
   const [editInstruction, setEditInstruction] = useState("");
+  // Mobile: the open panel is wider than the screen, so the hide arrow (normally
+  // docked at the panel's left edge) falls off-screen — pin it to the right edge instead.
+  const [isMobileView, setIsMobileView] = useState(
+    () => typeof window !== "undefined" && !!window.matchMedia?.("(max-width: 768px)").matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia?.("(max-width: 768px)");
+    if (!mq) return undefined;
+    const onChange = (e) => setIsMobileView(e.matches);
+    mq.addEventListener?.("change", onChange);
+    return () => mq.removeEventListener?.("change", onChange);
+  }, []);
   const resizingRef = useRef(false);
   useEffect(() => {
     const onMove = (e) => {
@@ -1952,9 +1964,9 @@ const manualClientIdMap = {
           style={{
             position: "absolute",
             top: "50%",
-            right: showSidebar ? sidePanelWidth + 5 : 8,
+            right: showSidebar && !isMobileView ? sidePanelWidth + 5 : 8,
             transform: "translateY(-50%)",
-            zIndex: 20,
+            zIndex: isMobileView ? 60 : 20,
             width: 28,
             height: 44,
             borderRadius: 8,

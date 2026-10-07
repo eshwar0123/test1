@@ -1286,6 +1286,10 @@ export default function Dashboard() {
       } = await import("docx");
 
       // ── Report sections may be plain text or editor HTML → paragraphs ──
+      // True when a section has real text (ignores empty markup and whitespace).
+      const hasText = (raw) =>
+        String(raw ?? "").replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").trim().length > 0;
+
       const htmlToParagraphs = (raw) => {
         const src = String(raw ?? "").trim();
         if (!src) return [new Paragraph({ children: [new TextRun("—")] })];
@@ -1453,7 +1457,8 @@ export default function Dashboard() {
               [["Patient Name", rep.patient_name || caseItem.patientName], ["Referring Doctor", rep.referring_doctor]],
               [["Age / Sex", ageSex], ["Investigation", rep.clinical_indication]],
             ]),
-            sectionTitle("Technique"),  ...htmlToParagraphs(technique),
+            // Technique is left out entirely when the radiologist didn't fill it in.
+            ...(hasText(technique) ? [sectionTitle("Technique"), ...htmlToParagraphs(technique)] : []),
             sectionTitle("REPORT"),     ...htmlToParagraphs(findings),
             sectionTitle("Impression"), ...htmlToParagraphs(impression),
             sectionTitle("ADVICE"),     ...htmlToParagraphs(advice),

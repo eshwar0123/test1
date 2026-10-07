@@ -82,6 +82,23 @@ export default function DicomToolbar({
   const [showQualityMenu, setShowQualityMenu] = useState(false);
   const [showMprMenu, setShowMprMenu] = useState(false);
   const [showPtrMenu, setShowPtrMenu] = useState(false);
+  // Mobile only: the tools block can be collapsed with an arrow to give the scan more room.
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== "undefined" && !!window.matchMedia?.("(max-width: 768px)").matches
+  );
+  const [toolsOpen, setToolsOpen] = useState(true);
+  useEffect(() => {
+    const mq = window.matchMedia?.("(max-width: 768px)");
+    if (!mq) return undefined;
+    const onChange = (e) => setIsMobile(e.matches);
+    mq.addEventListener?.("change", onChange);
+    return () => mq.removeEventListener?.("change", onChange);
+  }, []);
+  useEffect(() => {
+    // Let the viewports re-measure after the toolbar height changes.
+    window.dispatchEvent(new Event("resize"));
+  }, [toolsOpen, isMobile]);
+  const toolsHidden = isMobile && !toolsOpen;
   const toolbarMenusRef = useRef(null);
 
   const measurementTools = [
@@ -177,7 +194,7 @@ export default function DicomToolbar({
       <div
         ref={toolbarMenusRef}
         style={{
-          position: "relative", zIndex: 1000, display: "flex", gap: 3,
+          position: "relative", zIndex: 1000, display: toolsHidden ? "none" : "flex", gap: 3,
           alignItems: "flex-start", flexWrap: "wrap", padding: "8px 12px 6px",
           background: "linear-gradient(180deg, #0e1520 0%, #0b0f16 100%)",
           border: "1px solid #1e2a3a", borderRadius: 10,
@@ -889,6 +906,29 @@ export default function DicomToolbar({
         </div>
 
       </div>
+
+      {isMobile && (
+        <button
+          type="button"
+          onClick={() => { closeAllMenus(); setToolsOpen((v) => !v); }}
+          title={toolsOpen ? "Hide tools" : "Show tools"}
+          aria-label={toolsOpen ? "Hide tools" : "Show tools"}
+          aria-expanded={toolsOpen}
+          style={{
+            alignSelf: "center", flexShrink: 0, width: 56, height: 22,
+            display: "inline-flex", alignItems: "center", justifyContent: "center",
+            background: "rgba(31,41,55,0.85)", color: "#d1d5db",
+            border: "1px solid #1f2937", borderRadius: 8, cursor: "pointer", padding: 0,
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path
+              d={toolsOpen ? "M3.5 10l4.5-4.5L12.5 10" : "M3.5 6l4.5 4.5L12.5 6"}
+              stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+      )}
 
       {saveNotice && (
         <div style={{ marginTop: 6, marginLeft: 6, fontSize: 12, color: "#93c5fd", letterSpacing: "0.02em" }}>{saveNotice}</div>

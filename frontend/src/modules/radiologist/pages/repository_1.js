@@ -1135,7 +1135,7 @@ export default function Repository1() {
         </div>
       </main>
 
-      <aside className="r1-detail">
+      <aside className={`r1-detail${selectedCase ? ' r1-detail-open' : ''}`}>
         {!selectedCase ? (
           <div className="r1-detail-empty">
             <div className="r1-de-icon">🗂</div>
