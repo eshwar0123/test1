@@ -121,6 +121,20 @@ export default function Dashboard() {
     return () => obs.disconnect();
   }, []);
 
+  // Single-column layout on phones / narrow windows.
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 768px)");
+    const onChange = (e) => setIsMobile(e.matches);
+    setIsMobile(mq.matches);
+    if (mq.addEventListener) mq.addEventListener("change", onChange); else mq.addListener(onChange);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", onChange); else mq.removeListener(onChange);
+    };
+  }, []);
+
   const [scanFilter, setScanFilter] = useState("overall");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -253,12 +267,107 @@ export default function Dashboard() {
     setQueueModalOpen(true);
   };
 
+  // Pieces of the "Completed Scans" panel. Desktop keeps them in one card; on
+  // mobile each becomes its own card so the page stacks one section per row.
+  const completedHeader = (
+            <div style={{ ...cardHeaderStyleRight, color: isDark ? "white" : "#1e3a5f", ...(isMobile ? { flexWrap: "wrap", gap: 10, marginLeft: 0, marginTop: 0, marginBottom: 12 } : {}) }}>
+              <span>Completed Scans</span>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <select value={scanFilter} onChange={(e) => setScanFilter(e.target.value)} style={selectStyle}>
+                  <option value="overall">Overall</option>
+                  <option value="today">Today</option>
+                  <option value="custom">Custom</option>
+                </select>
+                {scanFilter === "custom" && (
+                  <>
+                    <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} style={dateInputStyle} />
+                    <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} style={dateInputStyle} />
+                  </>
+                )}
+              </div>
+            </div>
+  );
+  const completedStats = (
+    <>
+              {/* Stats row */}
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(3, minmax(0, 1fr))" : "auto repeat(4, minmax(0, 1fr))", gap: 8, alignItems: "stretch" }}>
+                <div style={{ ...totalValueCardStyle, ...(isDark ? { background: INNER_CARD_BG, borderColor: INNER_CARD_BORDER } : GLASS_MINI) }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: isDark ? LIGHT_TEXT : "#111827", letterSpacing: "0.3px" }}>Total</div>
+                  <div style={{ fontSize: 26, fontWeight: 900, color: isDark ? LIGHT_TEXT : "#111827", lineHeight: 1, marginTop: 6 }}>{summary.total}</div>
+                </div>
+                <SmallMiniStat label="CT" value={summary.ct} isDark={isDark} />
+                <SmallMiniStat label="MRI" value={summary.mri} isDark={isDark} />
+                <SmallMiniStat label="XRAY" value={summary.xray} isDark={isDark} />
+                <SmallMiniStat label="OTHER" value={summary.other} isDark={isDark} />
+              </div>
+
+    </>
+  );
+  const modalitySection = (
+    <>
+              {/* Cases by modality */}
+              <SectionTitle isDark={isDark}>Cases by modality</SectionTitle>
+              <div style={panelStyle(isDark)}>
+                {MODALITY_ROWS.map((m) => {
+                  const count = summary[m.key] || 0;
+                  const pct = summary.total ? Math.round((count / summary.total) * 100) : 0;
+                  return (
+                    <div key={m.key} style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 4px", borderBottom: isDark ? "1px solid rgba(159,196,255,0.12)" : "1px solid rgba(255,255,255,0.7)" }}>
+                      <span style={{ minWidth: 54, textAlign: "center", fontFamily: "monospace", fontSize: 12, fontWeight: 700, padding: "6px 8px", borderRadius: 8, color: m.color, background: `${m.color}26` }}>{m.code}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: isDark ? LIGHT_TEXT : "#111827", marginBottom: 6 }}>{m.name}</div>
+                        <div style={{ height: 4, borderRadius: 4, background: isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.07)" }}>
+                          <div style={{ width: `${pct}%`, height: "100%", borderRadius: 4, background: m.color, transition: "width .4s ease" }} />
+                        </div>
+                      </div>
+                      <span style={{ fontSize: 15, fontWeight: 800, color: isDark ? LIGHT_TEXT : "#111827", minWidth: 18, textAlign: "right" }}>{count}</span>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: m.color, minWidth: 40, textAlign: "right" }}>{pct}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+
+    </>
+  );
+  const tatSection = (
+    <>
+              {/* TAT performance */}
+              <SectionTitle isDark={isDark}>TAT performance</SectionTitle>
+              <div style={{ ...panelStyle(isDark), display: "flex", flexDirection: "column", gap: 8, padding: "10px 12px" }}>
+                {TAT_ROWS.map((r) => {
+                  const t = summary.tat?.[r.key] || {};
+                  const hasAvg = t.avg_hours !== null && t.avg_hours !== undefined;
+                  const hasDelta = t.delta_hours !== null && t.delta_hours !== undefined;
+                  const over = hasAvg && t.avg_hours > t.target_hours;
+                  const worsening = hasDelta && t.delta_hours > 0;
+                  // green: within target & not slowing · amber: within target but slowing · red: over target
+                  const accent = !hasAvg ? "#94a3b8" : over ? "#ef4444" : worsening ? "#f5b73b" : "#5fd0a0";
+                  return (
+                    <div key={r.key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 16px", borderRadius: 12, borderLeft: `4px solid ${accent}`, background: `${accent}22` }}>
+                      <div>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: isDark ? LIGHT_TEXT : "#111827" }}>{r.label}</div>
+                        <div style={{ fontSize: 13, color: isDark ? SUBTLE_TEXT : "#94a3b8", marginTop: 3 }}>Target {r.targetLabel}</div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontFamily: "monospace", fontSize: 20, fontWeight: 800, color: accent }}>{hasAvg ? `${t.avg_hours}h` : "–"}</div>
+                        <div style={{ fontSize: 13, color: isDark ? SUBTLE_TEXT : "#94a3b8", marginTop: 3 }}>
+                          {hasDelta && t.delta_hours !== 0 ? `${t.delta_hours < 0 ? "↓" : "↑"} ${Math.abs(t.delta_hours)}` : "\u00A0"}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+    </>
+  );
+  const rightCardStyle = { ...(isDark ? { background: OUTER_CARD_BG_SOLID } : GLASS_CARD_BLUE), borderRadius: 14, overflow: "hidden" };
+
   return (
     <div style={{
       width: "100%",
       minHeight: "calc(100vh - 80px)",
       margin: 0,
-      padding: "0.5rem 1rem",
+      padding: isMobile ? "0.5rem 0.5rem" : "0.5rem 1rem",
       position: "relative",
       background: "transparent",
       overflow: "auto",
@@ -267,7 +376,7 @@ export default function Dashboard() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "1.5fr 1fr",
+          gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "1.5fr 1fr",
           gap: 14,
           alignItems: "stretch",
           width: "100%",
@@ -275,11 +384,11 @@ export default function Dashboard() {
         }}
       >
         {/* LEFT COLUMN */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 14, height: "100%" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, height: isMobile ? "auto" : "100%", minWidth: 0 }}>
 
           {/* ── SCANS CARD ── */}
           <div style={{ ...scansOuterStyle, ...(isDark ? { background: OUTER_CARD_BG_SOLID } : GLASS_CARD_BLUE) }}>
-            <div style={{ ...scansOuterTitleStyle, color: isDark ? "#fff" : "#1e3a5f" }}>Scans</div>
+            <div style={{ ...scansOuterTitleStyle, color: isDark ? "#fff" : "#1e3a5f" }}>Assigned Scans</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10, flex: 1 }}>
 
               {/* Due Today */}
@@ -331,90 +440,37 @@ export default function Dashboard() {
         </div>{/* end left column */}
 
         {/* RIGHT COLUMN */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 14, alignSelf: "stretch", height: "100%" }}>
-          <CCard style={{ ...(isDark ? { background: OUTER_CARD_BG_SOLID } : GLASS_CARD_BLUE), borderRadius: 14, overflow: "hidden", flex: 1, display: "flex", flexDirection: "column" }}>
-            <div style={{ ...cardHeaderStyleRight, color: isDark ? "white" : "#1e3a5f" }}>
-              <span>Assigned Scans</span>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                <select value={scanFilter} onChange={(e) => setScanFilter(e.target.value)} style={selectStyle}>
-                  <option value="overall">Overall</option>
-                  <option value="today">Today</option>
-                  <option value="custom">Custom</option>
-                </select>
-                {scanFilter === "custom" && (
-                  <>
-                    <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} style={dateInputStyle} />
-                    <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} style={dateInputStyle} />
-                  </>
-                )}
-              </div>
-            </div>
-
-            <CCardBody style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 14, flex: 1 }}>
-              {/* Stats row */}
-              <div style={{ display: "grid", gridTemplateColumns: "auto repeat(4, minmax(0, 1fr))", gap: 8, alignItems: "stretch" }}>
-                <div style={{ ...totalValueCardStyle, ...(isDark ? { background: INNER_CARD_BG, borderColor: INNER_CARD_BORDER } : GLASS_MINI) }}>
-                  <div style={{ fontSize: 12, fontWeight: 800, color: isDark ? LIGHT_TEXT : "#111827", letterSpacing: "0.3px" }}>Total</div>
-                  <div style={{ fontSize: 26, fontWeight: 900, color: isDark ? LIGHT_TEXT : "#111827", lineHeight: 1, marginTop: 6 }}>{summary.total}</div>
-                </div>
-                <SmallMiniStat label="CT" value={summary.ct} isDark={isDark} />
-                <SmallMiniStat label="MRI" value={summary.mri} isDark={isDark} />
-                <SmallMiniStat label="XRAY" value={summary.xray} isDark={isDark} />
-                <SmallMiniStat label="OTHER" value={summary.other} isDark={isDark} />
-              </div>
-
-              {/* Cases by modality */}
-              <SectionTitle isDark={isDark}>Cases by modality</SectionTitle>
-              <div style={panelStyle(isDark)}>
-                {MODALITY_ROWS.map((m) => {
-                  const count = summary[m.key] || 0;
-                  const pct = summary.total ? Math.round((count / summary.total) * 100) : 0;
-                  return (
-                    <div key={m.key} style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 4px", borderBottom: isDark ? "1px solid rgba(159,196,255,0.12)" : "1px solid rgba(255,255,255,0.7)" }}>
-                      <span style={{ minWidth: 54, textAlign: "center", fontFamily: "monospace", fontSize: 12, fontWeight: 700, padding: "6px 8px", borderRadius: 8, color: m.color, background: `${m.color}26` }}>{m.code}</span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: isDark ? LIGHT_TEXT : "#111827", marginBottom: 6 }}>{m.name}</div>
-                        <div style={{ height: 4, borderRadius: 4, background: isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.07)" }}>
-                          <div style={{ width: `${pct}%`, height: "100%", borderRadius: 4, background: m.color, transition: "width .4s ease" }} />
-                        </div>
-                      </div>
-                      <span style={{ fontSize: 15, fontWeight: 800, color: isDark ? LIGHT_TEXT : "#111827", minWidth: 18, textAlign: "right" }}>{count}</span>
-                      <span style={{ fontSize: 15, fontWeight: 700, color: m.color, minWidth: 40, textAlign: "right" }}>{pct}%</span>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* TAT performance */}
-              <SectionTitle isDark={isDark}>TAT performance</SectionTitle>
-              <div style={{ ...panelStyle(isDark), display: "flex", flexDirection: "column", gap: 8, padding: "10px 12px" }}>
-                {TAT_ROWS.map((r) => {
-                  const t = summary.tat?.[r.key] || {};
-                  const hasAvg = t.avg_hours !== null && t.avg_hours !== undefined;
-                  const hasDelta = t.delta_hours !== null && t.delta_hours !== undefined;
-                  const over = hasAvg && t.avg_hours > t.target_hours;
-                  const worsening = hasDelta && t.delta_hours > 0;
-                  // green: within target & not slowing · amber: within target but slowing · red: over target
-                  const accent = !hasAvg ? "#94a3b8" : over ? "#ef4444" : worsening ? "#f5b73b" : "#5fd0a0";
-                  return (
-                    <div key={r.key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 16px", borderRadius: 12, borderLeft: `4px solid ${accent}`, background: `${accent}22` }}>
-                      <div>
-                        <div style={{ fontSize: 15, fontWeight: 800, color: isDark ? LIGHT_TEXT : "#111827" }}>{r.label}</div>
-                        <div style={{ fontSize: 13, color: isDark ? SUBTLE_TEXT : "#94a3b8", marginTop: 3 }}>Target {r.targetLabel}</div>
-                      </div>
-                      <div style={{ textAlign: "right" }}>
-                        <div style={{ fontFamily: "monospace", fontSize: 20, fontWeight: 800, color: accent }}>{hasAvg ? `${t.avg_hours}h` : "–"}</div>
-                        <div style={{ fontSize: 13, color: isDark ? SUBTLE_TEXT : "#94a3b8", marginTop: 3 }}>
-                          {hasDelta && t.delta_hours !== 0 ? `${t.delta_hours < 0 ? "↓" : "↑"} ${Math.abs(t.delta_hours)}` : "\u00A0"}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </CCardBody>
-          </CCard>
-        </div>
+        {isMobile ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
+            <CCard style={rightCardStyle}>
+              <CCardBody style={{ padding: "16px 14px", display: "flex", flexDirection: "column", gap: 12 }}>
+                {completedHeader}
+                {completedStats}
+              </CCardBody>
+            </CCard>
+            <CCard style={rightCardStyle}>
+              <CCardBody style={{ padding: "16px 14px", display: "flex", flexDirection: "column", gap: 12 }}>
+                {modalitySection}
+              </CCardBody>
+            </CCard>
+            <CCard style={rightCardStyle}>
+              <CCardBody style={{ padding: "16px 14px", display: "flex", flexDirection: "column", gap: 12 }}>
+                {tatSection}
+              </CCardBody>
+            </CCard>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14, alignSelf: "stretch", height: "100%" }}>
+            <CCard style={{ ...rightCardStyle, flex: 1, display: "flex", flexDirection: "column" }}>
+              {completedHeader}
+              <CCardBody style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 14, flex: 1 }}>
+                {completedStats}
+                {modalitySection}
+                {tatSection}
+              </CCardBody>
+            </CCard>
+          </div>
+        )}
       </div>
 
       {/* QUEUE MODAL */}
