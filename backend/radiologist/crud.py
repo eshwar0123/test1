@@ -695,6 +695,41 @@ def get_report(conn: connection, case_id: str, user_id: UUID) -> Dict[str, Any]:
         if not r:
             return {}
 
+        # Study time: a report that hasn't been saved yet has no scan_datetime —
+        # take it from the case's table row (bulk_uploads.created_at holds the DICOM
+        # study date/time for ingested cases, study_date otherwise), then rad_scans.
+        scan_dt = r[7]
+        if not scan_dt:
+            try:
+                cur.execute(
+                    """
+                    SELECT COALESCE(created_at, study_date::timestamp)
+                    FROM organization_schema.bulk_uploads
+                    WHERE case_id=%s
+                    ORDER BY id DESC LIMIT 1
+                    """,
+                    (case_id,),
+                )
+                _row = cur.fetchone()
+                scan_dt = _row[0] if _row and _row[0] else None
+            except Exception:
+                conn.rollback()
+                scan_dt = None
+        if not scan_dt:
+            try:
+                cur.execute(
+                    """
+                    SELECT scan_date FROM radiology_schema.rad_scans
+                    WHERE case_id=%s ORDER BY scan_date DESC LIMIT 1
+                    """,
+                    (case_id,),
+                )
+                _row = cur.fetchone()
+                scan_dt = _row[0] if _row and _row[0] else None
+            except Exception:
+                conn.rollback()
+                scan_dt = None
+
         # Always prefer the CURRENT radiologist profile (from the JOIN) over
         # the reports-row snapshot. Older rows still carry stale values like
         # "JOHN BAKER" or "Dr. Dr. Palak" from earlier seed/test runs; if we
@@ -716,7 +751,7 @@ def get_report(conn: connection, case_id: str, user_id: UUID) -> Dict[str, Any]:
             "patient_age": r[4],
             "patient_sex": r[5],
             "referring_doctor": r[6],
-            "scan_datetime": r[7].isoformat() if r[7] else None,
+            "scan_datetime": scan_dt.isoformat() if scan_dt else None,
             "clinical_indication": r[8],
             "technique": r[9],
             "findings": r[10],

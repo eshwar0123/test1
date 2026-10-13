@@ -134,6 +134,9 @@ def extract_case_metadata(ds) -> Dict[str, Any]:
         "modality_text": map_dicom_modality(getattr(ds, "Modality", None)),
         "study_type_text": (study_desc or body_part or None),
         "referring_doctor": normalise_person_name(getattr(ds, "ReferringPhysicianName", None)),
+        # (0008,0080) — the hospital / centre that produced the study. Used to route
+        # a case to its organization when the S3 folder name doesn't match.
+        "institution_name": normalise_person_name(getattr(ds, "InstitutionName", None)),
         "accession_number": (str(getattr(ds, "AccessionNumber", "") or "").strip() or None),
         "study_instance_uid": (str(getattr(ds, "StudyInstanceUID", "") or "").strip() or None),
     }

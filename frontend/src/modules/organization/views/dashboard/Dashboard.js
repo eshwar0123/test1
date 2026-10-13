@@ -1460,7 +1460,7 @@ export default function Dashboard() {
             // Technique is left out entirely when the radiologist didn't fill it in.
             ...(hasText(technique) ? [sectionTitle("Technique"), ...htmlToParagraphs(technique)] : []),
             sectionTitle("REPORT"),     ...htmlToParagraphs(findings),
-            sectionTitle("Impression"), ...htmlToParagraphs(impression),
+            ...(hasText(impression) ? [sectionTitle("Impression"), ...htmlToParagraphs(impression)] : []),
             sectionTitle("ADVICE"),     ...htmlToParagraphs(advice),
             ...signature,
           ],

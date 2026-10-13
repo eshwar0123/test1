@@ -326,6 +326,29 @@ export function buildExportReportHtml({ reportRoot, formatDateTime }) {
     p.remove();
   });
 
+  // Impression is optional: when it was left empty (or still shows the "(If any)"
+  // placeholder) leave the whole section out of the exported report.
+  const isBlank = (el) => {
+    const t = (el.textContent || "").replace(/\s+/g, " ").trim();
+    return !t || /^\(.*\)$/.test(t);
+  };
+  holder.querySelectorAll(".report-sec-title").forEach((h) => {
+    if ((h.textContent || "").trim().toLowerCase() !== "impression") return;
+    const body = h.nextElementSibling;
+    if (body && body.classList.contains("report-answer") && isBlank(body)) {
+      body.remove();
+      h.remove();
+    }
+  });
+  holder.querySelectorAll("p").forEach((p) => {
+    const t = (p.textContent || "").replace(/[:：]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+    if (t !== "impression") return;
+    const body = p.nextElementSibling;
+    if (!body || body.tagName !== "DIV" || !isBlank(body) || body.querySelector("img")) return;
+    body.remove();
+    p.remove();
+  });
+
   return holder.innerHTML;
 }
 

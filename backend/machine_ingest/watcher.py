@@ -167,6 +167,15 @@ def scan_once() -> None:
         traceback.print_exc()
         return
 
+    # One line per scan so it is visible which organization folders under
+    # uploads/Clients/ were found and how many case folders each holds.
+    per_client: Dict[str, int] = {}
+    for (cf, _case) in groups:
+        per_client[cf] = per_client.get(cf, 0) + 1
+    print(f"[s3-ingest] scanned {CLIENTS_PREFIX}: {len(per_client)} client folder(s), "
+          f"{len(groups)} case folder(s) — "
+          + ", ".join(f"{k} ({v})" for k, v in sorted(per_client.items())))
+
     now = datetime.now(timezone.utc)
     for (client_folder, case_folder), info in groups.items():
         s3_prefix = f"{CLIENTS_PREFIX}{client_folder}/{case_folder}/"
@@ -219,14 +228,33 @@ def _process_case(client_folder: str, case_folder: str, s3_prefix: str, keys: Li
 
         org = crud.resolve_org_for_folder(client_folder)
         if not org:
+            # Folder name didn't match any organization — fall back to who the
+            # DICOM says produced the study (InstitutionName tag, 0008,0080).
+            institution_names = []
+            for _k, _n, _ds in dicom_entries:
+                nm = extract_case_metadata(_ds).get("institution_name")
+                if nm and nm not in institution_names:
+                    institution_names.append(nm)
+            org = crud.resolve_org_for_institution(institution_names)
+            if org:
+                print(f"[s3-ingest] folder '{client_folder}' matched org "
+                      f"'{org.get('org_name')}' by DICOM InstitutionName {institution_names}")
+                try:
+                    crud.remember_folder_mapping(client_folder, org.get("org_id"))
+                except Exception as e:
+                    print(f"[s3-ingest] could not remember folder mapping: {e}")
+            elif institution_names:
+                print(f"[s3-ingest] InstitutionName {institution_names} matched no organization")
+        if not org:
             crud.mark_case(
                 s3_prefix=s3_prefix, client_folder=client_folder, case_folder=case_folder,
                 status="unmatched_org", file_count=len(dicom_entries),
                 error_message=(
-                    f"No organization matched S3 folder '{client_folder}'. Add a row to "
+                    f"No organization matched S3 folder '{client_folder}' or the DICOM "
+                    f"InstitutionName. Add a row to "
                     f"organization_schema.s3_org_folder_map (folder_name='{client_folder}', "
-                    f"org_id=<org's GENRAD-ORG-id>) to fix, then it will be picked up on the next poll "
-                    f"— this folder is not retried automatically."
+                    f"org_id=<org's GENRAD-ORG-id>) to fix; unmatched folders are retried automatically "
+                    f"every {os.getenv('S3_INGEST_UNMATCHED_RETRY_MINUTES', '30')} min."
                 ),
             )
             print(f"[s3-ingest] no org match for client folder '{client_folder}' — case left unprocessed")

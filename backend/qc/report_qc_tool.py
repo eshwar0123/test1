@@ -202,10 +202,14 @@ def run_content_check(f):
         f"{len(findings)} chars" if findings else None))
 
     impression = f.get("impression","").strip()
-    imp_ok     = len(impression) >= 10 and impression.lower() not in PLACEHOLDERS
+    # Impression is optional: a radiologist may leave it empty (the section is then
+    # left out of the report) and still submit. Only an impression that WAS typed
+    # is validated (too brief / placeholder).
+    imp_ok     = (not impression) or (len(impression) >= 10 and impression.lower() not in PLACEHOLDERS)
     results.append(Check(
         "Content Check · Impression / conclusion", imp_ok, "error",
-        f"Impression filled — {len(impression)} characters" if imp_ok
+        "Impression not provided — optional, section left out of the report" if not impression
+        else f"Impression filled — {len(impression)} characters" if imp_ok
         else (f"Too brief: only {len(impression)} chars — complete clinical summary required"
               if impression and len(impression) < 10
               else (f'Placeholder: "{impression}"' if impression
