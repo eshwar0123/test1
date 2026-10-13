@@ -1,0 +1,960 @@
+import anatomyFront from "/body.png";
+import anatomyBack from "/bodyback.png";
+import React, { useMemo, useState } from "react";
+import {
+  CBadge,
+  CButton,
+  CCard,
+  CCardBody,
+  CCardHeader,
+  CCol,
+  CFormSelect,
+  CRow,
+} from "@coreui/react";
+
+const scanData = {
+  head: {
+    label: "Head",
+    total: 42,
+    ct: 18,
+    mri: 20,
+    xray: 4,
+    other: 0,
+    organs: {
+      brain: { label: "Brain", total: 33, ct: 15, mri: 18, xray: 0, other: 0 },
+      skull: { label: "Skull", total: 4, ct: 2, mri: 0, xray: 2, other: 0 },
+      sinus: { label: "Sinus", total: 3, ct: 1, mri: 1, xray: 1, other: 0 },
+      orbit: { label: "Orbit", total: 2, ct: 0, mri: 1, xray: 1, other: 0 },
+    },
+  },
+  chest: {
+    label: "Chest",
+    total: 60,
+    ct: 22,
+    mri: 6,
+    xray: 30,
+    other: 2,
+    organs: {
+      lungs: { label: "Lungs", total: 30, ct: 12, mri: 0, xray: 17, other: 1 },
+      heart: { label: "Heart", total: 14, ct: 7, mri: 5, xray: 0, other: 2 },
+      ribs:  { label: "Ribs",  total: 16, ct: 3, mri: 1, xray: 13, other: 0 },
+    },
+  },
+  spine: {
+    label: "Spine",
+    total: 36,
+    ct: 10,
+    mri: 20,
+    xray: 4,
+    other: 2,
+    organs: {
+      cervical: { label: "Cervical", total: 12, ct: 3, mri: 8, xray: 1, other: 0 },
+      thoracic: { label: "Thoracic", total: 9,  ct: 2, mri: 5, xray: 1, other: 1 },
+      lumbar:   { label: "Lumbar",   total: 15, ct: 5, mri: 7, xray: 2, other: 1 },
+    },
+  },
+  abdomen: {
+    label: "Abdomen",
+    total: 54,
+    ct: 24,
+    mri: 12,
+    xray: 10,
+    other: 8,
+    organs: {
+      liver:       { label: "Liver",       total: 14, ct: 7, mri: 4, xray: 1, other: 2 },
+      kidney:      { label: "Kidney",      total: 12, ct: 5, mri: 3, xray: 1, other: 3 },
+      pancreas:    { label: "Pancreas",    total: 8,  ct: 4, mri: 2, xray: 0, other: 2 },
+      spleen:      { label: "Spleen",      total: 9,  ct: 4, mri: 2, xray: 1, other: 2 },
+      gallbladder: { label: "Gallbladder", total: 11, ct: 4, mri: 1, xray: 7, other: 0 },
+    },
+  },
+  pelvis: {
+    label: "Pelvis",
+    total: 28,
+    ct: 9,
+    mri: 8,
+    xray: 7,
+    other: 4,
+    organs: {
+      bladder:      { label: "Bladder",         total: 10, ct: 3, mri: 3, xray: 2, other: 2 },
+      reproductive: { label: "Prostate/Uterus", total: 9,  ct: 2, mri: 4, xray: 0, other: 3 },
+      rectum:       { label: "Rectum",          total: 9,  ct: 4, mri: 1, xray: 5, other: 0 },
+    },
+  },
+  upperLimb: {
+    label: "Upper Limb",
+    total: 31,
+    ct: 8,
+    mri: 6,
+    xray: 15,
+    other: 2,
+    organs: {
+      shoulder: { label: "Shoulder", total: 10, ct: 2, mri: 3, xray: 4, other: 1 },
+      elbow:    { label: "Elbow",    total: 6,  ct: 2, mri: 1, xray: 3, other: 0 },
+      wrist:    { label: "Wrist",    total: 7,  ct: 1, mri: 1, xray: 5, other: 0 },
+      hand:     { label: "Hand",     total: 8,  ct: 3, mri: 1, xray: 3, other: 1 },
+    },
+  },
+  lowerLimb: {
+    label: "Lower Limb",
+    total: 47,
+    ct: 11,
+    mri: 10,
+    xray: 22,
+    other: 4,
+    organs: {
+      hip:   { label: "Hip",   total: 10, ct: 3, mri: 2, xray: 4, other: 1 },
+      knee:  { label: "Knee",  total: 16, ct: 2, mri: 5, xray: 8, other: 1 },
+      ankle: { label: "Ankle", total: 9,  ct: 2, mri: 1, xray: 5, other: 1 },
+      foot:  { label: "Foot",  total: 12, ct: 4, mri: 2, xray: 5, other: 1 },
+    },
+  },
+};
+
+const modalityOptions = [
+  { value: "overall", label: "Overall" },
+  { value: "ct",      label: "CT" },
+  { value: "mri",     label: "MRI" },
+  { value: "xray",    label: "XRAY" },
+  { value: "other",   label: "OTHER" },
+];
+
+const modalityPills = [
+  { key: "ct",    label: "CT",    color: "#2563eb" },
+  { key: "mri",   label: "MRI",   color: "#7c3aed" },
+  { key: "xray",  label: "XRAY",  color: "#ea580c" },
+  { key: "other", label: "OTHER", color: "#475569" },
+];
+
+const getMetricValue = (node, filter) =>
+  filter === "overall" ? node.total : node[filter] ?? 0;
+
+const getBarColor = (filter) => {
+  switch (filter) {
+    case "ct":    return "#2563eb";
+    case "mri":   return "#7c3aed";
+    case "xray":  return "#ea580c";
+    case "other": return "#475569";
+    default:      return "#2563eb";
+  }
+};
+
+const overviewTotals = Object.values(scanData).reduce(
+  (acc, region) => {
+    acc.total += region.total ?? 0;
+    acc.ct += region.ct ?? 0;
+    acc.mri += region.mri ?? 0;
+    acc.xray += region.xray ?? 0;
+    acc.other += region.other ?? 0;
+    return acc;
+  },
+  { total: 0, ct: 0, mri: 0, xray: 0, other: 0 }
+);
+
+// ─── Front-view SVG paths & transforms ───────────────────────────────────────
+const frontRegionPaths = {
+  head: ["M172.189 277H148.189H124.689H89.6893H63.1893H26.6893H0.189316L11.1893 272.5L26.6893 268L39.1893 265.5L51.6893 261L63.1893 257.5L77.6893 250.5L89.6893 243.5L101.689 237L111.189 232.5L124.689 222.5L130.689 213.5L134.189 205V196V187.5V180V173.5L132.689 169L130.689 164.5L129.189 158V150.5V145H127.189L123.189 146.5L118.689 145L113.689 138L110.189 130.5L107.189 124.5V116V109V101V94.5V91L110.189 89.5L113.689 91L118.689 94.5L116.689 83.5V70.5L118.689 55.5L124.689 36.5L133.189 24L148.189 10.5L165.689 2.5L183.689 0.5H202.189L218.189 5.5L234.689 16.5L245.689 30.5L251.689 42.5L255.689 58L257.689 75V90.5L262.189 88.5L264.689 90.5L266.189 96.5V105L264.689 117.5L262.189 129.5L259.689 136.5L255.689 143.5L251.689 146.5L247.189 145V150.5L244.189 166L241.189 175V189V203L242.689 210.5L245.689 215.5L251.689 223L257.689 227.5L266.189 233L289.189 243.5L307.189 254.5L327.189 263L345.689 266.5L360.689 271.5L372.689 277H289.189H257.689H224.689H198.689H172.189Z"],
+  chest: ["M39.5 0.5H0.5V20H16L32 25.5L39.5 31L43.5 41L39.5 53.5H25.5L32 71.5L39.5 85.5L43.5 104.5V120.5L39.5 144L43.5 169L50.5 194.5L53.5 206H69.5L73.5 200.5L86 188L99.5 181L116.5 176.5L140 171.5L161 169H176.5L183.5 171.5H208.5H230L250.5 179.5L273.5 188L286 194.5V200.5L294 206L319.5 214V200.5L332.5 166V144V120.5L339.5 96.5L350.5 80V53.5H339.5L332.5 41L339.5 31L350.5 20H371V0.5H304.5H238H174.5H102H39.5Z"],
+  abdomen: ["M7.5 53L3 37.5H19L22.5 32L26.5 27.5L31 23.5L35.5 19.5L49.5 12.5L64 8.5L88 3L97.5 2L109 0.5H118H126L132.5 3H179L223 20L235 26V32L243 37.5L255.5 41.5L268.5 45.5L265 51L263.5 56L260 79.5V98.5V117.5L263.5 138.5L266.5 156L269.5 174V187L249 190H227.5H195.5H164L123.5 187H91H63H37.5L19.5 185L0.5 182V163.5L3 146.5L7.5 130L10.5 114.5V98.5V75.5L7.5 53Z"],
+  pelvis: ["M19.5507 14.5677L22.5507 0.567719L41.5507 3.56772L59.5507 5.56772H148.051L169.051 7.56772C177.384 7.90105 193.951 8.56772 193.551 8.56772H234.051H271.051L291.551 5.56772L293.551 14.5677L297.551 33.5677L303.051 55.0677L306.551 74.5677L311.551 89.5677V102.568L306.551 107.568L297.551 113.568L286.051 116.568L276.051 120.568L268.051 125.068L260.551 120.568L249.051 128.068L242.051 138.568L237.551 145.068L232.051 153.568V164.568L228.551 175.568L220.051 182.568L203.551 187.068L195.551 195.068L188.551 187.068L184.051 180.068H175.551L165.051 172.068L159.051 184.068L154.551 195.068L151.051 184.068L148.051 175.568L144.551 172.068L136.551 175.568L127.551 180.068L125.051 182.568L118.051 191.068L109.051 187.068L96.0507 182.568L86.5507 175.568L82.0507 164.568V153.568L75.0507 138.568L65.5507 128.068L58.5507 120.568H52.0507H43.5507L35.5507 116.568L22.5507 113.568L11.0507 107.568L0.550735 102.568L2.55074 89.5677L5.05074 74.5677L9.05074 55.0677L14.5507 33.5677L19.5507 14.5677Z"],
+  // FIX: left arm first (index 0), right arm second (index 1)
+  upperLimb: [
+    // Left arm (patient's left = viewer's right side of image)
+    "M39.0903 0.824829L50.5903 6.82483L60.0903 17.3248L70.0903 30.3248L76.0903 46.8248L81.0903 72.3248V92.8248C81.0903 95.3248 81.0903 102.525 81.0903 111.325C81.0903 120.125 81.0903 126.991 81.0903 129.325L87.0903 157.325V184.325V199.325L93.5903 225.825C95.9237 232.825 100.59 247.025 100.59 247.825C100.59 248.625 106.59 265.158 109.59 273.325L116.59 301.825V333.325V363.825L122.59 412.325L128.59 448.825L137.09 474.825L152.09 510.325L156.59 528.325L160.09 538.325V539.825H156.59H150.59C147.757 536.325 142.19 530.225 142.59 533.825C142.99 537.425 142.757 544.325 142.59 547.325V558.325L145.09 563.825C144.757 562.325 143.39 561.025 140.59 567.825C137.79 574.625 137.09 580.991 137.09 583.325L130.59 588.325L125.09 594.825H119.09C117.924 593.658 116.29 590.125 119.09 585.325C122.59 579.325 121.59 578.825 125.09 571.325C127.89 565.325 128.59 560.158 128.59 558.325V549.325V538.325H125.09V543.825V553.825V563.825L122.59 571.325L119.09 579.325L115.09 588.325L109.59 594.825C109.424 596.991 108.29 601.425 105.09 601.825C101.89 602.225 98.757 599.991 97.5903 598.825V592.825L102.09 583.325L107.59 571.325L109.59 563.825V549.325V538.325H107.59L105.09 543.825L103.59 552.325V561.825L102.09 567.825L97.5903 571.325L95.0903 579.325L91.5903 585.325L88.0903 592.825L82.5903 594.825C80.5903 595.658 76.5903 596.425 76.5903 592.825C76.5903 589.225 78.5903 584.991 79.5903 583.325L82.5903 573.325L88.0903 561.825L90.0903 545.825V533.825H88.0903L82.5903 539.825V547.325L79.5903 553.825L76.5903 561.825L71.0903 571.325C68.757 571.491 64.0903 571.025 64.0903 567.825C66.4903 558.225 69.757 550.158 71.0903 547.325V538.325V530.825C71.0903 534.825 71.0903 539.225 71.0903 524.825C71.0903 506.825 73.5903 491.325 76.5903 484.825C78.9903 479.625 79.5903 472.325 79.5903 469.325L76.5903 448.825L66.0903 420.325L52.5903 390.325L37.0903 356.825L27.5903 327.825L23.0903 296.825L21.0903 264.825C21.0903 259.658 21.0903 249.425 21.0903 249.825C21.0903 250.225 21.0903 244.325 21.0903 241.325L12.5903 225.825L6.09034 206.325V189.825L4.09034 170.825L1.59034 157.325L0.59034 153.825V145.825V129.325V120.825L7.59034 96.8248L18.5903 80.3248V53.8248H7.59034L0.59034 40.8248L7.59034 31.3248L18.5903 20.3248H39.0903V0.824829Z",
+    // Right arm (patient's right = viewer's left side of image)
+    "M124 20.96H139.086L156.166 26.9883L156.253 27.0186L162.918 32.6582L162.964 32.7744L166.964 42.7744L167.032 42.9443L166.975 43.1182L162.86 55.46H149.229L156.458 74.2588L162.947 87.2363L162.976 87.2939L162.989 87.3574L167 106.408V121.501L162.999 145.506L162 181.974L161.999 182.008L161.993 182.042L157.993 206.042L157.986 206.081L157.975 206.118L150.975 227.118L150.971 227.128L150.968 227.138L141.5 252.053V269.984L141.498 270.008L138.498 301.008L138.495 301.031L138.491 301.054L134.491 322.054L134.485 322.082L134.478 322.109L121.978 362.109L121.969 362.136L121.958 362.161L108.958 391.661L108.956 391.665L97.9561 416.165L89.4795 437.605L84.4893 459.062L81.0107 479.932L84.4814 492.325L84.4883 492.352L84.4932 492.378L87 507.419V544.389L89.4707 552.789L94 563.861V570.704L89.0156 574.581L83.7129 570.869L83.585 570.78L83.5312 570.633L80.0371 561.15L76.5488 553.176L74.5 549.078V543.027L73.0381 537.669L71.4219 535.244L69.9561 536.71L69.0049 540.991L69.9971 550.91L70 550.935V560.849L73.9521 569.247L73.9795 569.305L73.9912 569.368L75.4785 577.302L79.9521 586.746L79.9854 586.816L79.9961 586.894L80.9961 594.394L81.0352 594.689L80.7939 594.864L74.9248 599.133L71.124 594.789L71.1025 594.765L71.084 594.737L67.1035 588.768L61.6318 582.798L61.5312 582.688L60.5205 576.629L58.0625 572.203L58.0439 572.168L58.0303 572.131L56.0303 566.631L56.0176 566.596L56.0098 566.558L54.5098 559.058L54.5 559.01V549.001L52.5508 537.794L51.4111 537.225L50 548.986V560.871L53.4688 570.287L53.4824 570.323L55.4766 580.295L62.5 594.342V600.127L59.25 604.46H54.7471L54.5967 604.256L49.0967 596.756L49.0859 596.74L44.0762 588.725L44.0566 588.694L44.042 588.66L40.542 580.66L40.5303 580.635L40.5225 580.607L38.5459 574.187L36.0928 570.751L36.0234 570.653L36.0059 570.536L35 563.998V544.425L35.0049 544.39L35.9238 537.96H33V551.021L32.9854 551.081L30.5156 560.957L32.9658 570.267L36.9346 577.212L36.9502 577.24L36.9629 577.271L41.5 588.361V594.685L36.832 598.834L36.4795 599.146L32.1387 594.806L32.1318 594.798L26.6318 588.798L26.584 588.746L21.0527 577.684L21.0459 577.671L18.0527 570.688L15.5762 566.725L15.5 566.604V537.96H13.6729L6.6543 543.475L6.45801 543.458L0 542.92V537.357L0.0400391 537.263L6.03613 523.271L10.5 510.872V499.826L10.5674 499.71L18.0674 486.71L26.5352 471.765L32.0107 453.846L35.5059 431.882L35.5078 431.871L41 401.414V375.938L41.002 375.915L43.5 348.437V321.926L43.5049 321.892L47.0049 296.392L47.0078 296.371L47.0117 296.351L53.5117 267.351L53.5186 267.321L53.5283 267.294L62.5283 241.794L70.5 221.864V214.434L74.0029 181.906L76.502 155.912L76.5049 155.885L76.5107 155.857L81.0107 134.357L81.0156 134.333L81.0234 134.31L86.4922 116.908L84.002 91.0078L84 90.9844V75.917L84.0068 75.875L86.5068 61.375L86.5098 61.3633L86.5117 61.3516L91.5117 38.8516L91.5283 38.7783L91.5654 38.7139L100.065 23.7139L100.086 23.6768L100.112 23.6445L113.112 7.64453L113.156 7.59082L113.213 7.55078L124 0V20.96Z",
+  ],
+  lowerLimb: ["M62.8477 679.74C62.9255 679.77 62.9973 679.773 63.0537 679.768L62.8477 679.74ZM62.8477 679.74L62.8467 679.739M326.493 43.1072L326.5 43.1492V91.7302L326.494 91.7683L315.994 158.768L315.992 158.779L305.992 214.779L305.988 214.803L305.981 214.827L293.981 257.327L293.979 257.337L284 290.265V323.219L283.997 323.247L280.504 354.178L287.993 398.608L288 398.649V450.261L287.981 450.327L273.487 501.805L261.989 555.796L261.988 555.795L250.507 614.201L253.994 637.116L254 637.153V679.528L261.904 690.397L261.929 690.43L268.919 704.412L278.85 715.832L287.771 723.267L298.34 728.3L302.449 734.464L302.47 734.52L304.47 740.02L304.476 740.037L304.48 740.053L306.48 747.053L306.539 747.257L304.435 750.939L304.29 751.191H298.143L294.265 753.615L294.225 753.64L294.18 753.658L287.69 756.153L278.606 760.191H249.927L249.856 760.17L244.988 758.709L239.121 760.177L239.062 760.191H218.346L218.218 760.104L208.718 753.604L208.628 753.542L208.571 753.448L204.071 745.948L204 745.83V737.191H197.367L197.252 737.126L183.252 729.126L183 728.981V708.634L183.014 708.577L189 683.135V660.117L189.021 660.047L197 633.617V531.257L189.018 501.822L189.013 501.805L189.01 501.788L183.01 471.288L183 471.24V430.153L183.006 430.116L189.006 390.616L189.008 390.6L189.012 390.584L196.975 354.25L193.547 346.903L193.539 346.885L193.532 346.867L189.032 334.867L189.008 334.802L189.002 334.733L187.502 316.733L187.498 316.692L187.502 316.651L189.002 298.151L190 279.681V231.235L186.008 208.779L186.005 208.765L186.004 208.751L182.506 179.764L178.506 152.764L178.502 152.739L175.502 121.239L175.5 121.215V75.8982L172.637 73.0349L161.447 95.4148L160.5 95.1912V91.7732L158.025 84.3494L155.071 75.9802L151.84 73.1521L148 95.2322V145.748L147.987 145.803L136.498 195.756L134.5 249.21V290.212L134.498 290.232L132 320.708V338.303L131.953 338.403L124.5 354.303V364.642L127.989 381.591L127.991 381.598L127.992 381.605L131.992 404.605L131.996 404.626L131.998 404.646L134.497 432.136L136.497 450.136L136.503 450.187L134.498 471.239L134.495 471.271L134.487 471.303C132.323 480.791 126.893 507.278 122.495 537.263C120.394 551.589 119.505 558.865 119.256 562.103L120 562.191V622.138L122.483 633.566L127.977 651.042L128 651.114V679.557L129.935 682.943L130 683.058V698.561L135.438 708.45L135.5 708.563V723.855L129.836 731.579L122.235 735.633L122.125 735.691H116.934L115.495 745.761L115.479 745.881L115.409 745.978L111.941 750.931L109.964 755.877L109.881 756.087L109.668 756.162L102.641 758.672L102.612 758.678L96.1123 760.178L96.0566 760.191H81.7812L81.6328 760.03L76.5 754.469V755.898L73.749 758.649L73.6045 758.68L66.6045 760.18L66.5527 760.191H57.4092L57.3242 760.159L53.4102 758.691H50.0215C49.0952 758.775 47.6466 758.875 46.2734 758.904C45.5813 758.919 44.9014 758.915 44.3145 758.883C43.7411 758.851 43.21 758.788 42.8418 758.666C42.1884 758.448 41.2741 757.966 40.4248 757.474C39.633 757.016 38.8637 756.529 38.3506 756.191H25.7393L25.5908 755.978C25.0252 755.17 24.0255 753.951 22.8818 752.941C22.3105 752.436 21.714 751.993 21.1279 751.678C20.5385 751.362 19.988 751.191 19.5 751.191H13.5V745.623L13.5186 745.557L16.0186 736.557L16.0439 736.467L16.0996 736.391L22.1406 728.337L28.6953 723.295L38.1631 715.819C41.6549 712.155 50.0972 701.981 56.0557 690.462C58.3762 685.975 59.9287 683.131 60.9414 681.396C61.447 680.53 61.8224 679.932 62.0957 679.542C62.2315 679.348 62.3499 679.195 62.4512 679.083C62.467 679.065 62.4834 679.048 62.5 679.031V660.191C62.5 657.755 62.6765 653.685 63.2041 649.368C63.7308 645.059 64.6122 640.464 66.0381 637.001C67.3955 633.704 67.6914 629.251 67.4883 624.977C67.2857 620.716 66.5903 616.697 66.0137 614.308L66.0068 614.281L66.0039 614.252L62.5068 585.776L53.0195 545.329L40.5195 501.829L40.5107 501.799L40.5059 501.768L32.5059 450.268L32.5049 450.259L28.5049 420.759L28.4951 420.692L28.5039 420.625L32.5039 390.625L32.5068 390.608L32.5098 390.591L37.0098 368.591L40.4893 347.214L37.0146 333.312L37 333.253V290.191C37 286.894 35.617 282.262 33.8477 277.761C32.0857 273.28 29.9695 268.999 28.5615 266.431L28.5371 266.387L28.5225 266.339L20.0225 238.839L20.0137 238.811L20.0088 238.783L15.5088 214.783L9.00879 179.783L9.00684 179.773L9.00586 179.764L5.00586 152.764L5.00391 152.752L5.00195 152.738L2.50195 126.238V126.231L2.50098 126.223L0.500977 95.2234L0.5 95.2078V67.1795L0.500977 67.1668L2.50293 26.1267L2.51074 26.0867L7.64551 1.95485L30.1738 13.2185L44.1211 16.7058L44.1816 16.7215L44.2373 16.7507L50.627 20.1912H66.2197L66.3682 20.3533L83.3682 38.8533L83.4209 38.9099L83.4531 38.9802L89.9531 52.9802L90 53.0808V64.5916L94.4053 75.3621L103.739 81.7488L125.824 90.5828L133.674 79.7898L133.795 79.7351L143.788 75.2381L151.288 71.7381L151.584 71.6004L155.829 75.3152L155.928 75.4011L155.972 75.5252L158.972 84.0252L158.975 84.033L161.475 91.533L161.5 91.6101V93.073L172.363 71.3474L176.313 75.2976L183.147 79.6912H192.309L192.447 79.9675L195.414 85.9011L203.022 93.9851L210.658 86.8269L210.745 86.7449L210.859 86.7117L227.761 81.74L236.062 74.9041L239 64.6218V53.0359L256.588 27.408L256.648 27.3201L256.74 27.2644L268.498 20.1072L276.045 24.6345L304.767 13.2449L313.672 7.30836L319.32 1.09547L326.493 43.1072Z"],
+};
+
+// ─── Back-view SVG paths & transforms (spine only) ───────────────────────────
+const backRegionPaths = {
+  spine: ["M30.1181 677L23.1181 665.5L10.6181 653.5L14.1181 642.5L10.6181 625C9.45143 622 7.8181 615.3 10.6181 612.5C16.2181 609.7 18.2848 604 18.6181 601.5L23.1181 598.5H30.1181L32.6181 595H30.1181L14.1181 601.5V598.5L20.1181 594L23.1181 586.5L20.1181 584V581L10.6181 584V581L18.6181 577L23.1181 572V564L17.1181 560H10.6181C9.45143 559.333 7.8181 557.8 10.6181 557C13.4181 556.2 17.1181 554.667 18.6181 554L23.1181 547V539.5L24.6181 536.5L17.1181 531L11.1181 532L10.6181 529L17.1181 526L24.6181 518.5L23.1181 514.5L24.6181 511V506.5L17.1181 505H10.6181L7.1181 503H11.1181L20.1181 501.5C20.6181 500.167 21.9181 496.7 23.1181 493.5C24.3181 490.3 24.6181 486.167 24.6181 484.5V480.5L20.1181 475L14.6181 473L0.618103 463L2.1181 459.5L6.6181 462L3.6181 452L7.1181 456L11.1181 463L17.1181 465.5L21.1181 466L26.1181 462V456L27.6181 452L24.6181 447.5L18.6181 445.5H12.6181H8.6181V442H14.6181H20.1181L27.6181 436.5V434.5L26.1181 431L27.6181 426L24.6181 423H21.1181L7.1181 421L17.1181 419L29.1181 410L27.6181 405.5V402L26.1181 398.5H18.6181L12.6181 395L17.1181 393.5L23.1181 390L29.1181 386.5L26.1181 382.5L27.6181 377.5L24.6181 373.5L17.1181 375.5H12.6181L17.1181 371.5L24.6181 367C25.6181 366 27.9181 363.6 29.1181 362L31.1181 359.5L27.6181 357V354V350L24.6181 347C24.6181 345.5 24.6181 342.7 24.6181 343.5C24.6181 344.5 21.6181 340.5 24.6181 338C28.2181 332.4 28.1181 325 27.6181 322V319L26.1181 306.5L29.1181 299.5V282.5L27.6181 277L34.1181 271V259L27.6181 257V250L34.1181 246.5L37.1181 242L34.1181 231L27.6181 228.5V224.5L34.1181 219.5L37.1181 216.5V210L34.1181 206C30.9514 204.833 24.9181 201.7 26.1181 198.5C27.3181 195.3 32.9514 192.833 35.6181 192C37.1181 191.667 39.8181 190.3 38.6181 187.5C37.4181 184.7 30.7848 182.667 27.6181 182V175C27.6181 173.833 27.6181 171.4 27.6181 171C27.6181 170.6 31.9514 169.5 34.1181 169L35.6181 166.5L34.1181 160H24.6181C24.6181 157.833 24.6181 153.6 24.6181 154C24.6181 154.4 28.6181 151.5 30.6181 150L37.1181 145.5L38.6181 143.5V141H32.1181L27.6181 139.5L22.1181 137L30.6181 133L38.6181 128C39.7848 126 41.1181 122.4 37.1181 124C31.9181 126 27.6181 123.833 26.1181 122.5C25.1181 121.5 24.0181 119.2 27.6181 118C31.2181 116.8 35.4514 114.167 37.1181 113L38.6181 109.5L34.1181 111L29.1181 109.5V106L34.1181 103L37.1181 100L38.6181 96L34.1181 98L32.1181 96V90.5L37.1181 88.5L38.6181 85L34.1181 86.5L32.1181 82L34.1181 78.5L38.6181 76.5V73.5L34.1181 75C33.4514 73.6667 32.1181 71.1 32.1181 71.5C32.1181 71.9 33.4514 69.3333 34.1181 68L38.6181 66L35.6181 64.5L30.6181 63V58.5L34.1181 56C35.7848 55.5 38.1181 54.3 34.1181 53.5C30.1181 52.7 29.1181 49.5 29.1181 48L37.1181 46.5V39L27.6181 44.5C28.4514 43.8333 29.0181 41.8 24.6181 39C20.2181 36.2 19.4514 31.8333 19.6181 30C21.6181 28.5 26.9181 24.1 32.1181 18.5C37.3181 12.9 40.6181 6.83333 41.6181 4.5L50.1181 0.5H55.1181C55.7848 0.666667 57.9181 1.7 61.1181 4.5C64.3181 7.3 65.1181 11.6667 65.1181 13.5V18.5C65.7848 18.6667 68.7181 20.1 75.1181 24.5C81.5181 28.9 84.4514 32.6667 85.1181 34L83.1181 36.5L77.6181 39V41.5V43.6986H75.1181L67.6181 39V43.6986L71.6181 48V52H67.6181C66.2848 52.5 64.4181 54 67.6181 56C70.8181 58 71.6181 61.5 71.6181 63H67.6181V66L71.6181 70L70.6181 73H67.6181L65.1181 76.5L70.6181 78.5V83.5L67.6181 86.5V88.5L71.6181 90.5V96L67.6181 98L63.1181 96V100L67.6181 101.5L72.1181 104L74.1181 108.5L67.6181 111L63.1181 106L61.8704 113L67.6181 115.5L74.1181 118L75.1181 124L71.6181 126L65.1181 122.5L61.8704 126L67.6181 130.5L74.1181 133L80.1181 137L75.1181 139.5L70.6181 141L65.1181 139.5L63.1181 143.5L65.1181 147.5L74.1181 150L77.6181 154V158.772L72.1181 160H67.6181H63.1181L61.8704 164L65.1181 169C65.4514 168.333 67.0181 167.4 70.6181 169C74.2181 170.6 76.7848 174.445 77.6181 176.167L75.1181 179.5L72.1181 182L66.6181 181L61.8704 184L60.6181 187L65.1181 192L71.6181 195C72.7848 195.167 75.1181 196.1 75.1181 198.5C75.1181 200.9 73.1181 203.5 72.1181 204.5L67.6181 206L63.1181 207.5V212C62.4514 213.5 61.9181 216.8 65.1181 218C68.3181 219.2 72.4514 221.5 74.1181 222.5L75.1181 228.5L74.1181 231H71.6181L67.6181 233L65.1181 237.5V243.5L68.6181 247.5L74.1181 251.5L75.1181 257L67.6181 259L65.1181 266V271L71.6181 277L75.1181 280.5V284.5H67.6181L65.1181 286.5V292L68.6181 296L71.6181 299.5L75.1181 303.5V306.5H71.6181L68.6181 309V313.5L71.6181 315.5L74.1181 319L75.1181 322L74.1181 326H68.6181C67.6181 327 66.2181 329.6 68.6181 332C71.0181 334.4 68.9514 337 67.6181 338C66.1181 338.833 64.2181 340.8 68.6181 342C73.0181 343.2 74.7848 347.833 75.1181 350L74.1181 354V357L71.6181 359.5L75.1181 364.5C76.1181 366.167 78.8181 369.9 81.6181 371.5C89.1181 375.5 89.1181 377.5 88.6181 377.5C88.2181 377.5 84.7848 376.167 83.1181 375.5H78.6181H71.6181V379L74.1181 382.5L71.6181 386.5L77.6181 389.5L83.1181 393.5L87.1181 395L81.6181 397L77.6181 397.751L71.6181 398.5V403.5L74.1181 405.5L71.6181 408.5L75.1181 412L78.6181 416.5L84.6181 419C86.7848 419 91.0181 419 90.6181 419C93.4181 420.6 89.4514 421.667 87.1181 422H78.6181L75.1181 423L72.1181 425C72.7848 425.667 74.1181 427.1 74.1181 427.5C74.1181 427.9 74.7848 430 75.1181 431L72.1181 434.5L74.1181 436.5L78.6181 439L83.1181 442C83.4514 442.333 84.9181 442.9 88.1181 442.5C91.3181 442.1 93.1181 444.333 93.6181 445.5H90.6181H83.1181L77.6181 447.5L75.1181 450L74.1181 452C74.1181 452.5 74.1181 453.6 74.1181 454C74.1181 454.4 74.1181 456.5 74.1181 457.5L72.6181 461L72.1181 463L76.1181 464.5L80.6181 467L85.6181 464.5C87.2848 463 90.6181 460.2 90.6181 461C90.6181 461.8 93.2848 457.333 94.6181 455L96.1181 452L97.6181 457.5L98.6181 461.5L96.1181 465.5L93.6181 469C95.2848 469 98.9181 469 100.118 469C101.318 469 101.285 471 101.118 472H92.1181L79.1181 476L75.6181 479.5L75.1181 484.5L76.1181 489L78.6181 493.5L80.6181 498.5L81.6181 500.5L85.6181 501.5H90.6181L92.1181 505H85.6181L78.6181 506.5L76.1181 508V512.5L77.6181 518.5L78.6181 523L82.6181 527L90.6181 529L90.1181 533H84.1181L80.1181 534L77.6181 536.5V543L78.6181 548.5L82.6181 554L88.1181 556C88.7848 555.167 90.1181 554 90.1181 556C90.1181 558 85.1181 559.5 82.6181 560L80.1181 562.5L77.6181 565.5L78.6181 568V572L82.6181 577C82.1181 576.667 82.0181 576.5 85.6181 578.5C89.2181 580.5 89.4514 582.333 89.1181 583C88.9514 582.667 88.0181 582.2 85.6181 583C83.2181 583.8 80.9514 585.667 80.1181 586.5V592L86.6181 597L90.1181 598.5L87.1181 599.5L82.6181 597H78.6181L74.6181 595L70.1181 594V597V598.5H74.6181L78.6181 599.5L82.6181 603.5L84.1181 608.5L89.1181 610.5L90.1181 616.5V628V633L88.1181 637L87.6181 643.5V651.5L87.1181 655.5L84.1181 659L79.1181 663L74.6181 667L69.6181 673L68.1181 677L60.6181 674.5C59.2848 674 55.4181 673 50.6181 673C45.8181 673 40.2848 674 38.1181 674.5L34.6181 677H30.1181Z"],
+};
+
+const frontRegionTransforms = {
+  head:      "translate(128, 10) scale(0.46)",
+  chest:     "translate(128, 137) scale(0.46)",
+  abdomen:   "translate(151, 215.5) scale(0.46)",
+  pelvis:    "translate(141, 300) scale(0.46)",
+  upperLimb: [
+    "translate(280, 138) scale(0.46)",   // index 0 → left arm path
+    "translate(70, 137) scale(0.46)",  // index 1 → right arm path
+  ],
+  lowerLimb: ["translate(138, 347) scale(0.46)"],
+};
+
+const backRegionTransforms = {
+  spine: "translate(191,67) scale(0.46)",
+};
+
+// ─── Badge styles ─────────────────────────────────────────────────────────────
+const badgeCT = {
+  padding: "3px 8px", borderRadius: 999,
+  background: "rgba(37,99,235,0.12)", border: "1px solid rgba(37,99,235,0.35)",
+  color: "#2563eb", fontSize: 15, fontWeight: 700,
+};
+const badgeMRI = {
+  padding: "3px 8px", borderRadius: 999,
+  background: "rgba(124,58,237,0.12)", border: "1px solid rgba(124,58,237,0.35)",
+  color: "#7c3aed", fontSize: 15, fontWeight: 700,
+};
+const badgeXRAY = {
+  padding: "3px 8px", borderRadius: 999,
+  background: "rgba(234,88,12,0.12)", border: "1px solid rgba(234,88,12,0.35)",
+  color: "#ea580c", fontSize: 15, fontWeight: 700,
+};
+const badgeOTHER = {
+  padding: "3px 8px", borderRadius: 999,
+  background: "rgba(71,85,105,0.12)", border: "1px solid rgba(71,85,105,0.35)",
+  color: "#475569", fontSize: 15, fontWeight: 700,
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BodyMap
+// ─────────────────────────────────────────────────────────────────────────────
+function BodyMap({
+  selectedRegion,
+  hoveredRegion,
+  setHoveredRegion,
+  onSelectRegion,
+  getRegionValue,
+  isFullscreen,
+  compact = false,
+}) {
+  // When "Spine" is selected, flip to the back-view anatomy image
+  const isBackView = selectedRegion === "spine";
+
+  const activeRegionPaths      = isBackView ? backRegionPaths      : frontRegionPaths;
+  const activeRegionTransforms = isBackView ? backRegionTransforms : frontRegionTransforms;
+
+  const getRegionVisual = (key) => {
+    const active  = selectedRegion === key;
+    const hovered = hoveredRegion === key;
+    return {
+      fill:        active  ? "rgba(59,130,246,0.16)" : hovered ? "rgba(96,165,250,0.12)" : "rgba(148,163,184,0.03)",
+      stroke:      active  ? "#3b82f6"               : hovered ? "#60a5fa"               : "rgba(148,163,184,0.14)",
+      strokeWidth: active  ? 1.8                     : hovered ? 1.5                     : 1,
+      filter:      active  ? "url(#selectedGlow)"    : hovered ? "url(#hoverGlow)"       : "none",
+    };
+  };
+
+  return (
+    <div
+      style={{
+        position: "relative",
+        width: "100%",
+        maxWidth: isFullscreen ? "100%" : compact ? 460 : 430,
+        height: isFullscreen ? "100%" : compact ? 760 : 560,
+        minHeight: isFullscreen ? "calc(100vh - 260px)" : compact ? 760 : 560,
+        margin: "0 auto",
+      }}
+    >
+      {/* ── Anatomy image — swaps instantly between front and back ── */}
+      <img
+        src={isBackView ? anatomyBack : anatomyFront}
+        alt={isBackView ? "Back Anatomy" : "Front Anatomy"}
+        style={{
+          position: "absolute",
+          top: 0, left: 0,
+          width: "100%",
+          height: isBackView ? "calc(100% - 44px)" : "100%",
+          objectFit: "contain",
+          objectPosition: "center top",
+          borderRadius: 18,
+          transform: compact ? "scale(1.22)" : "none",
+          transformOrigin: "center top",
+          transition: "opacity 0.2s ease",
+        }}
+      />
+
+      {/* ── SVG highlight overlay ── */}
+      <svg
+        viewBox="0 0 430 710"
+        preserveAspectRatio="xMidYMid meet"
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          zIndex: 2,
+          transform: compact ? "scale(1.22)" : "none",
+          transformOrigin: "center top",
+        }}
+      >
+        <defs>
+          <filter id="selectedGlow" x="-50%" y="-50%" width="200%" height="200%">
+            <feDropShadow dx="0" dy="0" stdDeviation="10" floodColor="#3b82f6" floodOpacity="0.45" />
+            <feDropShadow dx="0" dy="0" stdDeviation="4"  floodColor="#93c5fd" floodOpacity="0.65" />
+          </filter>
+          <filter id="hoverGlow" x="-40%" y="-40%" width="180%" height="180%">
+            <feDropShadow dx="0" dy="0" stdDeviation="5" floodColor="#60a5fa" floodOpacity="0.28" />
+          </filter>
+        </defs>
+
+        {Object.entries(activeRegionPaths).map(([key, paths]) =>
+          paths.map((d, index) => {
+            const visual    = getRegionVisual(key);
+            const transform = Array.isArray(activeRegionTransforms[key])
+              ? activeRegionTransforms[key][index] || ""
+              : activeRegionTransforms[key] || "";
+            return (
+              <g
+                key={`${key}-${index}`}
+                transform={transform}
+                onMouseEnter={() => setHoveredRegion(key)}
+                onMouseLeave={() => setHoveredRegion(null)}
+                onClick={() => onSelectRegion(key)}
+                style={{ cursor: "pointer" }}
+              >
+                <path
+                  d={d}
+                  fill={visual.fill}
+                  stroke={visual.stroke}
+                  strokeWidth={visual.strokeWidth}
+                  filter={visual.filter}
+                  style={{ transition: "all 0.22s ease" }}
+                />
+              </g>
+            );
+          })
+        )}
+      </svg>
+
+      {/* ── "← Front View" button — pinned at the very bottom, below image ── */}
+      {isBackView && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: 44,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 4,
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => onSelectRegion("head")}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "7px 20px",
+              borderRadius: 999,
+              border: "1px solid #3b82f6",
+              background: "#eaf2ff",
+              color: "#1d4ed8",
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: "pointer",
+              boxShadow: "0 4px 12px rgba(59,130,246,0.18)",
+            }}
+          >
+            ← Front View
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BodyScanOverview
+// ─────────────────────────────────────────────────────────────────────────────
+export default function BodyScanOverview({
+  onClose,
+  isFullscreen = false,
+  onToggleFullscreen,
+  compact = false,
+  staticOnly = false,
+  bodyOnly = false,
+  onOpenFullscreen,
+}) {
+  const [filter, setFilter]               = useState("overall");
+  const [selectedRegion, setSelectedRegion] = useState("head");
+  const [hoveredRegion, setHoveredRegion]   = useState(null);
+
+  const selected      = scanData[selectedRegion];
+  const selectedValue = getMetricValue(selected, filter);
+  const progressColor = getBarColor(filter);
+
+  const organRows = useMemo(() => {
+    return Object.entries(selected.organs)
+      .map(([key, organ]) => ({
+        key,
+        ...organ,
+        value:      getMetricValue(organ, filter),
+        ctValue:    organ.ct    ?? 0,
+        mriValue:   organ.mri   ?? 0,
+        xrayValue:  organ.xray  ?? 0,
+        otherValue: organ.other ?? 0,
+        totalValue: organ.total ?? 0,
+      }))
+      .filter((organ) => (filter === "overall" ? true : organ.value > 0))
+      .sort((a, b) => b.value - a.value);
+  }, [selected, filter]);
+
+  const visibleOrganRows = compact ? organRows.slice(0, 4) : organRows;
+  const maxOrganValue  = Math.max(1, ...organRows.map((o) => o.value));
+  const getRegionValue = (regionKey) => getMetricValue(scanData[regionKey], filter);
+  const compactValue = filter === "overall" ? overviewTotals.total : overviewTotals[filter] ?? 0;
+  const compactLabel = filter === "overall" ? "Total Scans" : `${filter.toUpperCase()} Scans`;
+  const topRegion = Object.entries(scanData)
+    .map(([key, region]) => ({ key, label: region.label, value: getMetricValue(region, filter) }))
+    .sort((a, b) => b.value - a.value)[0];
+
+  if (compact) {
+    if (bodyOnly) {
+      return (
+        <div
+          style={{
+            background: "linear-gradient(160deg, #f3f4f6 0%, #eaecef 100%)",
+            borderRadius: 20,
+            border: "1px solid rgba(0,0,0,0.06)",
+            boxShadow: "0 2px 12px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.8)",
+            padding: "16px 12px 10px",
+            width: "100%",
+          }}
+        >
+          <button
+            type="button"
+            onClick={onOpenFullscreen}
+            style={{
+              width: "100%",
+              border: "none",
+              background: "transparent",
+              padding: 0,
+              cursor: onOpenFullscreen ? "pointer" : "default",
+            }}
+          >
+            <img
+              src={anatomyFront}
+              alt="Body Scan Overview"
+              style={{
+                width: "100%",
+                maxWidth: 300,
+                height: 460,
+                objectFit: "contain",
+                objectPosition: "center top",
+                transform: "scale(1.04)",
+                transformOrigin: "center top",
+                display: "block",
+                margin: "0 auto",
+                mixBlendMode: "multiply",
+              }}
+            />
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div
+        style={{
+          border: "2px solid rgba(44,62,92,0.75)",
+          borderRadius: 26,
+          padding: "18px 18px 22px",
+          minHeight: 740,
+          background: "linear-gradient(180deg,#5f7597 0%,#8ea3bc 100%)",
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.18), 0 10px 28px rgba(62,84,116,0.22)",
+          overflow: "hidden",
+          display: "flex",
+          alignItems: "stretch",
+          justifyContent: "flex-start",
+          position: "relative",
+        }}
+      >
+        {staticOnly ? (
+          <div
+            style={{
+              width: "100%",
+              display: "flex",
+              flexDirection: "column",
+              gap: 18,
+            }}
+          >
+            <div
+              style={{
+                width: "100%",
+                display: "grid",
+                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                gap: 12,
+              }}
+            >
+              {[
+                { label: compactLabel, value: compactValue, color: "#ffffff", bg: "rgba(255,255,255,0.16)" },
+                { label: "Regions", value: Object.keys(scanData).length, color: "#dbeafe", bg: "rgba(37,99,235,0.18)" },
+                { label: "Top Region", value: topRegion?.label ?? "-", color: "#bfdbfe", bg: "rgba(15,23,42,0.18)" },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  style={{
+                    borderRadius: 16,
+                    padding: "12px 14px",
+                    background: item.bg,
+                    border: "1px solid rgba(255,255,255,0.14)",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      letterSpacing: "1.2px",
+                      color: "rgba(255,255,255,0.72)",
+                      textTransform: "uppercase",
+                      fontWeight: 700,
+                      marginBottom: 8,
+                    }}
+                  >
+                    {item.label}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: typeof item.value === "number" ? 28 : 20,
+                      lineHeight: 1,
+                      fontWeight: 700,
+                      color: item.color,
+                    }}
+                  >
+                    {item.value}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div
+              style={{
+                width: "100%",
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 10,
+              }}
+            >
+              {modalityOptions.map((option) => {
+                const active = filter === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setFilter(option.value)}
+                    style={{
+                      borderRadius: 999,
+                      padding: "8px 14px",
+                      border: active ? "1px solid #ffffff" : "1px solid rgba(255,255,255,0.16)",
+                      background: active ? "rgba(255,255,255,0.2)" : "rgba(15,23,42,0.14)",
+                      color: "#ffffff",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      letterSpacing: "0.4px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div
+              style={{
+                width: "100%",
+                display: "grid",
+                gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+                gap: 10,
+              }}
+            >
+              {[
+                { label: "Total", value: overviewTotals.total, color: "#dbeafe", bg: "rgba(255,255,255,0.16)" },
+                { label: "CT", value: overviewTotals.ct, color: "#93c5fd", bg: "rgba(37,99,235,0.20)" },
+                { label: "MRI", value: overviewTotals.mri, color: "#c4b5fd", bg: "rgba(124,58,237,0.18)" },
+                { label: "XRAY", value: overviewTotals.xray, color: "#fdba74", bg: "rgba(234,88,12,0.18)" },
+                { label: "OTHER", value: overviewTotals.other, color: "#cbd5e1", bg: "rgba(100,116,139,0.24)" },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  style={{
+                    borderRadius: 16,
+                    padding: "12px 10px",
+                    background: item.bg,
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    textAlign: "center",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      letterSpacing: "1.2px",
+                      color: "rgba(255,255,255,0.72)",
+                      textTransform: "uppercase",
+                      fontWeight: 700,
+                      marginBottom: 6,
+                    }}
+                  >
+                    {item.label}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 24,
+                      lineHeight: 1,
+                      fontWeight: 700,
+                      color: item.color,
+                    }}
+                  >
+                    {item.value}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {onOpenFullscreen && (
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  onClick={onOpenFullscreen}
+                  style={{
+                    border: "1px solid rgba(255,255,255,0.16)",
+                    background: "rgba(15,23,42,0.16)",
+                    color: "#ffffff",
+                    padding: "10px 16px",
+                    borderRadius: 12,
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  Open Full Body Scan
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <BodyMap
+            selectedRegion={selectedRegion}
+            hoveredRegion={hoveredRegion}
+            setHoveredRegion={setHoveredRegion}
+            onSelectRegion={setSelectedRegion}
+            getRegionValue={getRegionValue}
+            isFullscreen={false}
+            compact
+          />
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <CCard
+      className="border-0 shadow-sm"
+      style={{
+        borderRadius: 16,
+        marginBottom: 0,
+        marginTop: isFullscreen ? 0 : 8,
+      }}
+    >
+      <CCardHeader
+        className="bg-white border-0"
+        style={{
+          borderTopLeftRadius: 16,
+          borderTopRightRadius: 16,
+          paddingTop: 18,
+          paddingBottom: 8,
+        }}
+      >
+        <div
+          className="d-flex flex-wrap align-items-start justify-content-between gap-3"
+          style={{ rowGap: 14 }}
+        >
+          <div>
+            <h5 className="mb-1">Body Scan Overview</h5>
+            <div className="text-muted small">
+              Region-wise and organ-wise scan distribution
+            </div>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ minWidth: 170 }}>
+              <CFormSelect value={filter} onChange={(e) => setFilter(e.target.value)}>
+                {modalityOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </CFormSelect>
+            </div>
+
+            <CButton color="secondary" variant="outline" onClick={onClose}>
+              Close
+            </CButton>
+          </div>
+        </div>
+      </CCardHeader>
+
+      <CCardBody>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: isFullscreen ? "1.05fr 1.4fr" : "1fr 1.45fr",
+            gap: 20,
+            alignItems: "stretch",
+            minHeight: isFullscreen ? "calc(100vh - 170px)" : "auto",
+          }}
+        >
+          {/* ── Left panel: body image + region sidebar ── */}
+          <div>
+            <div
+              style={{
+                border: compact
+                  ? "1px solid rgba(148,163,184,0.2)"
+                  : "1px solid rgba(255,255,255,0.08)",
+                borderRadius: 14,
+                padding: compact ? 12 : isFullscreen ? 18 : 10,
+                minHeight: compact ? 330 : isFullscreen ? "calc(100vh - 210px)" : 620,
+                height: "100%",
+                background: "linear-gradient(180deg,#111827 0%,#0f172a 100%)",
+                boxShadow: compact ? "0 6px 20px rgba(15, 23, 42, 0.12)" : "0 8px 24px rgba(15, 23, 42, 0.18)",
+                overflow: "hidden",
+                display: "flex",
+                alignItems: compact ? "center" : "stretch",
+                flexDirection: compact ? "column" : "row",
+                gap: compact ? 12 : 0,
+              }}
+            >
+              {/* Body image */}
+              <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", minWidth: 0, width: "100%" }}>
+                <BodyMap
+                  selectedRegion={selectedRegion}
+                  hoveredRegion={hoveredRegion}
+                  setHoveredRegion={setHoveredRegion}
+                  onSelectRegion={setSelectedRegion}
+                  getRegionValue={getRegionValue}
+                  isFullscreen={isFullscreen}
+                  compact={compact}
+                />
+              </div>
+
+              {/* Region list sidebar — sits to the right of the body image */}
+              <div style={{
+                width: compact ? "100%" : 155,
+                minWidth: compact ? 0 : 130,
+                display: "flex",
+                flexDirection: compact ? "row" : "column",
+                flexWrap: compact ? "wrap" : "nowrap",
+                justifyContent: "center",
+                gap: 8,
+                padding: compact ? "0" : "12px 10px 12px 0",
+              }}>
+                {Object.keys(scanData).map((key) => {
+                  const active = selectedRegion === key;
+                  const value  = getRegionValue(key);
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setSelectedRegion(key)}
+                      onMouseEnter={() => setHoveredRegion(key)}
+                      onMouseLeave={() => setHoveredRegion(null)}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 6,
+                        width: compact ? "calc(50% - 4px)" : "100%",
+                        padding: compact ? "6px 9px" : "7px 10px",
+                        borderRadius: 10,
+                        border: active ? "1px solid #3b82f6" : "1px solid rgba(255,255,255,0.12)",
+                        background: active ? "rgba(59,130,246,0.18)" : "rgba(255,255,255,0.06)",
+                        cursor: "pointer",
+                        transition: "all 0.18s ease",
+                      }}
+                    >
+                      <span style={{
+                        fontSize: compact ? 11.5 : 12.5,
+                        fontWeight: 700,
+                        color: active ? "#93c5fd" : "rgba(255,255,255,0.82)",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        maxWidth: compact ? 78 : 95,
+                      }}>
+                        {scanData[key].label}
+                      </span>
+                      <span style={{
+                        minWidth: compact ? 22 : 26,
+                        height: compact ? 22 : 26,
+                        borderRadius: "50%",
+                        background: active ? "#3b82f6" : "rgba(255,255,255,0.12)",
+                        border: active ? "none" : "1px solid rgba(255,255,255,0.2)",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: compact ? 11 : 12,
+                        fontWeight: 800,
+                        color: active ? "#fff" : "rgba(255,255,255,0.9)",
+                      }}>
+                        {value}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Right panel: organ breakdown ── */}
+          <div>
+            <div
+              style={{
+                border: "1px solid #e5e7eb",
+                borderRadius: 14,
+                padding: compact ? 14 : isFullscreen ? 18 : 16,
+                minHeight: compact ? "auto" : isFullscreen ? "calc(100vh - 210px)" : 520,
+                height: "100%",
+                background: "#ffffff",
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <div className="d-flex align-items-center justify-content-between mb-3">
+                <div>
+                  <div className="text-muted small">Selected Region</div>
+                  <div className="h5 mb-0">{selected.label}</div>
+                </div>
+                <CBadge color="primary" className="px-3 py-2">
+                  {selectedValue} {filter === "overall" ? "Total" : filter.toUpperCase()} scans
+                </CBadge>
+              </div>
+
+              <div className="mb-3">
+                <div className="text-muted small mb-2">Modality Summary</div>
+                <CRow className="g-2">
+                  {modalityPills.map((pill) => {
+                    const isActive  = filter === pill.key;
+                    const isOverall = filter === "overall";
+                    return (
+                      <CCol md={compact ? 6 : 3} key={pill.key}>
+                        <div
+                          style={{
+                            border: `1px solid ${
+                              isOverall ? `${pill.color}66` : isActive ? pill.color : "#e2e8f0"
+                            }`,
+                            borderRadius: 10,
+                            padding: "12px 12px",
+                            background: isOverall
+                              ? `${pill.color}10`
+                              : isActive
+                              ? `${pill.color}18`
+                              : "#fff",
+                            boxShadow: isActive ? `0 0 0 2px ${pill.color}22` : "none",
+                            transition: "all 0.2s ease",
+                          }}
+                        >
+                          <div className="small fw-semibold" style={{ color: pill.color }}>
+                            {pill.label}
+                          </div>
+                          <div className="h6 mb-0">{selected[pill.key]}</div>
+                        </div>
+                      </CCol>
+                    );
+                  })}
+                </CRow>
+              </div>
+
+              <div style={{ marginTop: 4, flex: 1, overflowY: "auto", paddingRight: compact ? 0 : 4 }}>
+                <div className="text-muted small mb-2">
+                  {compact ? "Top Organ Breakdown" : "Organ / Sub-part Breakdown"}
+                </div>
+                <div className="d-flex flex-column gap-2">
+                  {visibleOrganRows.map((organ) => (
+                    <div
+                      key={organ.key}
+                      style={{
+                        border: "1px solid #e2e8f0",
+                        borderRadius: 10,
+                        padding: compact ? "12px" : "18px 12px",
+                        background: "#fff",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 12,
+                          marginBottom: 6,
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 10,
+                            flexWrap: "wrap",
+                            fontWeight: 800,
+                            color: "#111827",
+                            fontSize: compact ? 14 : 16,
+                          }}
+                        >
+                          {organ.label}
+                          <span style={badgeCT}>CT {organ.ctValue}</span>
+                          <span style={badgeMRI}>MRI {organ.mriValue}</span>
+                          <span style={badgeXRAY}>XRAY {organ.xrayValue}</span>
+                          <span style={badgeOTHER}>OTHER {organ.otherValue}</span>
+                        </div>
+                        <div
+                          style={{
+                            fontSize: compact ? 12 : 14,
+                            fontWeight: 800,
+                            color: "#6b7280",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {organ.totalValue} total
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          height: 6,
+                          borderRadius: 999,
+                          background: "#e2e8f0",
+                          overflow: "hidden",
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: `${Math.max(6, (organ.value / maxOrganValue) * 100)}%`,
+                            height: "100%",
+                            background: progressColor,
+                            transition: "width .25s ease, background-color .2s ease",
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+
+                  {visibleOrganRows.length === 0 && (
+                    <div
+                      style={{
+                        border: "1px dashed #cbd5e1",
+                        borderRadius: 10,
+                        padding: "14px 12px",
+                        color: "#64748b",
+                        background: "#f8fafc",
+                        fontSize: 16,
+                      }}
+                    >
+                      No organs available for this modality in the selected region.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </CCardBody>
+    </CCard>
+  );
+}

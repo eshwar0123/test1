@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+python-multipart
+pydantic
+sqlalchemy
+psycopg2-binary
+python-dotenv
+passlib[bcrypt]
+bcrypt
+python-jose[cryptography]
+email-validator
+# pip uninstall bcrypt passlib -y
+# pip install "bcrypt==3.2.2" "passlib==1.7.4"

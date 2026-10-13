@@ -1,0 +1,15 @@
+fastapi
+psycopg2-binary
+uvicorn[standard]
+pandas
+openpyxl
+odfpy
+xlrd
+numbers-parser
+python-multipart
+pydicom
+nibabel
+sqlalchemy
+aiofiles
+python-dotenv
+supabase

@@ -1,0 +1,1045 @@
+.org-upload-page {
+  padding: 28px;
+  min-height: 100vh;
+  position: relative;
+  background: transparent;
+  box-sizing: border-box;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+}
+
+.org-upload-page::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image: url('/backgroundimg.png');
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+}
+
+/* ── Top section ── */
+.org-upload-top {
+  display: grid;
+  grid-template-columns: 50% 1fr;
+  gap: 22px;
+  align-items: stretch;
+  margin-bottom: 22px;
+  /* both columns share the same implicit row height */
+  grid-auto-rows: 1fr;
+}
+
+.org-upload-left {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.org-upload-right {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+/* ── Bottom full-width ── */
+.org-upload-bottom {
+  width: 100%;
+}
+
+/* ─────────────────────────────────
+   CARD  —  normal bordered card
+───────────────────────────────── */
+.org-upload-card {
+  background: rgba(255, 255, 255, 0.28);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  border: 1px solid rgba(255, 255, 255, 0.50);
+  border-radius: 18px;
+  box-shadow: 0 8px 32px rgba(99, 102, 241, 0.12), 0 1px 4px rgba(255, 255, 255, 0.20) inset;
+  overflow: hidden;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* ── BARE: no card bg/border — just layout container ── */
+.org-upload-card--bare {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* Bulk upload — fills full left column height */
+.org-upload-card--bulk {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+/* Patient list — fills remaining right column height */
+.org-upload-card--list {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Excel card */
+.org-upload-card--excel {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ─────────────────────────────────
+   CARD HEADER
+───────────────────────────────── */
+.org-upload-card-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.30);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.org-upload-card--bare .org-upload-card-header {
+  background: transparent;
+  border-bottom: none;
+  padding: 0 0 14px 0;
+}
+
+.org-upload-stack { flex-direction: column; align-items: flex-start; }
+
+.org-upload-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.org-upload-title-row h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.org-upload-title-row p {
+  margin: 0;
+  font-size: 14px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.org-upload-title-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+}
+
+.org-upload-link-btn {
+  border: none;
+  background: transparent;
+  color: #2563eb;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+  white-space: nowrap;
+  margin-top: 6px;
+}
+
+/* ─────────────────────────────────
+   CARD BODY
+───────────────────────────────── */
+.org-upload-card-body {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* List card body fills available height, table inside handles scroll */
+.org-upload-card--list .org-upload-card-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.org-upload-card--bare .org-upload-card-body {
+  padding: 0;
+}
+
+/* ─────────────────────────────────
+   DROPZONE GRID
+───────────────────────────────── */
+.org-upload-dropzone-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+.org-upload-form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.org-upload-form-group label {
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.org-upload-dropzone {
+  border: 2px dashed rgba(200, 180, 255, 0.55);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 20px 14px;
+  text-align: center;
+  transition: border-color 0.18s, box-shadow 0.18s, background 0.18s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.org-upload-dropzone:hover {
+  border-color: rgba(139, 92, 246, 0.80);
+  background: rgba(255, 255, 255, 0.30);
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.15);
+}
+
+/* ── Gradient dashed border (Custom Border design) ── */
+.org-drop-gradient-zone {
+  border: none !important;
+  position: relative;
+}
+.org-drop-gradient-zone:hover {
+  box-shadow: 0 4px 18px rgba(59, 130, 246, 0.14);
+}
+
+.org-drop-border-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.org-drop-corner-icon {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.8;
+}
+
+.org-upload-drop-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  background: rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+}
+
+.org-upload-drop-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.org-upload-drop-hint {
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.5;
+  max-width: 190px;
+}
+
+/* ─────────────────────────────────
+   INTRO PANEL
+───────────────────────────────── */
+.org-upload-intro-panel {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  flex-shrink: 0;
+}
+
+.org-upload-intro-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #0284c7;
+  margin-bottom: 3px;
+}
+
+.org-upload-intro-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 3px;
+}
+
+.org-upload-intro-panel p {
+  margin: 0;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ─────────────────────────────────
+   PROGRESS
+───────────────────────────────── */
+.org-upload-progress {
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  flex-shrink: 0;
+}
+
+.org-upload-progress-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 14px;
+  color: #64748b;
+}
+
+.org-upload-progress-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.30);
+  overflow: hidden;
+}
+
+.org-upload-progress-fill {
+  width: 18%;
+  height: 100%;
+  background: linear-gradient(90deg, #2dd4bf, #0ea5e9 50%, #2563eb);
+  border-radius: 999px;
+}
+
+/* ─────────────────────────────────
+   BUTTONS
+───────────────────────────────── */
+.org-upload-primary-btn,
+.org-upload-secondary-btn,
+.org-upload-danger-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.org-upload-primary-btn {
+  width: 100%;
+  border: none;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  padding: 13px 18px;
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.30);
+  flex-shrink: 0;
+}
+
+.org-upload-secondary-btn {
+  border: 1px solid rgba(255, 255, 255, 0.50);
+  background: rgba(255, 255, 255, 0.30);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: #1e293b;
+  padding: 9px 14px;
+}
+
+.org-upload-danger-btn {
+  border: 1px solid #fecaca;
+  background: #fff1f2;
+  color: #dc2626;
+  padding: 7px 11px;
+}
+
+.org-upload-primary-btn:hover,
+.org-upload-secondary-btn:hover,
+.org-upload-danger-btn:hover {
+  transform: translateY(-1px);
+}
+
+.org-upload-secondary-btn.small,
+.org-upload-primary-btn.small {
+  width: auto;
+  padding: 9px 16px;
+}
+
+.org-upload-secondary-btn.tiny,
+.org-upload-danger-btn.tiny {
+  padding: 6px 11px;
+  font-size: 13px;
+  border-radius: 8px;
+}
+
+/* ─────────────────────────────────
+   STAT CARDS
+───────────────────────────────── */
+.org-upload-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.org-upload-stat {
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 14px;
+  padding: 14px 16px;
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.10), 0 1px 2px rgba(255,255,255,0.25) inset;
+}
+
+.org-upload-stat-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.org-upload-stat-value {
+  margin-top: 5px;
+  font-size: 28px;
+  font-weight: 800;
+  color: #1e293b;
+}
+
+.org-upload-stat.accent .org-upload-stat-value { color: #2563eb; }
+.org-upload-stat.success .org-upload-stat-value { color: #0f9f6e; }
+.org-upload-stat.error .org-upload-stat-value { color: #dc2626; }
+
+/* ─────────────────────────────────
+   TABS
+───────────────────────────────── */
+.org-upload-tabs {
+  display: flex;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.28);
+  padding: 0 8px;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.org-upload-tab {
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #64748b;
+  padding: 13px 18px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.org-upload-tab.active {
+  color: #0284c7;
+  border-bottom-color: #0284c7;
+}
+
+.org-upload-tab:hover:not(.active) {
+  color: #334155;
+}
+
+/* ─────────────────────────────────
+   TOOLBAR
+───────────────────────────────── */
+.org-upload-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.org-upload-input {
+  flex: 1;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 10px 14px;
+  font-size: 14px;
+  color: #1e293b;
+}
+
+.org-upload-input:focus {
+  outline: none;
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.10);
+}
+
+.org-upload-toolbar-actions,
+.org-upload-action-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ─────────────────────────────────
+   TABLE  (scrollable body, 6 rows)
+───────────────────────────────── */
+.org-upload-table-wrap {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.org-upload-table-wrap--scroll {
+  overflow-y: auto;
+  overflow-x: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.org-upload-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.org-upload-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  text-align: left;
+  padding: 11px 13px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.org-upload-table td {
+  padding: 13px 13px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #1e293b;
+  font-size: 14px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.org-upload-table tbody tr:hover td { background: #f8faff; }
+
+.org-upload-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.org-upload-badge.blue { background: #dbeafe; color: #2563eb; }
+.org-upload-badge.green { background: #dcfce7; color: #16a34a; }
+
+/* Index number column */
+.org-upload-idx {
+  font-size: 13px;
+  color: #94a3b8;
+  font-weight: 600;
+  min-width: 28px;
+}
+
+/* ─────────────────────────────────
+   ABOUT TAB CONTENT
+───────────────────────────────── */
+.org-upload-about {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 2px 0;
+}
+
+.org-upload-about-section {
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: #f8faff;
+  border: 1px solid #dbeafe;
+}
+
+.org-upload-about-section h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.org-upload-about-section p {
+  margin: 0;
+  font-size: 14px;
+  color: #475569;
+  line-height: 1.7;
+}
+
+.org-upload-about-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.org-upload-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  background: #e0f2fe;
+  color: #0284c7;
+  border: 1px solid #bae6fd;
+}
+
+.org-upload-about-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.org-upload-about-item {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+}
+
+.org-upload-about-item-label {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 3px;
+}
+
+.org-upload-about-item-value {
+  font-size: 14px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+/* ─────────────────────────────────
+   GUIDE MODAL
+───────────────────────────────── */
+.org-upload-guide-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  background: rgba(15, 23, 42, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.org-upload-guide-modal {
+  width: 100%;
+  max-width: 440px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+  overflow: hidden;
+}
+
+.org-upload-guide-banner {
+  padding: 16px 20px;
+  background: #f0f9ff;
+  border-bottom: 1px solid #bae6fd;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.org-upload-kicker {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #2563eb;
+}
+
+.org-upload-guide-title {
+  margin-top: 3px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.org-upload-guide-content { padding: 0 0 16px; flex: 1; overflow-y: auto; min-height: 0; }
+
+.org-upload-guide-list {
+  margin: 0;
+  padding: 14px 16px 10px 34px;
+  font-size: 14px;
+  line-height: 1.9;
+  color: #475569;
+}
+
+.org-upload-code-block {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow: visible;
+}
+
+.org-upload-guide-note {
+  margin: 0 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f8faff;
+  border: 1px solid #bfdbfe;
+  color: #475569;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.org-upload-guide-close {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid #bfdbfe;
+  background: #ffffff;
+  color: #2563eb;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Guide modal — richer content helpers */
+.org-upload-guide-modal {
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+}
+.org-upload-guide-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.org-guide-section-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f172a;
+  margin-top: 6px;
+}
+.org-guide-hint {
+  font-size: 12px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.5;
+}
+.org-guide-hint code {
+  background: #f1f5f9;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 11px;
+  color: #2563eb;
+}
+.org-upload-guide-list code {
+  background: #f1f5f9;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 11px;
+  color: #2563eb;
+}
+.org-guide-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.org-guide-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #dbeafe;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+}
+.org-guide-table-wrap {
+  overflow-x: auto;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+}
+.org-guide-table th,
+.org-guide-table td {
+  font-size: 12px;
+  padding: 8px 12px;
+  white-space: nowrap;
+}
+
+/* ─────────────────────────────────
+   UPLOAD MODE TABS  (Single / Bulk)
+───────────────────────────────── */
+.org-upload-mode-tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 20px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff;
+  flex-shrink: 0;
+}
+
+.org-upload-mode-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 11px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #64748b;
+  transition: color 0.15s, border-color 0.15s;
+  margin-bottom: -1px;
+}
+.org-upload-mode-tab.active {
+  color: #0284c7;
+  border-bottom-color: #0284c7;
+}
+.org-upload-mode-tab:hover:not(.active) { color: #334155; }
+
+/* ─────────────────────────────────
+   SINGLE PATIENT FORM
+───────────────────────────────── */
+.org-sp-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.org-sp-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.org-sp-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  border: 2px dashed #cbd5e1;
+  border-radius: 14px;
+  background: #fafcff;
+  padding: 20px 14px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.18s, background 0.18s;
+}
+.org-sp-dropzone:hover {
+  border-color: #38bdf8;
+  background: #f0f9ff;
+}
+
+.org-sp-drop-selected {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0284c7;
+}
+
+/* Success card */
+.org-sp-success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 20px;
+  text-align: center;
+  flex: 1;
+}
+
+.org-sp-success-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #dcfce7;
+  color: #16a34a;
+  font-size: 26px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.org-sp-success-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.org-sp-success-meta {
+  font-size: 14px;
+  color: #475569;
+}
+
+/* ─────────────────────────────────
+   RESPONSIVE
+───────────────────────────────── */
+@media (max-width: 1100px) {
+  .org-upload-top { grid-template-columns: 1fr; }
+  .org-upload-card--bulk,
+  .org-upload-card--list { height: auto; }
+  .org-upload-card--excel { height: auto; }
+  .org-upload-stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 700px) {
+  .org-upload-page { padding: 12px; }
+  .org-upload-dropzone-grid { grid-template-columns: 1fr; }
+  .org-upload-stats { grid-template-columns: repeat(2, 1fr); }
+  .org-upload-about-grid { grid-template-columns: 1fr; }
+}
+
+/* ═══════════════════════════════════
+   DARK THEME
+═══════════════════════════════════ */
+[data-theme="dark"] .org-upload-page::before {
+  background-image: linear-gradient(rgba(10,15,30,0.82), rgba(10,15,30,0.82)), url('/backgroundimg.png');
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+}
+[data-theme="dark"] .org-upload-card {
+  background: rgba(15, 23, 42, 0.70);
+  border-color: rgba(255,255,255,0.10);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.40);
+}
+[data-theme="dark"] .org-upload-card-header {
+  background: rgba(15,23,42,0.50);
+  border-bottom-color: rgba(255,255,255,0.08);
+}
+[data-theme="dark"] .org-upload-title-row h2 { color: #f1f5f9; }
+[data-theme="dark"] .org-upload-title-row p  { color: #64748b; }
+[data-theme="dark"] .org-upload-form-group label { color: #cbd5e1; }
+[data-theme="dark"] .org-upload-dropzone {
+  background: rgba(15,23,42,0.50);
+  border-color: rgba(100, 80, 200, 0.45);
+}
+[data-theme="dark"] .org-upload-dropzone:hover {
+  background: rgba(15,23,42,0.65);
+  border-color: rgba(139,92,246,0.70);
+}
+[data-theme="dark"] .org-upload-drop-title { color: #f1f5f9; }
+[data-theme="dark"] .org-upload-drop-hint  { color: #64748b; }
+[data-theme="dark"] .org-upload-drop-icon {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.12);
+}
+[data-theme="dark"] .org-upload-stat {
+  background: rgba(15,23,42,0.65);
+  border-color: rgba(255,255,255,0.10);
+}
+[data-theme="dark"] .org-upload-stat-label { color: #64748b; }
+[data-theme="dark"] .org-upload-stat-value { color: #f1f5f9; }
+[data-theme="dark"] .org-upload-tabs {
+  background: rgba(15,23,42,0.45);
+  border-bottom-color: rgba(255,255,255,0.08);
+}
+[data-theme="dark"] .org-upload-tab { color: #64748b; }
+[data-theme="dark"] .org-upload-tab.active { color: #818cf8; border-bottom-color: #818cf8; }
+[data-theme="dark"] .org-upload-intro-panel {
+  background: rgba(15,23,42,0.50);
+  border-color: rgba(255,255,255,0.08);
+}
+[data-theme="dark"] .org-upload-intro-label { color: #60a5fa; }
+[data-theme="dark"] .org-upload-intro-title { color: #f1f5f9; }
+[data-theme="dark"] .org-upload-intro-panel p { color: #64748b; }
+[data-theme="dark"] .org-upload-progress {
+  background: rgba(15,23,42,0.50);
+  border-color: rgba(255,255,255,0.08);
+}
+[data-theme="dark"] .org-upload-progress-row { color: #64748b; }
+[data-theme="dark"] .org-upload-progress-track { background: rgba(255,255,255,0.08); }
+[data-theme="dark"] .org-upload-secondary-btn {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.12);
+  color: #e2e8f0;
+}
+[data-theme="dark"] .org-upload-table-wrap { background: transparent; }
+[data-theme="dark"] .org-upload-table thead th {
+  background: rgba(255,255,255,0.06);
+  color: #64748b;
+  border-bottom-color: rgba(255,255,255,0.08);
+}
+[data-theme="dark"] .org-upload-table tbody tr { border-top-color: rgba(255,255,255,0.06); }
+[data-theme="dark"] .org-upload-table tbody tr:hover td { background: rgba(255,255,255,0.04); }
+[data-theme="dark"] .org-upload-table td { color: #cbd5e1; }
+[data-theme="dark"] .org-upload-link-btn { color: #60a5fa; }
+[data-theme="dark"] .org-upload-mode-tab { color: #64748b; }
+[data-theme="dark"] .org-upload-mode-tab.active { color: #818cf8; border-bottom-color: #818cf8; }

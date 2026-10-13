@@ -1,0 +1,133 @@
+/* ===========================
+   Docs Page — PDF.js canvas viewer
+=========================== */
+.docs-page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 80px);
+  padding: 12px 20px 0;
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+  background: #f1f5f9;
+}
+
+/* ── Watermark ── */
+.docs-watermark {
+  position: fixed; top: 0; left: 0;
+  width: 100vw; height: 100vh;
+  pointer-events: none; z-index: 9999; overflow: hidden;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(10, 1fr);
+}
+.docs-watermark-text {
+  display: block; color: rgba(37,99,235,0.06);
+  font-size: 13px; font-weight: 500; white-space: nowrap;
+  transform: rotate(-35deg); transform-origin: center;
+  text-align: center; align-self: center; justify-self: center;
+  pointer-events: none;
+}
+
+/* ── Header ── */
+.docs-header { border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 10px; flex-shrink: 0; }
+.docs-title  { font-size: 22px; font-weight: 700; color: #1e293b; margin: 0 0 2px; }
+.docs-subtitle { font-size: 13px; color: #64748b; margin: 0; }
+
+/* ── Loading / Error ── */
+.docs-loading { display: flex; align-items: center; gap: 14px; padding: 60px 0; color: #64748b; font-size: 15px; justify-content: center; }
+.docs-spinner { width: 36px; height: 36px; border: 3px solid #e2e8f0; border-top-color: #2563eb; border-radius: 50%; animation: docs-spin 0.7s linear infinite; flex-shrink: 0; }
+@keyframes docs-spin { to { transform: rotate(360deg); } }
+.docs-error { background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 24px; color: #991b1b; text-align: center; margin: 20px 0; }
+.docs-error-icon { font-size: 28px; display: block; margin-bottom: 10px; }
+.docs-error p { margin: 6px 0; font-size: 14px; }
+
+/* ── Two-column layout ── */
+.docs-layout {
+  display: flex; flex: 1; min-height: 0;
+  border: 1px solid #e2e8f0; border-radius: 10px;
+  overflow: hidden; margin-bottom: 16px; background: white;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+}
+
+/* ── TOC sidebar ── */
+.docs-toc { width: 240px; flex-shrink: 0; overflow-y: auto; border-right: 1px solid #e2e8f0; background: #f8fafc; padding: 0 0 16px; }
+.docs-toc-header {
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 1px; color: #94a3b8; padding: 14px 16px 10px;
+  border-bottom: 1px solid #e2e8f0; position: sticky; top: 0;
+  background: #f8fafc; z-index: 1;
+}
+.docs-toc-empty { font-size: 12px; color: #94a3b8; padding: 14px 16px; font-style: italic; }
+.toc-item {
+  font-size: 13px; color: #475569; padding: 6px 16px;
+  cursor: pointer; line-height: 1.45;
+  border-left: 3px solid transparent;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+  word-break: break-word;
+}
+.toc-item:hover           { background: #f1f5f9; color: #1e293b; }
+.toc-item.toc-active      { background: #eff6ff; color: #2563eb; border-left-color: #2563eb; font-weight: 600; }
+.toc-item.depth-0         { font-weight: 600; font-size: 13px; padding-left: 16px; }
+.toc-item.depth-1         { padding-left: 28px; font-size: 12.5px; }
+.toc-item.depth-2         { padding-left: 40px; font-size: 12px; color: #64748b; }
+.toc-item.depth-3         { padding-left: 52px; font-size: 11.5px; color: #64748b; }
+
+/* ── PDF viewer wrapper ── */
+.docs-pdf-wrapper { flex: 1; min-height: 0; display: flex; flex-direction: column; background: #e5e7eb; }
+
+/* ── Zoom toolbar ── */
+.docs-zoom-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 16px; background: white;
+  border-bottom: 1px solid #e2e8f0; flex-shrink: 0;
+}
+.docs-zoom-btn {
+  width: 28px; height: 28px; border-radius: 6px;
+  border: 1px solid #e2e8f0; background: #f8fafc;
+  font-size: 18px; font-weight: 600; color: #475569;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: background 0.1s, color 0.1s;
+  line-height: 1;
+}
+.docs-zoom-btn:hover { background: #e0f2fe; color: #2563eb; border-color: #93c5fd; }
+.docs-zoom-label { font-size: 13px; font-weight: 500; color: #334155; min-width: 44px; text-align: center; }
+.docs-zoom-page  { font-size: 12px; color: #94a3b8; margin-left: 8px; }
+
+/* ── Scrollable PDF pages ── */
+.docs-pdf-scroll {
+  flex: 1; overflow-y: auto; overflow-x: auto;
+  padding: 24px 0; display: flex;
+  flex-direction: column; align-items: center; gap: 16px;
+}
+
+/* ── Individual page ── */
+.pdf-page-wrapper {
+  background: white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  border-radius: 2px;
+  display: inline-block;
+  line-height: 0;
+}
+.pdf-page-canvas { display: block; }
+
+/* ── Print block ── */
+@media print { .docs-page { display: none !important; } }
+
+/* ── Dark mode ── */
+.dark .docs-page      { background: #0f172a; }
+.dark .docs-header    { border-bottom-color: rgba(255,255,255,0.1); }
+.dark .docs-title     { color: #f1f5f9; }
+.dark .docs-subtitle  { color: #94a3b8; }
+.dark .docs-layout    { border-color: #1e293b; }
+.dark .docs-toc       { background: #0f172a; border-right-color: #1e293b; }
+.dark .docs-toc-header { background: #0f172a; border-bottom-color: #1e293b; }
+.dark .toc-item       { color: #94a3b8; }
+.dark .toc-item:hover { background: #1e293b; color: #e2e8f0; }
+.dark .toc-item.toc-active { background: #1e3a5f; color: #60a5fa; border-left-color: #60a5fa; }
+.dark .docs-pdf-wrapper { background: #1e293b; }
+.dark .docs-zoom-bar  { background: #1e293b; border-bottom-color: #334155; }
+.dark .docs-zoom-btn  { background: #334155; border-color: #475569; color: #94a3b8; }
+.dark .docs-zoom-btn:hover { background: #1e3a5f; color: #60a5fa; }
+.dark .docs-zoom-label { color: #e2e8f0; }
+.dark .docs-watermark-text { color: rgba(96,165,250,0.06); }

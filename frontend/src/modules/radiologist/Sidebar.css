@@ -1,0 +1,373 @@
+/* =========================
+   ✅ Radiology Layout
+========================= */
+.radiology-app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  width: 100% !important;
+  background-color: #b0d4f1;
+  background-image: url("/backgroundimg.png");
+  background-size: 100% 100%;
+  background-position: center;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  background-blend-mode: multiply;
+}
+
+/* =========================
+   ✅ Sidebar (fixed + slide)
+========================= */
+.sidebar {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  bottom: 0 !important;
+  height: 100vh !important;
+
+  width: 256px !important;
+  min-width: 256px !important;
+  max-width: 256px !important;
+
+  overflow: hidden !important;
+  z-index: 9999 !important;
+
+  display: flex !important;
+  flex-direction: column !important;
+
+  transform: translateX(0);
+  transition: transform 0.25s ease !important;
+
+  background: linear-gradient(160deg, #cfe6f7 0%, #b8d4ee 40%, #a8c6e3 100%) !important;
+}
+
+/* closed state (RadiologyApp adds sidebar-collapsed on root) */
+.radiology-app.sidebar-collapsed .sidebar {
+  transform: translateX(-100%);
+}
+
+/* Fill height for CoreUI wrappers */
+.sidebar .sidebar-nav,
+.sidebar .simplebar-content-wrapper,
+.sidebar .simplebar-content {
+  height: 100% !important;
+}
+
+.sidebar-nav-flex {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
+}
+
+.sidebar-spacer {
+  flex: 1 1 auto !important;
+}
+
+/* =========================
+   ✅ Main area shifts with sidebar
+========================= */
+.radiology-app .wrapper {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  padding-left: 0 !important;
+  transition: none !important;
+  background: transparent !important;
+}
+
+.radiology-app .body {
+  flex: 1;
+  width: 100% !important;
+  min-width: 0;
+  overflow-x: hidden;
+  background: transparent !important;
+}
+
+/* Override any CoreUI sidebar-pushed layout */
+html body .radiology-app .wrapper,
+html body .radiology-app .body {
+  margin-left: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+html body .radiology-app .container-fluid {
+  margin-left: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* =========================
+   ✅ Footer follows sidebar open/close
+   (Important: left/width work only if footer is positioned)
+========================= */
+/* =========================
+   ✅ Footer follows layout normally
+========================= */
+
+/* Normal footer (no fixed positioning) */
+footer,
+.footer,
+.c-footer,
+.app-footer {
+  position: relative !important;
+  left: 0 !important;
+  width: 100% !important;
+  transition: all 0.25s ease !important;
+}
+
+/* When sidebar open */
+.radiology-app:not(.sidebar-collapsed) footer,
+.radiology-app:not(.sidebar-collapsed) .footer,
+.radiology-app:not(.sidebar-collapsed) .c-footer,
+.radiology-app:not(.sidebar-collapsed) .app-footer {
+  margin-left: 256px !important;
+  width: calc(100% - 256px) !important;
+}
+
+/* When sidebar closed */
+.radiology-app.sidebar-collapsed footer,
+.radiology-app.sidebar-collapsed .footer,
+.radiology-app.sidebar-collapsed .c-footer,
+.radiology-app.sidebar-collapsed .app-footer {
+  margin-left: 0 !important;
+  width: 100% !important;
+}
+
+
+/* prevent content hiding behind fixed footer */
+.wrapper,
+.body {
+  padding-bottom: 56px !important;
+}
+
+/* =========================
+   🎨 onix Sidebar Theme
+========================= */
+.gp-sidebar,
+.sidebar.gp-sidebar,
+.sidebar.gp-sidebar *[class*="sidebar-nav"],
+html body .gp-sidebar {
+  --cui-sidebar-bg: #b8cde8 !important;
+  --cui-sidebar-color: #0d1f3c !important;
+  --cui-sidebar-brand-bg: #b8cde8 !important;
+  background: linear-gradient(
+    160deg,
+    #cfe6f7 0%,
+    #b8d4ee 40%,
+    #a8c6e3 100%
+  ) !important;
+  border-right: 1px solid rgba(100, 140, 190, 0.25) !important;
+}
+
+.gp-sidebar .sidebar-header {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.15);
+  padding-bottom: 12px;
+  background: transparent !important;
+}
+
+/* Force all CoreUI inner wrappers to be transparent */
+.gp-sidebar .simplebar-content-wrapper,
+.gp-sidebar .simplebar-scroll-content,
+.gp-sidebar .sidebar-nav,
+.gp-sidebar .c-sidebar-nav,
+.gp-sidebar > div {
+  background: transparent !important;
+}
+
+.gp-settings-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 10px 14px;
+  color: inherit;
+}
+
+.gp-dd-arrow {
+  opacity: 0.7;
+}
+
+.gp-dd-menu {
+  background: rgba(255,255,255,0.95);
+  border: 1px solid rgba(0,0,0,0.08);
+  border-radius: 10px;
+  padding: 6px;
+  margin-left: 10px;
+  margin-top: 6px;
+  min-width: 180px;
+}
+
+.gp-dd-item {
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.gp-dd-item:hover {
+  background: rgba(0,0,0,0.06);
+}
+
+
+
+
+
+
+
+
+/* icons */
+.gp-ic {
+  width: 18px !important;
+  height: 18px !important;
+  opacity: 0.95;
+}
+
+/* =========================
+   Links styles (Main + Footer)
+========================= */
+.gp-link,
+.gp-foot-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  margin: 4px 10px;
+  border-radius: 10px;
+
+  text-decoration: none !important;
+  white-space: nowrap;
+
+  color: #0d1f3c !important;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+/* main */
+.gp-link {
+  padding: 10px 14px;
+  font-weight: 700;
+  font-size: 17px;
+}
+
+/* footer */
+.gp-foot-link {
+  padding: 8px 14px;
+  font-weight: 600;
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+/* hover */
+.gp-link:hover,
+.gp-foot-link:hover {
+  background: linear-gradient(90deg, #b9d7f33b, #0a368862);
+  transform: translateX(3px);
+}
+
+/* active */
+.gp-link.active,
+.gp-foot-link.active {
+  background: linear-gradient(90deg, #bcd6f0, #0b3a92);
+}
+
+/* footer divider + version */
+.gp-footer {
+  padding: 8px 0 10px;
+}
+
+.gp-footer-divider {
+  height: 1px;
+  background: rgba(80, 120, 180, 0.35);
+  margin: 1px 0px 10px;
+}
+.logo-divider {
+  height: 1px;
+  background: rgba(80, 120, 180, 0.3);
+  margin: 1px 0px 10px;
+}
+
+.gp-version {
+  margin: 10px 14px 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.75);
+}
+
+.gp-settings-btn {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.gp-chevron {
+  margin-left: auto;
+  opacity: 0.7;
+  transition: transform 0.2s ease;
+  font-size: 14px;
+}
+
+.gp-chevron.rot {
+  transform: rotate(180deg);
+}
+
+.gp-submenu {
+  margin: 0 10px 8px;
+  padding: 6px;
+  border-radius: 12px;
+  background:none;
+  border: none;
+}
+
+.gp-sub-link {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 14px 12px;
+  border-radius: 10px;
+  text-decoration: none !important;
+  color: #0b0b0b !important;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.gp-sub-link:hover {
+  background: linear-gradient(90deg, #88c1f7, #225bc5) ;
+}
+
+.gp-sub-link.active {
+  background: linear-gradient(90deg, #6aa1d43b, #225bc562);
+}
+
+/* ===== Logo Fix ===== */
+.gp-brand {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px 10px;
+}
+
+.gp-logo {
+  max-width: 190px;
+  margin-left: -50px;
+  height: auto;
+  object-fit: contain;
+}
+
+/* ===== Dark Mode Override (must be at end of this file to win) ===== */
+.radiology-app.dark .sidebar,
+.radiology-app.dark .sidebar.gp-sidebar {
+  background: #1f2d45 !important;
+  border-right-color: rgba(159, 196, 255, 0.14) !important;
+}
+.radiology-app.dark .gp-brand,
+.radiology-app.dark .sidebar-brand {
+  background: #1f2d45 !important;
+}
+.radiology-app.dark .gp-footer {
+  background: transparent !important;
+}

@@ -1,0 +1,82 @@
+/* ══════════════════════════════════════════════════
+   DARK MODE — All Dashboard Modals
+   (ScanQueue, Calendar, BodyScanOverview)
+══════════════════════════════════════════════════ */
+
+/* CoreUI modal backdrop + dialog */
+.radiology-app.dark .modal-content {
+  background: #1f2d45 !important;
+  border-color: rgba(159, 196, 255, 0.14) !important;
+  color: #f4f8ff !important;
+}
+
+.radiology-app.dark .modal-header {
+  background: #1f2d45 !important;
+  border-bottom-color: rgba(159, 196, 255, 0.14) !important;
+}
+
+.radiology-app.dark .modal-title {
+  color: #f4f8ff !important;
+}
+
+.radiology-app.dark .modal-body {
+  background: #1f2d45 !important;
+  color: #f4f8ff !important;
+}
+
+.radiology-app.dark .modal-footer {
+  background: #1f2d45 !important;
+  border-top-color: rgba(159, 196, 255, 0.14) !important;
+}
+
+/* Close button */
+.radiology-app.dark .btn-close {
+  filter: invert(1) brightness(2) !important;
+}
+
+/* Inputs inside modals */
+.radiology-app.dark .modal-body input,
+.radiology-app.dark .modal-body textarea,
+.radiology-app.dark .modal-body select {
+  background: rgba(41, 73, 111, 0.5) !important;
+  border-color: rgba(159, 196, 255, 0.2) !important;
+  color: #f4f8ff !important;
+}
+
+.radiology-app.dark .modal-body input::placeholder,
+.radiology-app.dark .modal-body textarea::placeholder {
+  color: #9fb3d4 !important;
+}
+
+/* BodyScanOverview card inside fullscreen modal */
+.radiology-app.dark .body-overview-modal .modal-body {
+  background: #1f2d45 !important;
+}
+
+.radiology-app.dark .body-overview-modal .card {
+  background: #1f2d45 !important;
+  border-color: rgba(159, 196, 255, 0.14) !important;
+}
+
+.radiology-app.dark .body-overview-modal .card-header {
+  background: #1f2d45 !important;
+  border-bottom-color: rgba(159, 196, 255, 0.14) !important;
+}
+
+.radiology-app.dark .body-overview-modal h5,
+.radiology-app.dark .body-overview-modal h6 {
+  color: #f4f8ff !important;
+}
+
+.radiology-app.dark .body-overview-modal .text-muted {
+  color: #94a3b8 !important;
+}
+
+/* Calendar big modal panels */
+.radiology-app.dark .calendar-big-modal .modal-content {
+  background: #1f2d45 !important;
+}
+
+.radiology-app.dark .calendar-big-modal .modal-body {
+  background: #1f2d45 !important;
+}

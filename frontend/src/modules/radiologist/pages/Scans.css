@@ -1,0 +1,28 @@
+.scan-grid {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.scan-card {
+  cursor: pointer;
+  position: relative;
+}
+
+.thumbnail-container {
+  position: relative;
+  overflow: hidden;
+  width: 200px;
+  height: 200px;
+}
+
+.thumbnail-container img {
+  width: 100%;
+  height: 100%;
+  transition: transform 0.3s ease;
+}
+
+.thumbnail-container:hover img {
+  transform: scale(1.2); /* Magnify the image */
+  transform-origin: center; /* Zoom from center */
+}

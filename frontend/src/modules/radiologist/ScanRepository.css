@@ -1,0 +1,314 @@
+/* =========================
+   Scan Repository Styles
+========================= */
+
+.scan-repo .header-row {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.scan-repo .header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.scan-repo .header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  --cui-tertiary-bg: white;
+  --cui-secondary-bg: white;
+}
+
+.scan-repo .search-group {
+  min-width: 280px;
+}
+
+.scan-repo .loading {
+  text-align: center;
+  padding: 40px;
+  font-size: 18px;
+  color: #666;
+}
+
+/* Prevent whole page horizontal overflow */
+.scan-repo {
+  padding-bottom: 1px !important;
+}
+
+/* ===================================
+   CARD HEIGHT + SINGLE SCROLL AREA
+=================================== */
+
+.repo-card {
+  display: flex;
+  flex-direction: column;
+  height: 750px;
+  
+  top: -10px;
+  gap:-100;
+   /* adjust if needed */
+}
+
+.repo-card-body {
+  flex: 1;
+  overflow: hidden; /* IMPORTANT: stop page/card double scroll */
+  padding: 0;
+}
+
+.scan-repo .scan-table {
+  height: 100%;
+  display: block;
+
+  border: 1px solid #e6e6e6;
+  border-radius: 10px;
+  background: #fff;
+
+  overflow-y: auto;
+  overflow-x: auto;
+
+  width: 100%;
+}
+
+/* ===================================
+   TABLE GRID
+=================================== */
+
+.scan-repo .scan-row {
+  display: grid;
+
+  grid-template-columns:
+    110px
+    minmax(200px, 1.2fr)
+    minmax(260px, 1.6fr)
+    minmax(180px, 1fr)
+    70px
+    80px
+    170px
+    90px
+    140px;
+
+  align-items: center;
+  padding: 6px 10px;
+  gap: 4px;
+  border-bottom: 1px solid #efefef;
+}
+
+/* keep button aligned */
+.scan-repo .col.actions {
+  justify-self: start;
+}
+
+.scan-repo .scan-row:last-child {
+  border-bottom: none;
+}
+
+/* ✅ Sticky header row inside the scroll area */
+.scan-repo .scan-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #f6f8fb;
+  font-weight: 700;
+  color: #404b5a;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.scan-repo .scan-row .col {
+  font-size: 16px;
+  color: #2f3640;
+}
+
+.scan-repo .scan-row .col.case {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scan-repo .scan-row:hover {
+  background: #f9fbff;
+}
+
+/* Preview */
+.scan-repo .preview-thumb {
+  width: 72px;
+  height: 72px;
+  border-radius: 6px;
+  object-fit: cover;
+  border: 1px solid #e3e3e3;
+  background: #f0f2f5;
+  display: block;
+}
+
+.scan-repo .preview-thumb.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6c757d;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Organisation */
+.organisation {
+  min-width: 220px;
+}
+
+.org-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.org-logo-img {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: #fff;
+}
+
+.org-logo-fallback {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+.org-name-text {
+  font-weight: 500;
+  color: #1e293b;
+}
+
+/* Case id row */
+.scan-repo .case-id-row {
+  display: flex;
+  gap: 1px;
+  align-items: center;
+}
+
+.scan-repo .case-id-row input {
+  flex: 1;
+}
+
+.scan-repo .scan-row {
+  min-width: 1300px; /* force full width */
+}
+
+@media (max-width: 768px) {
+  .scan-repo .header-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .scan-repo .header-right {
+    flex-direction: column;
+  }
+
+  .scan-repo .search-group {
+    min-width: 100%;
+  }
+}
+
+/* ===================================
+   SEARCH AREA FIX (CoreUI InputGroup)
+=================================== */
+
+.scan-repo .search-group .input-group-text {
+  background: linear-gradient(90deg, #57a1eb, #07265f) !important;
+  color: #ffffff !important;
+  border: 1px solid #d1d5db !important;
+  font-weight: 500;
+}
+
+.scan-repo .search-group .form-control {
+  background: #ffffff !important;
+  border: 1px solid #d1d5db !important;
+  box-shadow: none !important;
+}
+
+.scan-repo .search-group .input-group-text {
+  border-right: none !important;
+}
+
+.scan-repo .search-group .form-control {
+  border-left: none !important;
+}
+
+.scan-repo .search-group .form-control:focus {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15) !important;
+}
+
+
+/* =========================
+   SWAP COLORS: Search <-> Open Viewer
+========================= */
+
+
+
+/* Open Viewer -> green (take from old Search) */
+.scan-repo .open-viewer-btn {
+  background: linear-gradient(90deg, #57a1eb, #07265f) !important;
+  border: none !important;
+  color: #ffffff !important;
+  font-weight: 700;
+  box-shadow: 0 6px 16px rgba(34, 105, 197, 0.25);
+}
+
+.scan-repo .open-viewer-btn:hover {
+  background: linear-gradient(90deg, #16a34a, #059669) !important;
+}
+
+
+.theme-btn-sm {
+  background: linear-gradient(90deg, #57a1eb, #07265f);
+  border: none;
+  color: white;
+  padding: 6px 14px;
+  font-weight: 500;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.theme-btn-sm:hover {
+  background: linear-gradient(90deg, #8eb0f086, #001e5bb4);
+  transform: translateY(-1px);
+}
+
+.theme-btn-sm:active {
+  transform: scale(0.98);
+}
+
+/* Make upload modal smaller + scroll inside */
+.upload-scan-modal .modal-dialog {
+  max-width: 520px;          /* ✅ control width */
+}
+
+.upload-scan-modal .modal-body {
+ 
+  max-height: 65vh;          /* ✅ control height */
+  overflow-y: auto;          /* ✅ scroll inside */
+}
+
+/* Optional: reduce padding a bit */
+.upload-scan-modal .modal-body {
+  padding: 14px 16px;
+}
+
+.upload-scan-modal .modal-header,
+.upload-scan-modal .modal-footer {
+  padding: 12px 16px;
+}

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<!--
+* CoreUI Free React.js Admin Template
+* @version v5.5.0
+* @link https://coreui.io/product/free-react-admin-template/
+* Copyright (c) 2025 creativeLabs Łukasz Holeczek
+* Licensed under MIT (https://github.com/coreui/coreui-free-react-admin-template/blob/main/LICENSE)
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="CoreUI for React - Open Source Bootstrap Admin Template">
+    <meta name="author" content="Łukasz Holeczek">
+    <meta name="keyword" content="Bootstrap,Admin,Template,Open,Source,CSS,SCSS,HTML,RWD,Dashboard,React">
+    <title>Onix AI</title>
+    <style>
+      .skiptranslate,
+      iframe.skiptranslate,
+      .goog-te-banner-frame,
+      .goog-te-gadget,
+      .goog-te-balloon-frame,
+      #goog-gt-tt,
+      .goog-tooltip,
+      [id^="goog-gt-"],
+      [class^="VIpgJd-"],
+      [class*="VIpgJd-ZVi9od"] {
+        display: none !important;
+        pointer-events: none !important;
+      }
+
+      html,
+      body {
+        top: 0 !important;
+        position: static !important;
+      }
+
+      .goog-text-highlight,
+      font[style*="background-color"] {
+        background: transparent !important;
+        box-shadow: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <noscript>
+      You need to enable JavaScript to run this app
+    </noscript>
+    <div id="root"></div>
+    <div id="google_translate_element" style="display:none;"></div>
+    <script>
+      (function patchGoogleTranslateReactInterop() {
+        const originalRemoveChild = Node.prototype.removeChild
+        const originalInsertBefore = Node.prototype.insertBefore
+
+        // Google Translate mutates DOM text nodes outside React's ownership.
+        // Keep this guard in place so route changes do not crash after translation.
+        Node.prototype.removeChild = function patchedRemoveChild(child) {
+          if (child && child.parentNode && child.parentNode !== this) {
+            return child.parentNode.removeChild(child)
+          }
+          if (!child || child.parentNode !== this) {
+            return child
+          }
+          return originalRemoveChild.call(this, child)
+        }
+
+        Node.prototype.insertBefore = function patchedInsertBefore(newNode, referenceNode) {
+          if (referenceNode && referenceNode.parentNode && referenceNode.parentNode !== this) {
+            return this.appendChild(newNode)
+          }
+          return originalInsertBefore.call(this, newNode, referenceNode)
+        }
+      })()
+
+      function googleTranslateElementInit() {
+        if (!window.google || !window.google.translate) return
+        new window.google.translate.TranslateElement(
+          {
+            pageLanguage: 'en',
+            includedLanguages: 'en,th',
+            layout: window.google.translate.TranslateElement.InlineLayout.SIMPLE,
+            autoDisplay: false,
+          },
+          'google_translate_element',
+        )
+      }
+    </script>
+    <script src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+    <script type="module" src="/src/index.js"></script>
+    <!-- built files will be auto injected -->
+  </body>
+</html>

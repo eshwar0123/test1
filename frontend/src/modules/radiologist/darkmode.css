@@ -1,0 +1,619 @@
+/* ════════════════════════════════════════════════════════════════
+   darkmode.css  –  Applied when .radiology-app.dark is present
+   All selectors are scoped to .radiology-app.dark to avoid leaking
+════════════════════════════════════════════════════════════════ */
+
+/* ── Core layout ── */
+.radiology-app.dark {
+  background-color: #0f172a !important;
+  background-image: url("/backgroundimg.png") !important;
+  background-size: 100% 100% !important;
+  background-position: center !important;
+  background-attachment: fixed !important;
+  background-repeat: no-repeat !important;
+  background-blend-mode: soft-light !important;
+  color: #e2e8f0 !important;
+}
+.radiology-app.dark .wrapper {
+  background: transparent !important;
+}
+.radiology-app.dark .body {
+  background: transparent !important;
+}
+
+/* ── Header — dark navy like admin reference ── */
+.radiology-app.dark .header {
+  background: #0f172a !important;
+  border-bottom-color: #1e293b !important;
+}
+.radiology-app.dark .header-logo-img {
+  filter: none;
+}
+.radiology-app.dark .header-nav-link {
+  color: #94a3b8 !important;
+}
+.radiology-app.dark .header-nav-link:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #e2e8f0 !important;
+}
+.radiology-app.dark .header-nav-link.active {
+  background: #1e40af !important;
+  color: #fff !important;
+}
+.radiology-app.dark .dm-toggle {
+  border-color: rgba(255,255,255,0.2) !important;
+  color: #94a3b8 !important;
+}
+.radiology-app.dark .dm-toggle:hover {
+  background: rgba(255,255,255,0.08) !important;
+  color: #f1f5f9 !important;
+}
+.radiology-app.dark .notif-bell {
+  border-color: rgba(255,255,255,0.2) !important;
+  color: #94a3b8 !important;
+}
+.radiology-app.dark .notif-bell:hover {
+  background: rgba(255,255,255,0.08) !important;
+  color: #f1f5f9 !important;
+}
+.radiology-app.dark .notif-badge {
+  border-color: #0f172a !important;
+}
+.radiology-app.dark .green-profile-toggle {
+  border-color: rgba(255,255,255,0.2) !important;
+}
+
+/* ── Sidebar (CoreUI CSidebar) ── */
+html body .radiology-app.dark .sidebar,
+html body .radiology-app.dark .gp-sidebar,
+html body .radiology-app.dark .sidebar.gp-sidebar,
+html body .radiology-app.dark .sidebar.gp-sidebar .simplebar-content-wrapper,
+html body .radiology-app.dark .sidebar.gp-sidebar .sidebar-nav,
+html body .radiology-app.dark .sidebar.gp-sidebar > div {
+  --cui-sidebar-bg: #1f2d45 !important;
+  --cui-sidebar-brand-bg: #1f2d45 !important;
+  --cui-sidebar-color: #c3d3ec !important;
+  background: #1f2d45 !important;
+  border-right-color: rgba(159, 196, 255, 0.14) !important;
+}
+html body .radiology-app.dark .sidebar-brand,
+html body .radiology-app.dark .gp-brand {
+  background: #1f2d45 !important;
+  border-bottom-color: rgba(159, 196, 255, 0.14) !important;
+}
+html body .radiology-app.dark .logo-divider {
+  background: rgba(159, 196, 255, 0.14) !important;
+}
+.radiology-app.dark .gp-link {
+  color: #c3d3ec !important;
+}
+.radiology-app.dark .gp-link:hover,
+.radiology-app.dark .gp-link.active {
+  background: rgba(41, 73, 111, 0.8) !important;
+  color: #f4f8ff !important;
+}
+.radiology-app.dark .gp-settings-btn {
+  color: #c3d3ec !important;
+  background: none !important;
+}
+.radiology-app.dark .gp-settings-btn:hover {
+  background: rgba(41, 73, 111, 0.8) !important;
+  color: #f4f8ff !important;
+}
+.radiology-app.dark .gp-submenu {
+  background: rgba(31, 45, 69, 0.6) !important;
+  border-color: rgba(159, 196, 255, 0.14) !important;
+}
+.radiology-app.dark .gp-foot-link {
+  color: #9fb3d4 !important;
+}
+.radiology-app.dark .gp-foot-link:hover {
+  color: #c3d3ec !important;
+}
+.radiology-app.dark .gp-version {
+  color: #9fb3d4 !important;
+}
+.radiology-app.dark .gp-footer-divider {
+  background: rgba(159, 196, 255, 0.14) !important;
+}
+.radiology-app.dark .gp-footer {
+  background: transparent !important;
+}
+
+/* ── Repository 1 page ── */
+.radiology-app.dark .r1-shell {
+  --r1-surface:      #1f2d45 !important;
+  --r1-surface-2:    #29496f !important;
+  --r1-border:       rgba(159, 196, 255, 0.14) !important;
+  --r1-text:         #f4f8ff !important;
+  --r1-text-muted:   #c3d3ec !important;
+  --r1-accent-light: #1e3a5f !important;
+  --r1-error-bg:     #3b1c1c !important;
+  --r1-warning-bg:   #3b2e1c !important;
+  --r1-success-bg:   #1c3b2a !important;
+  background: transparent !important;
+}
+.radiology-app.dark .r1-worklist {
+  background: transparent !important;
+  backdrop-filter: none !important;
+}
+.radiology-app.dark .r1-wl-header {
+  background: rgba(31, 45, 69, 0.85) !important;
+  backdrop-filter: blur(8px) !important;
+  border-color: rgba(159, 196, 255, 0.14) !important;
+}
+.radiology-app.dark .r1-detail {
+  background: rgba(31, 45, 69, 0.75) !important;
+  backdrop-filter: blur(8px) !important;
+  border-color: rgba(159, 196, 255, 0.14) !important;
+}
+.radiology-app.dark .r1-wl-body {
+  background: transparent !important;
+}
+.radiology-app.dark .r1-case-card {
+  background: rgba(31, 45, 69, 0.9) !important;
+  border-color: rgba(159, 196, 255, 0.14) !important;
+}
+.radiology-app.dark .r1-case-card:hover {
+  background: rgba(41, 73, 111, 0.95) !important;
+  border-color: #3b82f6 !important;
+}
+.radiology-app.dark .r1-case-card.r1-selected {
+  background: rgba(41, 73, 111, 0.95) !important;
+  border-color: #3b82f6 !important;
+}
+.radiology-app.dark .r1-case-card.r1-reading-card {
+  background: rgba(30, 45, 64, 0.9) !important;
+}
+.radiology-app.dark .r1-case-card.r1-reading-card.r1-selected {
+  background: rgba(41, 73, 111, 0.95) !important;
+}
+.radiology-app.dark .r1-chip {
+  background: rgba(41, 73, 111, 0.6) !important;
+  border-color: rgba(159, 196, 255, 0.14) !important;
+  color: #c3d3ec !important;
+}
+.radiology-app.dark .r1-chip:hover:not(.r1-chip-active) {
+  background: rgba(41, 73, 111, 0.9) !important;
+}
+.radiology-app.dark .r1-chip-active {
+  background: #1e3a5f !important;
+  border-color: #3b82f6 !important;
+  color: #60a5fa !important;
+}
+.radiology-app.dark .r1-select-filter {
+  background: rgba(41, 73, 111, 0.6) !important;
+  border-color: rgba(159, 196, 255, 0.14) !important;
+  color: #c3d3ec !important;
+  box-shadow: 0 1px 4px rgba(7, 20, 39, 0.28) !important;
+}
+.radiology-app.dark .r1-select-filter:hover {
+  background: rgba(41, 73, 111, 0.9) !important;
+}
+.radiology-app.dark .r1-select-filter-label,
+.radiology-app.dark .r1-select-filter-control {
+  color: #c3d3ec !important;
+}
+.radiology-app.dark .r1-select-filter-control {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color-scheme: dark;
+}
+.radiology-app.dark .r1-select-filter-control option {
+  background: #1f2d45 !important;
+  color: #f4f8ff !important;
+}
+.radiology-app.dark .r1-select-filter-control option:checked,
+.radiology-app.dark .r1-select-filter-control option:hover {
+  background: #1e3a5f !important;
+  color: #60a5fa !important;
+}
+.radiology-app.dark .r1-select-filter.r1-chip-active {
+  background: #1e3a5f !important;
+  border-color: #3b82f6 !important;
+}
+.radiology-app.dark .r1-select-filter.r1-chip-active .r1-select-filter-label,
+.radiology-app.dark .r1-select-filter.r1-chip-active .r1-select-filter-control {
+  color: #60a5fa !important;
+}
+.radiology-app.dark .r1-detail-header {
+  background: rgba(31, 45, 69, 0.9) !important;
+  border-color: rgba(159, 196, 255, 0.14) !important;
+}
+.radiology-app.dark .r1-detail-section {
+  border-color: rgba(159, 196, 255, 0.14) !important;
+}
+.radiology-app.dark .r1-detail-empty {
+  color: #64748b !important;
+}
+.radiology-app.dark .r1-de-title {
+  color: #f1f5f9 !important;
+}
+/* Detail panel text */
+.radiology-app.dark .r1-dh-name {
+  color: #f1f5f9 !important;
+}
+.radiology-app.dark .r1-dh-id {
+  color: #94a3b8 !important;
+}
+.radiology-app.dark .r1-ds-label {
+  color: #94a3b8 !important;
+}
+.radiology-app.dark .r1-dl {
+  color: #94a3b8 !important;
+}
+.radiology-app.dark .r1-dv {
+  color: #f1f5f9 !important;
+}
+.radiology-app.dark .r1-case-id,
+.radiology-app.dark .r1-case-name {
+  color: #f1f5f9 !important;
+}
+.radiology-app.dark .r1-case-meta,
+.radiology-app.dark .r1-case-wait {
+  color: #94a3b8 !important;
+}
+.radiology-app.dark .r1-wl-title {
+  color: #f1f5f9 !important;
+}
+.radiology-app.dark .r1-wl-sub {
+  color: #94a3b8 !important;
+}
+.radiology-app.dark .r1-group-label {
+  color: #94a3b8 !important;
+}
+/* Priority badges dark */
+.radiology-app.dark .r1-pri-stat {
+  background: #3b1c1c !important;
+  color: #f87171 !important;
+}
+.radiology-app.dark .r1-pri-urgent {
+  background: #3b2e1c !important;
+  color: #fbbf24 !important;
+}
+.radiology-app.dark .r1-pri-routine {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #94a3b8 !important;
+}
+/* Status pills dark */
+.radiology-app.dark .r1-status-review {
+  background: #2e1a4a !important;
+  color: #c084fc !important;
+}
+.radiology-app.dark .r1-status-pending {
+  background: #3b2e1c !important;
+  color: #fbbf24 !important;
+}
+.radiology-app.dark .r1-status-completed {
+  background: #1c3b2a !important;
+  color: #4ade80 !important;
+}
+.radiology-app.dark .r1-status-reading {
+  background: #1e3a5f !important;
+  color: #60a5fa !important;
+}
+/* Action buttons */
+.radiology-app.dark .r1-btn-secondary {
+  background: rgba(41, 73, 111, 0.6) !important;
+  border-color: rgba(159, 196, 255, 0.14) !important;
+  color: #f4f8ff !important;
+}
+.radiology-app.dark .r1-btn-secondary:hover {
+  background: rgba(41, 73, 111, 0.9) !important;
+}
+.radiology-app.dark .r1-img-thumb {
+  border-color: rgba(159, 196, 255, 0.14) !important;
+  background: rgba(31, 45, 69, 0.9) !important;
+}
+.radiology-app.dark .r1-shift-card {
+  background: rgba(41, 73, 111, 0.6) !important;
+  border-color: rgba(159, 196, 255, 0.14) !important;
+}
+.radiology-app.dark .r1-tat-box {
+  background: rgba(41, 73, 111, 0.6) !important;
+  border-color: rgba(159, 196, 255, 0.14) !important;
+}
+/* Upload modal dark mode */
+.radiology-app.dark .r1-modal {
+  background: #1f2d45 !important;
+}
+.radiology-app.dark .r1-modal-header,
+.radiology-app.dark .r1-modal-footer {
+  border-color: rgba(159, 196, 255, 0.14) !important;
+}
+.radiology-app.dark .r1-modal-title {
+  color: #f1f5f9 !important;
+}
+.radiology-app.dark .r1-modal-close {
+  color: #94a3b8 !important;
+}
+.radiology-app.dark .r1-modal-close:hover {
+  background: #334155 !important;
+}
+.radiology-app.dark .r1-form-label {
+  color: #94a3b8 !important;
+}
+.radiology-app.dark .r1-form-input {
+  background: rgba(41, 73, 111, 0.4) !important;
+  border-color: rgba(159, 196, 255, 0.14) !important;
+  color: #f4f8ff !important;
+}
+.radiology-app.dark .r1-form-hint {
+  color: #9fb3d4 !important;
+}
+/* Report modal dark mode */
+.radiology-app.dark .r1-report-body {
+  background: #1f2d45 !important;
+}
+.radiology-app.dark .r1-rpt-logo {
+  color: #60a5fa !important;
+}
+.radiology-app.dark .r1-rpt-facility {
+  color: #94a3b8 !important;
+}
+.radiology-app.dark .r1-rpt-divider {
+  background: #334155 !important;
+}
+.radiology-app.dark .r1-rpt-section-title {
+  color: #f1f5f9 !important;
+}
+.radiology-app.dark .r1-rpt-value {
+  color: #e2e8f0 !important;
+}
+.radiology-app.dark .r1-rpt-text {
+  color: #cbd5e1 !important;
+}
+.radiology-app.dark .r1-rpt-sig-line {
+  background: #64748b !important;
+}
+.radiology-app.dark .r1-completed-badge {
+  background: #1c3b2a !important;
+  color: #4ade80 !important;
+  border-color: #22c55e !important;
+}
+.radiology-app.dark .r1-upload-btn {
+  background: #3b82f6 !important;
+}
+.radiology-app.dark .r1-upload-btn:hover {
+  background: #2563eb !important;
+}
+.radiology-app.dark .r1-score-track,
+.radiology-app.dark .r1-tp-track,
+.radiology-app.dark .r1-progress-bar {
+  background: #334155;
+}
+
+/* ── ScanRepository page ── */
+.radiology-app.dark .scan-repo,
+.radiology-app.dark .repo-card {
+  background: rgba(31, 45, 69, 0.85) !important;
+  border-color: rgba(159, 196, 255, 0.14) !important;
+  color: #f4f8ff !important;
+}
+.radiology-app.dark .repo-card .card-header,
+.radiology-app.dark .repo-card .header-row {
+  background: rgba(41, 73, 111, 0.6) !important;
+  border-color: rgba(159, 196, 255, 0.14) !important;
+  color: #f4f8ff !important;
+}
+.radiology-app.dark .scan-row {
+  border-color: rgba(159, 196, 255, 0.14) !important;
+  color: #f4f8ff !important;
+}
+.radiology-app.dark .scan-row:hover {
+  background: rgba(41, 73, 111, 0.5) !important;
+}
+.radiology-app.dark .scan-header {
+  background: rgba(31, 45, 69, 0.9) !important;
+  color: #c3d3ec !important;
+}
+.radiology-app.dark .preview-thumb.placeholder {
+  background: rgba(41, 73, 111, 0.6) !important;
+  color: #c3d3ec !important;
+}
+
+/* ── Dashboard / Summary page ── */
+.radiology-app.dark .card,
+.radiology-app.dark .c-card {
+  background: rgba(31, 45, 69, 0.85) !important;
+  border-color: rgba(159, 196, 255, 0.14) !important;
+  color: #f4f8ff !important;
+}
+.radiology-app.dark .card-header {
+  background: rgba(41, 73, 111, 0.6) !important;
+  border-color: rgba(159, 196, 255, 0.14) !important;
+  color: #f4f8ff !important;
+}
+
+/* ── Dashboard scan inner cards (Due Today / Upcoming) ── */
+.radiology-app.dark .card button[style*="background: #ffffff"],
+.radiology-app.dark .card button[style*='background: "#ffffff"'] {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #e2e8f0 !important;
+}
+
+/* ── Dashboard calendar ── dark mode override ── */
+.radiology-app.dark .card-body button[style*="#1e40ff"] {
+  background: #3b82f6 !important;
+}
+
+/* ── Dashboard footer area ── */
+.radiology-app.dark .gp-footer {
+  background: transparent !important;
+}
+.radiology-app.dark .gp-footer-divider {
+  background: #334155 !important;
+}
+
+/* ── Forms & Inputs ── */
+.radiology-app.dark input,
+.radiology-app.dark select,
+.radiology-app.dark textarea,
+.radiology-app.dark .form-control,
+.radiology-app.dark .form-select {
+  background: rgba(41, 73, 111, 0.4) !important;
+  border-color: rgba(159, 196, 255, 0.14) !important;
+  color: #f4f8ff !important;
+}
+.radiology-app.dark input::placeholder { color: #9fb3d4 !important; }
+.radiology-app.dark .input-group-text {
+  background: rgba(41, 73, 111, 0.6) !important;
+  border-color: rgba(159, 196, 255, 0.14) !important;
+  color: #c3d3ec !important;
+}
+
+/* ── Modals ── */
+.radiology-app.dark .modal-content {
+  background: #1f2d45 !important;
+  border-color: rgba(159, 196, 255, 0.14) !important;
+  color: #f4f8ff !important;
+}
+.radiology-app.dark .modal-header,
+.radiology-app.dark .modal-footer {
+  border-color: rgba(159, 196, 255, 0.14) !important;
+}
+.radiology-app.dark .btn-close { filter: invert(1); }
+
+/* ── Generic text & borders ── */
+.radiology-app.dark h1,
+.radiology-app.dark h2,
+.radiology-app.dark h3,
+.radiology-app.dark h4,
+.radiology-app.dark h5,
+.radiology-app.dark h6,
+.radiology-app.dark p,
+.radiology-app.dark span,
+.radiology-app.dark label {
+  color: inherit;
+}
+.radiology-app.dark .text-muted { color: #9fb3d4 !important; }
+.radiology-app.dark .border      { border-color: rgba(159, 196, 255, 0.14) !important; }
+
+/* ── Profile / Accounts / Help / Terms / Privacy pages ── */
+.radiology-app.dark .container-fluid > *,
+.radiology-app.dark section,
+.radiology-app.dark article {
+  color: #f4f8ff;
+}
+
+/* ── Profile page ── */
+.radiology-app.dark .profile-box {
+  background: rgba(31, 45, 69, 0.85) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
+}
+.radiology-app.dark .profile-row-new {
+  border-bottom-color: rgba(159, 196, 255, 0.14) !important;
+}
+.radiology-app.dark .profile-row-new .label {
+  color: #f4f8ff !important;
+}
+.radiology-app.dark .profile-row-new .value {
+  color: #c3d3ec !important;
+}
+.radiology-app.dark .file-name {
+  color: #9fb3d4 !important;
+}
+.radiology-app.dark .signature-preview {
+  background: rgba(41, 73, 111, 0.4) !important;
+  border-color: rgba(159, 196, 255, 0.14) !important;
+}
+.radiology-app.dark .profile-card {
+  background: rgba(31, 45, 69, 0.85) !important;
+  border-color: rgba(159, 196, 255, 0.14) !important;
+}
+
+/* ── Accounts page ── */
+.radiology-app.dark .theme-btn-sm {
+  background: linear-gradient(90deg, #6ab4f7, #1a3f7a) !important;
+  color: #ffffff !important;
+}
+.radiology-app.dark .theme-btn-sm:hover {
+  background: linear-gradient(90deg, #8ec8ff, #2a5a9e) !important;
+}
+
+/* ── Settings page — text legibility ── */
+.radiology-app.dark .text-body-secondary {
+  color: #c3d3ec !important;
+}
+.radiology-app.dark h4,
+.radiology-app.dark h6 {
+  color: #f4f8ff !important;
+}
+.radiology-app.dark .fw-semibold {
+  color: #c3d3ec !important;
+}
+
+
+/* ── Header dark mode (notifications, brand text, disclaimer) ── */
+.radiology-app.dark .header-brand-text {
+  color: #f4f8ff !important;
+}
+.radiology-app.dark .demo-disclaimer {
+  color: #c3d3ec !important;
+}
+.radiology-app.dark .notif-dropdown {
+  background: #1f2d45 !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
+}
+.radiology-app.dark .notif-dropdown-header {
+  border-bottom-color: rgba(159, 196, 255, 0.14) !important;
+}
+.radiology-app.dark .notif-dropdown-title {
+  color: #f4f8ff !important;
+}
+.radiology-app.dark .notif-item {
+  border-bottom-color: rgba(159, 196, 255, 0.14) !important;
+}
+.radiology-app.dark .notif-item:hover {
+  background: rgba(41, 73, 111, 0.5) !important;
+}
+.radiology-app.dark .notif-item.unread {
+  background: rgba(41, 73, 111, 0.7) !important;
+}
+.radiology-app.dark .notif-item-title {
+  color: #f4f8ff !important;
+}
+.radiology-app.dark .notif-item-desc {
+  color: #c3d3ec !important;
+}
+.radiology-app.dark .notif-badge {
+  border-color: #1f2d45 !important;
+}
+
+/* ── ScanRepository: match dashboard card colors ── */
+.radiology-app.dark .scan-repo .scan-table {
+  background: rgba(31, 45, 69, 0.85) !important;
+  border-color: rgba(159, 196, 255, 0.14) !important;
+}
+.radiology-app.dark .scan-repo .scan-row .col {
+  color: #f4f8ff !important;
+}
+.radiology-app.dark .scan-repo .loading {
+  color: #c3d3ec !important;
+}
+.radiology-app.dark .org-name-text {
+  color: #f4f8ff !important;
+}
+.radiology-app.dark .org-logo-img {
+  border-color: rgba(159, 196, 255, 0.14) !important;
+  background: rgba(31, 45, 69, 0.9) !important;
+}
+.radiology-app.dark .org-logo-fallback {
+  background: rgba(41, 73, 111, 0.6) !important;
+  color: #c3d3ec !important;
+}
+.radiology-app.dark .scan-repo .header-right {
+  --cui-tertiary-bg: transparent;
+  --cui-secondary-bg: transparent;
+}
+.radiology-app.dark .scan-repo .search-group .form-control {
+  background: rgba(41, 73, 111, 0.4) !important;
+  border-color: rgba(159, 196, 255, 0.14) !important;
+  color: #f4f8ff !important;
+}
+.radiology-app.dark .scan-repo .search-group .form-control::placeholder {
+  color: #9fb3d4 !important;
+}
