@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { actingReportUserId } from "../utils/actingReportUserId";
 import {
   buildExportReportHtml as buildExportReportHtmlMarkup,
   downloadReportPdfFromHtml,
@@ -353,6 +354,7 @@ export default function useViewerReportChat({
     const saveReportChanges = async () => {
       try {
         const uid =
+          actingReportUserId() ||
           reportData?.user_id ||
           localStorage.getItem("user_id") ||
           (() => {
@@ -679,21 +681,36 @@ export default function useViewerReportChat({
         // Study Date as dd/mm/yyyy. Take the date part of an ISO string as-is so a
         // timezone offset can't shift the day.
         const raw = String(reportData.scan_datetime);
-        const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-        let val = m ? `${m[3]}/${m[2]}/${m[1]}` : "";
-        if (!val) {
-          const d = new Date(raw);
-          if (!isNaN(d.getTime())) {
-            const pad = (n) => String(n).padStart(2, "0");
-            val = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
-          }
+        const pad = (n) => String(n).padStart(2, "0");
+        let val = "";
+        const hasTime = /[T ]\d{2}:\d{2}/.test(raw);
+        const d = new Date(raw);
+        if (hasTime && !isNaN(d.getTime())) {
+          // Study Date & Time (local) - round-trips what extractReportFields saved.
+          val = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        } else {
+          const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+          val = m ? `${m[3]}/${m[2]}/${m[1]}` : "";
+          if (!val && !isNaN(d.getTime())) val = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
         }
         const scanEl = root.querySelector(".report-scan-editor");
         if (val && scanEl) scanEl.innerText = val;
       }
 
-      if (reportData.clinical_indication)
-        root.querySelector(".report-clinical-indication").innerText = reportData.clinical_indication;
+      if (reportData.clinical_indication) {
+        const ciEl = root.querySelector(".report-clinical-indication");
+        if (ciEl) ciEl.innerText = reportData.clinical_indication;
+      }
+
+      // Report Submit: when the report was submitted (dd/mm/yyyy HH:MM).
+      if (reportData.completed_at) {
+        const cd = new Date(reportData.completed_at);
+        const subEl = root.querySelector(".report-submit-editor");
+        if (subEl && !isNaN(cd.getTime())) {
+          const p2 = (n) => String(n).padStart(2, "0");
+          subEl.innerText = `${p2(cd.getDate())}/${p2(cd.getMonth() + 1)}/${cd.getFullYear()} ${p2(cd.getHours())}:${p2(cd.getMinutes())}`;
+        }
+      }
 
       const blocks = Array.from(root.querySelectorAll(".report-answer.block"));
       console.log("[initReportTemplate] DEBUG reportData fields", {
@@ -718,6 +735,7 @@ export default function useViewerReportChat({
   // ✅ COLUMN-WISE SAVE (PUT /reports/{case_id})
   const saveReportToDb = async (modeOverride) => {
     const uid =
+      actingReportUserId() ||
       reportData?.user_id ||
       localStorage.getItem("user_id") ||
       (() => {
@@ -944,6 +962,7 @@ export default function useViewerReportChat({
   // Mark Complete — copies last_saved → main columns + status='completed'
   const markComplete = async () => {
     const uid =
+      actingReportUserId() ||
       reportData?.user_id ||
       localStorage.getItem("user_id") ||
       (() => {
@@ -1066,6 +1085,7 @@ export default function useViewerReportChat({
     // ✅ AUTO-SAVE: Persist AI report edits to database so changes survive navigation
     try {
       const uid =
+        actingReportUserId() ||
         reportData?.user_id ||
         localStorage.getItem("user_id") ||
         (() => {

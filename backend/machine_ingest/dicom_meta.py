@@ -117,11 +117,30 @@ def map_dicom_modality(raw: Any) -> Optional[str]:
     return _MODALITY_TEXT_MAP.get(s, s)
 
 
+def parse_study_type(raw: Any) -> Optional[str]:
+    """'Head^00_HEADSEQ_BRHAMSHAKTI (Adult)' -> 'Head'.
+    Only a '^' triggers parsing (keep the text before the first '^');
+    anything else, e.g. 'CT Brain (Adult)', is kept exactly as is."""
+    s = str(raw or "").strip()
+    token = s.split("^", 1)[0].strip()
+    if not token or token.lower() in PLACEHOLDERS:
+        return None
+    return token
+
+
+def study_type_from_dataset(ds) -> Optional[str]:
+    """Priority: BodyPartExamined, then StudyDescription, SeriesDescription,
+    ProtocolName — first one that parses to a token wins."""
+    for tag in ("BodyPartExamined", "StudyDescription", "SeriesDescription", "ProtocolName"):
+        val = parse_study_type(getattr(ds, tag, None))
+        if val:
+            return val
+    return None
+
+
 def extract_case_metadata(ds) -> Dict[str, Any]:
     """ds — a pydicom Dataset. Returns the fields needed to build a
     case_meta dict matching organization/router.py's bulk-submit shape."""
-    study_desc = str(getattr(ds, "StudyDescription", "") or "").strip()
-    body_part = str(getattr(ds, "BodyPartExamined", "") or "").strip()
 
     return {
         "patient_name": normalise_person_name(getattr(ds, "PatientName", None)),
@@ -132,7 +151,7 @@ def extract_case_metadata(ds) -> Dict[str, Any]:
         "study_date_str": format_study_date(getattr(ds, "StudyDate", None)),
         "study_datetime_str": study_datetime_from_dataset(ds),
         "modality_text": map_dicom_modality(getattr(ds, "Modality", None)),
-        "study_type_text": (study_desc or body_part or None),
+        "study_type_text": study_type_from_dataset(ds),
         "referring_doctor": normalise_person_name(getattr(ds, "ReferringPhysicianName", None)),
         # (0008,0080) — the hospital / centre that produced the study. Used to route
         # a case to its organization when the S3 folder name doesn't match.

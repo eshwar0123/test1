@@ -123,7 +123,9 @@ const stats = [
   { value:'99.9%',label:'Platform uptime' },
 ]
 
-export default function OrganizationRegister() {
+export default function OrganizationRegister({ role = 'organization' }) {
+  const ROLE = role   // 'organization' | 'technician' (technician username = organization name)
+  const isTech = role === 'technician'
   const navigate  = useNavigate()
   const location  = useLocation()
   const [inviteToken,setInviteToken]   = useState(null)
@@ -203,7 +205,7 @@ export default function OrganizationRegister() {
           } catch (err) { console.error('Failed to link invite:', err) }
         }
         setError('Account created successfully!')
-        setTimeout(()=>navigate('/organization/login'),1500)
+        setTimeout(()=>navigate(isTech ? '/technician/login' : '/organization/login'),1500)
       } else setError(res.data.message||'Registration failed')
     } catch (err) { console.error(err); setError('Registration failed! Please try again.') }
   }
@@ -297,7 +299,7 @@ export default function OrganizationRegister() {
                   <OrgIcon size={26} color={T.teal}/>
                 </div>
                 <div>
-                  <div style={{fontSize:'18px',fontWeight:700,color:T.textDark}}>Create Organization</div>
+                  <div style={{fontSize:'18px',fontWeight:700,color:T.textDark}}>{isTech ? 'Create Technician Account' : 'Create Organization'}</div>
                   <div style={{fontSize:'12px',color:T.textLight,marginTop:2}}>Hospital & Healthcare Institution</div>
                 </div>
               </div>
@@ -418,7 +420,7 @@ export default function OrganizationRegister() {
                   </div>
 
                   <button type="submit" style={{width:'100%',padding:'12px',background:`linear-gradient(135deg,${T.teal},${T.tealDark})`,color:'#fff',border:'none',borderRadius:'10px',fontSize:'14px',fontWeight:600,cursor:'pointer',fontFamily:'inherit',marginBottom:14,letterSpacing:'0.02em'}}>
-                    Register Organization
+                    {isTech ? 'Register Technician' : 'Register Organization'}
                   </button>
                 </>
               )}
@@ -434,7 +436,7 @@ export default function OrganizationRegister() {
             {!inviteToken&&(
               <div style={{textAlign:'center',marginTop:16,fontSize:'12px',color:T.textLight}}>
                 Already registered?{' '}
-                <span onClick={()=>navigate('/organization/login')} style={{color:T.teal,fontWeight:600,cursor:'pointer',textDecoration:'underline'}}>Sign in here</span>
+                <span onClick={()=>navigate(isTech ? '/technician/login' : '/organization/login')} style={{color:T.teal,fontWeight:600,cursor:'pointer',textDecoration:'underline'}}>Sign in here</span>
               </div>
             )}
           </div>

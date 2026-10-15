@@ -1,5 +1,6 @@
 // frontend\radiologist\ViewerSidePanel.js
 import React, { useEffect, useRef, useState } from "react";
+import { actingReportUserId } from "../utils/actingReportUserId";
 import { CButton } from "@coreui/react";
 import { BACKEND_URL, RADIOLOGIST_PROFILE } from "../utils/constants";
 import onixIcon from "/icon.png";
@@ -621,9 +622,9 @@ export default function ViewerSidePanel({
     } catch (_e) { /* history fill is best-effort */ }
 
     const pad = (n) => String(n).padStart(2, "0");
-    // Date & Time: the DICOM study date/time first (same as the viewer overlay), then
-    // bulk_uploads.created_at, then the report's saved scan time.
-    let scanText = (dicomStudyDateTime || caseHistory?.study_time || "").toString().trim();
+    // Study Date & Time: the case table's value first (bulk_uploads.created_at via
+    // /cases/{id}/history), then the DICOM overlay, then the report's saved scan time.
+    let scanText = (caseHistory?.study_time || dicomStudyDateTime || "").toString().trim();
     if (!scanText && reportData?.scan_datetime) {
       const d = new Date(reportData.scan_datetime);
       if (!isNaN(d.getTime())) {
@@ -638,16 +639,29 @@ export default function ViewerSidePanel({
     // ── Built-in template header → bordered two-column grid.
     try {
       const escH = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-      const dm = scanText.match(/^(\d{4})-(\d{2})-(\d{2})/);
-      const studyDate = dm ? `${dm[3]}/${dm[2]}/${dm[1]}` : scanText;
+      // Study Date & Time as dd/mm/yyyy HH:MM (time kept when the source has one).
+      const dm = scanText.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/);
+      const studyDate = dm ? `${dm[3]}/${dm[2]}/${dm[1]}${dm[4] ? ` ${dm[4]}:${dm[5]}` : ""}` : scanText;
+      // Report Submit: when the report was submitted (reports.completed_at); empty
+      // until then - the PDF export stamps the submit time into any empty cell.
+      let submitText = "";
+      if (reportData?.completed_at) {
+        const cd = new Date(reportData.completed_at);
+        if (!isNaN(cd.getTime())) {
+          submitText = `${pad(cd.getDate())}/${pad(cd.getMonth() + 1)}/${cd.getFullYear()} ${pad(cd.getHours())}:${pad(cd.getMinutes())}`;
+        }
+      }
+      // The old Investigation value is still carried (hidden) so clinical_indication keeps saving.
+      const hiddenInvestigation =
+        `<span class="report-clinical-indication" style="display:none" contenteditable="false">${escH(investigation)}</span>`;
       const cell = (label, value, cls) =>
         `<td style="border:1px solid #222;padding:8px 10px;width:50%;vertical-align:middle;"><b>${label}:</b> ` +
         `<span${cls ? ` class="${cls}"` : ""} contenteditable="true">${escH(value)}</span></td>`;
       const gridHtml =
         `<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px;table-layout:fixed;">` +
-        `<tr>${cell("Patient Id", dicomPatientId || caseId || "")}${cell("Study Date", studyDate, "report-scan-editor")}</tr>` +
+        `<tr>${cell("Patient Id", dicomPatientId || caseId || "")}${cell("Study Date &amp; Time", studyDate, "report-scan-editor")}</tr>` +
         `<tr>${cell("Patient Name", patientName || "")}${cell("Referring Doctor", reportData?.referring_doctor || "", "report-ref-doctor")}</tr>` +
-        `<tr>${cell("Age / Sex", ageText || sexText ? `${patientAge || "-"}/${sexText || "-"}` : "")}${cell("Investigation", investigation, "report-clinical-indication")}</tr>` +
+        `<tr>${cell("Age / Sex", ageText || sexText ? `${patientAge || "-"}/${sexText || "-"}` : "")}${cell("Report Submit", submitText, "report-submit-editor").replace("</td>", `${hiddenInvestigation}</td>`)}</tr>` +
         `</table>`;
       headerTables.forEach((table) => { table.outerHTML = gridHtml; });
     } catch (_e) { /* header grid is best-effort */ }
@@ -662,6 +676,7 @@ export default function ViewerSidePanel({
       { re: /^(referring\s*(doctor|physician)|referred\s*by|ref\.?\s*(doctor|dr\.?))$/, value: () => reportData?.referring_doctor || "", cls: "report-ref-doctor" },
       { re: /^(date\s*(&|and)\s*time|date\s*\/\s*time|study\s*date|scan\s*date|date|exam\s*date)$/, value: () => scanText, cls: "report-scan-editor" },
       { re: /^(investigation|clinical\s*indication|examination|study)$/, value: () => investigation, cls: "report-clinical-indication" },
+      { re: /^report\s*submit(ted)?$/, value: () => "", cls: "report-submit-editor" },
     ];
 
     // ── Signature block: same card the normal report shows (signature image,
@@ -943,6 +958,38 @@ export default function ViewerSidePanel({
 
   // Patient history (typed text + optional attached file) for the Metadata tab.
   const [caseHistory, setCaseHistory] = useState(null); // { history, history_file_name, history_url }
+
+  // Study Date & Time / Report Submit come from the tables (case history + saved report).
+  // They can arrive after the editor was built (technician report-only mode opens the
+  // editor before the case history loads), so fill any still-empty cell when they do.
+  useEffect(() => {
+    const root = reportEditorRef?.current;
+    if (!root || !showReport) return;
+    const p2 = (n) => String(n).padStart(2, "0");
+    let src = (caseHistory?.study_time || dicomStudyDateTime || "").toString().trim();
+    if (!src && reportData?.scan_datetime) {
+      const d = new Date(reportData.scan_datetime);
+      if (!isNaN(d.getTime())) {
+        src = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+      }
+    }
+    const m = src.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/);
+    const studyText = m ? `${m[3]}/${m[2]}/${m[1]}${m[4] ? ` ${m[4]}:${m[5]}` : ""}` : src;
+    let submitText = "";
+    if (reportData?.completed_at) {
+      const cd = new Date(reportData.completed_at);
+      if (!isNaN(cd.getTime())) {
+        submitText = `${p2(cd.getDate())}/${p2(cd.getMonth() + 1)}/${cd.getFullYear()} ${p2(cd.getHours())}:${p2(cd.getMinutes())}`;
+      }
+    }
+    const fill = (sel, val) => {
+      const el = root.querySelector(sel);
+      if (el && val && !(el.textContent || "").trim()) el.innerText = val;
+    };
+    fill(".report-scan-editor", studyText);
+    fill(".report-submit-editor", submitText);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showReport, caseHistory?.study_time, dicomStudyDateTime, reportData?.scan_datetime, reportData?.completed_at]);
   useEffect(() => {
     setCaseHistory(null);
     if (!backendUrl || !caseId) return;
@@ -962,8 +1009,9 @@ export default function ViewerSidePanel({
     if (!backendUrl || !caseId) return;
     setHistoryLoading(true);
     try {
-      const versionsUrl = currentUserId
-        ? `${backendUrl}/radiology/reports/${encodeURIComponent(caseId)}/versions?user_id=${encodeURIComponent(currentUserId)}`
+      const reportUid = actingReportUserId() || currentUserId;
+      const versionsUrl = reportUid
+        ? `${backendUrl}/radiology/reports/${encodeURIComponent(caseId)}/versions?user_id=${encodeURIComponent(reportUid)}`
         : `${backendUrl}/radiology/reports/${encodeURIComponent(caseId)}/versions`;
       const res = await fetch(versionsUrl);
       const json = await res.json().catch(() => null);
@@ -999,7 +1047,7 @@ export default function ViewerSidePanel({
           body: JSON.stringify({
             html,
             label: label || "Snapshot",
-            user_id: currentUserId || null,
+            user_id: actingReportUserId() || currentUserId || null,
           }),
         }
       );

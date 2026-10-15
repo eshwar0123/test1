@@ -41,6 +41,7 @@
   import ViewerHeader from "./DicomViewer/components/ViewerHeader";
   import ViewerImageOverlay from "./DicomViewer/components/ViewerImageOverlay";
   import ViewerSidePanel from "./DicomViewer/components/ViewerSidePanel";
+  import { actingReportUserId } from "./DicomViewer/utils/actingReportUserId";
   import NiftiToolbar from "./DicomViewer/nifti/components/NiftiToolbar";
   import NiftiCanvasGrid from "./DicomViewer/nifti/components/NiftiCanvasGrid";
   import CornerstoneNiftiGrid from "./DicomViewer/nifti/components/CornerstoneNiftiGrid";
@@ -1529,13 +1530,39 @@
     };
     const [reportData, setReportData] = useState(null);
     const [reportExists, setReportExists] = useState(false);
+
+    // Technician "report only" mode (opened from the technician Case Queue edit icon):
+    // skip the viewer, open the report editor straight away with the viewer column
+    // collapsed, and go back to the queue when the editor is closed.
+    const reportOnly = !!location.state?.reportOnly;
+    const openReportRef = useRef(null);
+    const reportOnlyOpenedRef = useRef(false);
+    useEffect(() => {
+      if (!reportOnly) return undefined;
+      const openNow = () => {
+        if (reportOnlyOpenedRef.current || !openReportRef.current) return;
+        reportOnlyOpenedRef.current = true;
+        Promise.resolve(openReportRef.current()).finally(() => setReportViewerCollapsed(true));
+      };
+      if (reportData) openNow();
+      const t = setTimeout(openNow, 2500);   // fallback if the saved report never loads
+      return () => clearTimeout(t);
+    }, [reportOnly, reportData]);
+    const closeReportOnly = (v) => {
+      const next = typeof v === "function" ? v(true) : v;
+      setShowReport(next);
+      if (!next) {
+        try { if (document.fullscreenElement) document.exitFullscreen?.(); } catch { /* ignore */ }
+        navigate(-1);
+      }
+    };
     const [latestReportVersionHtml, setLatestReportVersionHtml] = useState(null);
     const [dbAnnotations, setDbAnnotations] = useState([]);
 
     // Step 2: Fetch saved report on case load
     useEffect(() => {
       if (!caseId) return;
-      const uid = localStorage.getItem("user_id") || (() => {
+      const uid = actingReportUserId() || localStorage.getItem("user_id") || (() => {
         try { return JSON.parse(localStorage.getItem("auth") || "{}").userId || null; } catch { return null; }
       })();
       if (!uid) return;
@@ -1565,7 +1592,7 @@
     useEffect(() => {
       setLatestReportVersionHtml(null);
       if (!caseId) return;
-      const uid = localStorage.getItem("user_id") || (() => {
+      const uid = actingReportUserId() || localStorage.getItem("user_id") || (() => {
         try { return JSON.parse(localStorage.getItem("auth") || "{}").userId || null; } catch { return null; }
       })();
       if (!uid) return;
@@ -3597,7 +3624,7 @@
             caseId={caseId}
   clientId={clientId}
 
-            onToggleReport={async () => {
+            onToggleReport={(openReportRef.current = async () => {
               // Open the editor and restore the latest snapshot from
               // radiology_schema.report_versions for this case (if any).
               // After my recent changes, every Save and every AI generate
@@ -3636,7 +3663,7 @@
               // the editor so the user sees what they last had open
               // (including any AI generation that was auto-snapshotted).
               try {
-                const uid = localStorage.getItem("user_id") || (() => {
+                const uid = actingReportUserId() || localStorage.getItem("user_id") || (() => {
                   try { return JSON.parse(localStorage.getItem("auth") || "{}").userId || null; } catch { return null; }
                 })();
                 const versionsUrl = uid
@@ -3673,7 +3700,7 @@
               } catch (e) {
                 console.warn("[onToggleReport] fetch latest report_versions failed:", e);
               }
-            }}
+            })}
             layoutMode={layoutMode}
             onChangeLayoutMode={(next) => {
               setLayoutMode(next);
@@ -4168,7 +4195,7 @@
                   showReport={showReport}
                   showSidebar={showSidebar}
                   setShowSidebar={setShowSidebar}
-                  setShowReport={setShowReport}
+                  setShowReport={reportOnly ? closeReportOnly : setShowReport}
                   reportViewerCollapsed={reportViewerCollapsed}
                   setReportViewerCollapsed={setReportViewerCollapsed}
                   reportExists={reportExists}
@@ -4597,7 +4624,7 @@
                   showReport={showReport}
                   showSidebar={showSidebar}
                   setShowSidebar={setShowSidebar}
-                  setShowReport={setShowReport}
+                  setShowReport={reportOnly ? closeReportOnly : setShowReport}
                   reportViewerCollapsed={reportViewerCollapsed}
                   setReportViewerCollapsed={setReportViewerCollapsed}
                   reportExists={reportExists}

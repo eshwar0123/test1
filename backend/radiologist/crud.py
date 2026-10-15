@@ -660,6 +660,7 @@ def update_signature_path(conn: connection, user_id: UUID, path: str) -> None:
 def get_report(conn: connection, case_id: str, user_id: UUID) -> Dict[str, Any]:
     _ensure_dmc_no_column(conn)
     _ensure_reports_sync_trigger(conn)
+    _ensure_reports_completed_at_column(conn)
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -681,7 +682,8 @@ def get_report(conn: connection, case_id: str, user_id: UUID) -> Dict[str, Any]:
             rad.lab_address   AS rad_lab_address,
             rad.department    AS rad_department,
             rad.lab_logo_url  AS rad_lab_logo_url,
-            rad.dmc_no        AS rad_dmc_no
+            rad.dmc_no        AS rad_dmc_no,
+            r.completed_at
             FROM radiology_schema.reports r
             LEFT JOIN radiology_schema.radiologists rad
             ON rad.user_id = r.user_id
@@ -774,6 +776,8 @@ def get_report(conn: connection, case_id: str, user_id: UUID) -> Dict[str, Any]:
             "updated_at": r[26].isoformat() if r[26] else None,
             "infrastructure": r[27],  # JSONB auto-decodes to dict via psycopg2
             "eta_report": float(r[28]) if r[28] is not None else None,
+            # when the report was submitted (IST, naive) - shown as "Report Submit"
+            "completed_at": r[38].isoformat() if r[38] else None,
         }
 
 

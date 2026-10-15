@@ -55,6 +55,7 @@ const TEAL='#1d9e75', TEAL_L='#5dcaa5'
 const cards = [
   { role:'organization', label:'Organization', sub:'Hospital & Healthcare Institution', path:'/organization/signup', features:['Institution account','Manage your teams','Full analytics access'] },
   { role:'radiologist',  label:'Radiologist',  sub:'Clinical & Imaging Professional',  path:'/radiologist/signup',  features:['Personal clinical account','AI-assisted tools','Case management'] },
+  { role:'technician',   label:'Technician',   sub:'Imaging & Scan Technician',        path:'/technician/signup',   features:['Linked to your organization','Case queue access','Report editing'] },
 ]
 
 function Card({ card, onClick }) {
@@ -73,7 +74,9 @@ function Card({ card, onClick }) {
         background: hov ? 'rgba(29,158,117,0.1)' : 'rgba(255,255,255,0.1)',
         border: hov ? '1.5px solid rgba(29,158,117,0.3)' : '1.5px solid rgba(255,255,255,0.18)',
         display:'flex',alignItems:'center',justifyContent:'center',marginBottom:18,transition:'all 0.22s' }}>
-        {card.role==='radiologist' ? <RadiologistIcon size={38} color={hov?TEAL:'#fff'}/> : <OrganisationIcon size={38} color={hov?TEAL:'#fff'}/>}
+        {card.role==='radiologist' ? <RadiologistIcon size={38} color={hov?TEAL:'#fff'}/> : card.role==='technician' ? (
+          <svg width={38} height={38} viewBox="0 0 64 64" fill="none"><rect x="8" y="12" width="48" height="32" rx="4" stroke={hov?TEAL:'#fff'} strokeWidth="2.5"/><path d="M24 56h16M32 44v12" stroke={hov?TEAL:'#fff'} strokeWidth="2.5" strokeLinecap="round"/><path d="M18 30l6-8 6 10 5-6 7 4" stroke={hov?TEAL:'#fff'} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        ) : <OrganisationIcon size={38} color={hov?TEAL:'#fff'}/>}
       </div>
       <div style={{fontSize:19,fontWeight:700,color:hov?'#0d1b2a':'#fff',marginBottom:3,transition:'color 0.22s'}}>{card.label}</div>
       <div style={{fontSize:11,color:hov?'#4a6070':TEAL_L,marginBottom:18,transition:'color 0.22s'}}>{card.sub}</div>

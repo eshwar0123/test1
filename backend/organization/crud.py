@@ -670,6 +670,32 @@ def delete_upload_row(row_id: int, user_id) -> Optional[Dict[str, Any]]:
 # and computes summary KPIs on top.
 # ============================================================
 
+_NIL_UUID = "00000000-0000-0000-0000-000000000000"
+
+
+def resolve_org_user_id(user_id) -> str:
+    """Technicians read their organization's data. A technician's
+    core_schema.users.username IS the organization name, so map them to the
+    org owner's user_id (org_profile.org_name match). Non-technicians are
+    returned unchanged. An unmatched technician maps to a nil UUID so every
+    org query returns empty."""
+    u = _one(
+        "SELECT role, username FROM core_schema.users WHERE user_id = %s",
+        (str(user_id),),
+    )
+    if not u or str(u.get("role") or "").strip().lower() != "technician":
+        return str(user_id)
+    org = _one(
+        """
+        SELECT user_id FROM organization_schema.org_profile
+        WHERE lower(btrim(org_name)) = lower(btrim(%s))
+        ORDER BY id LIMIT 1
+        """,
+        (u.get("username") or "",),
+    )
+    return str(org["user_id"]) if org and org.get("user_id") else _NIL_UUID
+
+
 def get_org_id_for_user(user_id) -> Optional[str]:
     """Look up the org_id (e.g. 'GENRAD-ORG-12345678') for the given user
        from organization_schema.org_profile."""

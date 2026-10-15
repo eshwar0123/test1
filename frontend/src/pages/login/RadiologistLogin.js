@@ -98,6 +98,7 @@ const RadiologistLogin = () => {
     const r = (role||"").toLowerCase()
     if (r==="admin")             navigate(from||"/admin/dashboard",         {replace:true})
     else if (r==="organization") navigate(from||"/organization/profile",  {replace:true})
+    else if (r==="technician")   navigate(from||"/technician/case-queue",    {replace:true})
     else                         navigate(from||"/radiologist/dashboard",   {replace:true})
   }
 

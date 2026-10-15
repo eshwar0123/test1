@@ -78,7 +78,8 @@ const labelStyle = {
   letterSpacing:'0.07em', textTransform:'uppercase', color:T.textMid, marginBottom:'6px',
 }
 
-const OrganizationLogin = () => {
+const OrganizationLogin = ({ portal = 'organization' }) => {
+  const isTech = portal === 'technician'
   const navigate  = useNavigate()
   const location  = useLocation()
   const [email,setEmail]                     = useState('')
@@ -105,6 +106,7 @@ const OrganizationLogin = () => {
     const r = (role||"").toLowerCase()
     if (r==="admin")             navigate(from||"/admin/dashboard",        {replace:true})
     else if (r==="organization") navigate(from||"/organization/dashboard", {replace:true})
+    else if (r==="technician")   navigate(from||"/technician/case-queue",  {replace:true})
     else                         navigate(from||"/radiologist/dashboard",  {replace:true})
   }
 
@@ -217,7 +219,7 @@ const OrganizationLogin = () => {
             }}>
               <OrganisationIcon size={48} color="#fff" />
             </div>
-            <div style={{ fontSize:'26px', fontWeight:700, color:T.white, marginBottom:6 }}>Organization Portal</div>
+            <div style={{ fontSize:'26px', fontWeight:700, color:T.white, marginBottom:6 }}>{isTech ? 'Technician Portal' : 'Organization Portal'}</div>
             <div style={{ fontSize:'11px', color:T.tealLight, textTransform:'uppercase', letterSpacing:'0.12em', fontWeight:500, marginBottom:26 }}>Hospital & Healthcare Org</div>
             <div style={{ width:40, height:2, background:T.teal, borderRadius:2, marginBottom:26 }} />
             <p style={{ fontSize:'14px', color:'rgba(159,225,203,0.85)', lineHeight:1.7, fontWeight:300, margin:0 }}>
@@ -246,7 +248,7 @@ const OrganizationLogin = () => {
                 <OrganisationIcon size={24} color={T.teal} />
               </div>
               <div>
-                <div style={{ fontSize:'16px', fontWeight:700, color:T.textDark }}>Organization Login</div>
+                <div style={{ fontSize:'16px', fontWeight:700, color:T.textDark }}>{isTech ? 'Technician Login' : 'Organization Login'}</div>
                 <div style={{ fontSize:'12px', color:T.textLight }}>Hospital & Healthcare Institutions</div>
               </div>
             </div>

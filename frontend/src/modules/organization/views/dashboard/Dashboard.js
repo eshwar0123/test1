@@ -1382,7 +1382,17 @@ export default function Dashboard() {
         if (!d || isNaN(d)) return null;
         return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
       };
-      const studyDate = fmtDate(rep.scan_datetime) || caseItem.completedAt || "-";
+      // Study Date & Time and Report Submit, both as dd/mm/yyyy HH:MM.
+      const fmtDateTime = (v) => {
+        const d = v ? new Date(v) : null;
+        if (!d || isNaN(d)) return null;
+        const p2 = (n) => String(n).padStart(2, "0");
+        const hasTime = /[T ]\d{2}:\d{2}/.test(String(v)) || /\d{1,2}:\d{2}/.test(String(v));
+        return `${p2(d.getDate())}/${p2(d.getMonth() + 1)}/${d.getFullYear()}` + (hasTime ? ` ${p2(d.getHours())}:${p2(d.getMinutes())}` : "");
+      };
+      const studyDate = fmtDateTime(rep.scan_datetime) || caseItem.completedAt || "-";
+      const submittedRaw = rep.completed_at || String(caseItem.completedAt || "").replace(",", "");
+      const reportSubmit = fmtDateTime(submittedRaw) || caseItem.completedAt || "-";
 
       // Bordered two-column header grid (same layout as the PDF report).
       const thin = { style: BorderStyle.SINGLE, size: 6, color: "222222" };
@@ -1445,7 +1455,7 @@ export default function Dashboard() {
         title: `Radiology Report - ${caseItem.caseId}`,
         styles: { default: { document: { run: { font: "Arial", size: 22 } } } },
         sections: [{
-          properties: { page: { margin: { top: 1000, bottom: 1000, left: 1100, right: 1100 } } },
+          properties: { page: { margin: { top: 2600, bottom: 1000, left: 1100, right: 1100 } } },
           children: [
             new Paragraph({
               alignment: AlignmentType.CENTER,
@@ -1453,9 +1463,9 @@ export default function Dashboard() {
               children: [new TextRun({ text: reportTitle, bold: true, size: 28 })],
             }),
             infoGrid([
-              [["Patient Id", caseItem.patientId && caseItem.patientId !== "—" ? caseItem.patientId : caseItem.caseId], ["Study Date", studyDate]],
+              [["Patient Id", caseItem.patientId && caseItem.patientId !== "—" ? caseItem.patientId : caseItem.caseId], ["Study Date & Time", studyDate]],
               [["Patient Name", rep.patient_name || caseItem.patientName], ["Referring Doctor", rep.referring_doctor]],
-              [["Age / Sex", ageSex], ["Investigation", rep.clinical_indication]],
+              [["Age / Sex", ageSex], ["Report Submit", reportSubmit]],
             ]),
             // Technique is left out entirely when the radiologist didn't fill it in.
             ...(hasText(technique) ? [sectionTitle("Technique"), ...htmlToParagraphs(technique)] : []),

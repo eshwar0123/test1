@@ -870,6 +870,7 @@ export default function Repository1() {
   }, [uploadForm, cases.length]);
 
   const openViewer = async (item) => {
+    try { sessionStorage.removeItem('report_as_user_id'); } catch {}
     // Enter real fullscreen as part of THIS click (browsers only allow it from
     // a user gesture). We fullscreen the whole document; RadiologyApp hides its
     // Header/Footer on the viewer route, so the viewer fills the entire screen.

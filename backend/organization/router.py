@@ -1154,7 +1154,7 @@ def dashboard_cases(user=Depends(get_current_user)):
     if not user_id:
         raise HTTPException(401, "Invalid token payload (user_id missing)")
 
-    profile = crud.get_org_profile_basics(UUID(user_id))
+    profile = crud.get_org_profile_basics(UUID(crud.resolve_org_user_id(user_id)))
     if not profile or not profile.get("org_id"):
         # No org profile yet → return empty buckets so the page still renders
         return {
@@ -1460,7 +1460,7 @@ def download_dashboard_report(case_id: str, user=Depends(get_current_user)):
     if not user_id:
         raise HTTPException(401, "Invalid token payload (user_id missing)")
 
-    org_id = crud.get_org_id_for_user(UUID(user_id))
+    org_id = crud.get_org_id_for_user(UUID(crud.resolve_org_user_id(user_id)))
     if not org_id:
         raise HTTPException(404, "Organization profile not found — complete org setup first")
 
@@ -1591,14 +1591,14 @@ def workflow_cases(user=Depends(get_current_user)):
 
     # Use get_org_profile_basics — same lookup as /dashboard/cases — so both
     # endpoints resolve org_id from the same table column.
-    profile = crud.get_org_profile_basics(UUID(user_id))
+    profile = crud.get_org_profile_basics(UUID(crud.resolve_org_user_id(user_id)))
     if not profile or not profile.get("org_id"):
         return {"ok": True, "cases": [], "debug": "no_org_profile"}
 
     org_id = profile["org_id"]
 
     try:
-        rows = crud.list_workflow_cases_for_org(org_id, str(user_id))
+        rows = crud.list_workflow_cases_for_org(org_id, crud.resolve_org_user_id(user_id))
     except Exception as exc:
         import traceback
         traceback.print_exc()
@@ -1672,7 +1672,7 @@ def get_case_files(case_id: str, user=Depends(get_current_user)):
     if not user_id:
         raise HTTPException(401, "Invalid token payload (user_id missing)")
 
-    org_id = crud.get_org_id_for_user(UUID(user_id))
+    org_id = crud.get_org_id_for_user(UUID(crud.resolve_org_user_id(user_id)))
     if not org_id:
         raise HTTPException(404, "Organization profile not found")
 
@@ -1780,7 +1780,7 @@ def serve_scan_file(subject_id: str, filename: str, user=Depends(get_current_use
     if not user_id:
         raise HTTPException(401, "Invalid token payload (user_id missing)")
 
-    org_id = crud.get_org_id_for_user(UUID(user_id))
+    org_id = crud.get_org_id_for_user(UUID(crud.resolve_org_user_id(user_id)))
     if not org_id:
         raise HTTPException(403, "No organization profile found")
 

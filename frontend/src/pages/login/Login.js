@@ -120,7 +120,23 @@ const cards = [
     path:'/radiologist/login',
     features:['View & report scans','AI-assisted diagnosis','Case repository'],
   },
+  {
+    role:'technician',
+    label:'Technician',
+    sub:'Imaging & Scan Technician',
+    path:'/technician/login',
+    features:['Organization case queue','Completed cases','Edit reports'],
+  },
 ]
+
+/* ── Technician icon ── */
+const TechnicianIcon = ({ size = 44, color = '#fff' }) => (
+  <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="8" y="12" width="48" height="32" rx="4" stroke={color} strokeWidth="2.5" fill="none"/>
+    <path d="M24 56h16M32 44v12" stroke={color} strokeWidth="2.5" strokeLinecap="round"/>
+    <path d="M18 30l6-8 6 10 5-6 7 4" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+  </svg>
+)
 
 function RoleCard({ card, onClick }) {
   const [hov, setHov] = React.useState(false)
@@ -152,7 +168,9 @@ function RoleCard({ card, onClick }) {
       }}>
         {card.role === 'radiologist'
           ? <RadiologistIcon size={40} color={hov ? ACCENT : '#fff'} />
-          : <OrganisationIcon size={40} color={hov ? ACCENT : '#fff'} />}
+          : card.role === 'technician'
+            ? <TechnicianIcon size={40} color={hov ? ACCENT : '#fff'} />
+            : <OrganisationIcon size={40} color={hov ? ACCENT : '#fff'} />}
       </div>
 
       <div style={{ fontSize:20, fontWeight:700, color: hov ? TEXT_HEADING : '#fff', marginBottom:4, transition:'color 0.22s' }}>

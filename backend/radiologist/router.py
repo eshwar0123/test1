@@ -942,6 +942,23 @@ def get_or_create_report(case_id: str, user_id: str):
             data = crud.get_or_create_report(conn, case_id, uid)
         except ValueError:
             rad = crud.get_radiologist(conn, uid)
+            # Still hand back the case's table timestamps (study time / report submit).
+            scan_iso = None
+            completed_iso = None
+            try:
+                with conn.cursor() as _c:
+                    _c.execute(
+                        "SELECT COALESCE(created_at, study_date::timestamp) FROM organization_schema.bulk_uploads "
+                        "WHERE case_id=%s ORDER BY id DESC LIMIT 1", (case_id,))
+                    _r = _c.fetchone()
+                    scan_iso = _r[0].isoformat() if _r and _r[0] else None
+                    _c.execute(
+                        "SELECT completed_at FROM radiology_schema.reports "
+                        "WHERE case_id=%s AND completed_at IS NOT NULL ORDER BY completed_at DESC LIMIT 1", (case_id,))
+                    _r = _c.fetchone()
+                    completed_iso = _r[0].isoformat() if _r and _r[0] else None
+            except Exception:
+                conn.rollback()
             first = (rad.get("first_name") or "").strip()
             last = (rad.get("last_name") or "").strip()
             # Strip a leading "Dr." / "Dr " from first_name so the prefix
@@ -960,6 +977,8 @@ def get_or_create_report(case_id: str, user_id: str):
                 "department": rad.get("department") or "",
                 "lab_logo_url": rad.get("lab_logo_url") or "",
                 "dmc_no": rad.get("dmc_no") or "",
+                "scan_datetime": scan_iso,
+                "completed_at": completed_iso,
             }}
         return {"success": True, "data": data or None}
     finally:

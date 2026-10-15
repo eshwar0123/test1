@@ -106,10 +106,10 @@ export async function generateReportPdfBlobFromHtml({ bodyHtml, caseId }) {
   mount.style.background = "#ffffff";
   mount.innerHTML = `
     <style>
-      .page { width: 794px; min-height: 1123px; margin: 0 auto; background: #fff; font-family: Arial, sans-serif; }
+      .page { width: 794px; min-height: 1123px; box-sizing: border-box; padding-top: 170px; margin: 0 auto; background: #fff; font-family: Arial, sans-serif; }
       .report-answer { border-bottom: none !important; }
-      .report-top { display: block !important; }
-      .report-head { display: grid !important; }
+      .report-top { display: none !important; }
+      .report-head { display: none !important; }
       [contenteditable="true"] { outline: none; }
     </style>
     <div class="page">${bodyHtml}</div>
@@ -256,7 +256,7 @@ export function getReportTemplateHtml({
         <table class="patient-grid">
           <tr>
             <td><b>Patient Id:</b> ${caseId || "-"}</td>
-            <td><b>Study Date:</b> <span class="report-answer report-scan-editor" contenteditable="true"></span></td>
+            <td><b>Study Date &amp; Time:</b> <span class="report-answer report-scan-editor" contenteditable="true"></span></td>
           </tr>
           <tr>
             <td><b>Patient Name:</b> ${patientName || "-"}</td>
@@ -264,7 +264,7 @@ export function getReportTemplateHtml({
           </tr>
           <tr>
             <td><b>Age / Sex:</b> ${ageSex}</td>
-            <td><b>Investigation:</b> <span class="report-answer report-clinical-indication" contenteditable="true"></span></td>
+            <td><b>Report Submit:</b> <span class="report-answer report-submit-editor" contenteditable="true"></span><span class="report-clinical-indication" style="display:none"></span></td>
           </tr>
         </table>
 
@@ -312,6 +312,15 @@ export function buildExportReportHtml({ reportRoot, formatDateTime }) {
   if (scanEditor && !(scanEditor.textContent || "").trim()) {
     const n = new Date();
     scanEditor.textContent = `${String(n.getDate()).padStart(2, "0")}/${String(n.getMonth() + 1).padStart(2, "0")}/${n.getFullYear()}`;
+  }
+
+  // Report Submit: if the report hasn't been submitted before, this export IS the
+  // submission, so stamp the current date & time (dd/mm/yyyy HH:MM).
+  const submitEditor = holder.querySelector(".report-submit-editor");
+  if (submitEditor && !(submitEditor.textContent || "").trim()) {
+    const n = new Date();
+    const p2 = (v) => String(v).padStart(2, "0");
+    submitEditor.textContent = `${p2(n.getDate())}/${p2(n.getMonth() + 1)}/${n.getFullYear()} ${p2(n.getHours())}:${p2(n.getMinutes())}`;
   }
 
   // An empty "Clinical History" section shouldn't appear in the exported report:
@@ -367,10 +376,10 @@ export function openPrintReport(bodyHtml) {
         <style>
           @page { size: A4; margin: 10mm; }
           body { margin: 0; background: #f3f4f6; font-family: Arial, sans-serif; }
-          .page { width: 190mm; min-height: 277mm; margin: 0 auto; background: #fff; }
+          .page { width: 190mm; min-height: 277mm; box-sizing: border-box; padding-top: 45mm; margin: 0 auto; background: #fff; }
           .report-answer { border-bottom: none !important; }
-          .report-top { display: block !important; }
-          .report-head { display: grid !important; }
+          .report-top { display: none !important; }
+          .report-head { display: none !important; }
           [contenteditable="true"] { outline: none; }
         </style>
       </head>
@@ -397,10 +406,10 @@ export async function downloadReportPdfFromHtml({ bodyHtml, caseId, fileName }) 
   mount.style.background = "#ffffff";
   mount.innerHTML = `
     <style>
-      .page { width: 794px; min-height: 1123px; margin: 0 auto; background: #fff; font-family: Arial, sans-serif; }
+      .page { width: 794px; min-height: 1123px; box-sizing: border-box; padding-top: 170px; margin: 0 auto; background: #fff; font-family: Arial, sans-serif; }
       .report-answer { border-bottom: none !important; }
-      .report-top { display: block !important; }
-      .report-head { display: grid !important; }
+      .report-top { display: none !important; }
+      .report-head { display: none !important; }
       [contenteditable="true"] { outline: none; }
     </style>
     <div class="page">${bodyHtml}</div>
