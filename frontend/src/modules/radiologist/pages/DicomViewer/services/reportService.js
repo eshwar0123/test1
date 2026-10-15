@@ -264,7 +264,7 @@ export function getReportTemplateHtml({
           </tr>
           <tr>
             <td><b>Age / Sex:</b> ${ageSex}</td>
-            <td><b>Report Submit:</b> <span class="report-answer report-submit-editor" contenteditable="true"></span><span class="report-clinical-indication" style="display:none"></span></td>
+            <td><b>Report Submit:</b> <span class="report-answer report-submit-editor" contenteditable="true"></span></td>
           </tr>
         </table>
 

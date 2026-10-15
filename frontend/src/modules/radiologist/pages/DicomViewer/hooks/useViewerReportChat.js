@@ -763,6 +763,18 @@ export default function useViewerReportChat({
     }
 
     const fields = extractReportFields(reportEditorRef.current) || {};
+    // The header grid no longer has a visible Investigation cell, so the QC's
+    // "Clinical indication" check would otherwise see an empty value. Fall back to the
+    // saved value, then to the study title (e.g. "CT HEAD" - modality + study).
+    if (!fields.clinical_indication) {
+      const mTxt = String(caseModality || "").trim();
+      const sTxt = String(study || "").trim();
+      const sTokens = sTxt.toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
+      const mUp = mTxt.toUpperCase();
+      const sHasMod = !!mUp && (sTokens.includes(mUp) || (mUp === "XRAY" && /X[\s-]?RAY/i.test(sTxt)));
+      const studyTitle = (sHasMod ? sTxt : `${mTxt} ${sTxt}`).trim();
+      fields.clinical_indication = reportData?.clinical_indication || studyTitle || null;
+    }
     const mode = modeOverride || reportData?.report_mode || null;
     console.log("[saveReportToDb] uid =", uid, "mode =", mode, "fields =", fields);
 

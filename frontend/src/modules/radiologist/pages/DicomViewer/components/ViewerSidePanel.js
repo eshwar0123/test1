@@ -651,9 +651,6 @@ export default function ViewerSidePanel({
           submitText = `${pad(cd.getDate())}/${pad(cd.getMonth() + 1)}/${cd.getFullYear()} ${pad(cd.getHours())}:${pad(cd.getMinutes())}`;
         }
       }
-      // The old Investigation value is still carried (hidden) so clinical_indication keeps saving.
-      const hiddenInvestigation =
-        `<span class="report-clinical-indication" style="display:none" contenteditable="false">${escH(investigation)}</span>`;
       const cell = (label, value, cls) =>
         `<td style="border:1px solid #222;padding:8px 10px;width:50%;vertical-align:middle;"><b>${label}:</b> ` +
         `<span${cls ? ` class="${cls}"` : ""} contenteditable="true">${escH(value)}</span></td>`;
@@ -661,7 +658,7 @@ export default function ViewerSidePanel({
         `<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px;table-layout:fixed;">` +
         `<tr>${cell("Patient Id", dicomPatientId || caseId || "")}${cell("Study Date &amp; Time", studyDate, "report-scan-editor")}</tr>` +
         `<tr>${cell("Patient Name", patientName || "")}${cell("Referring Doctor", reportData?.referring_doctor || "", "report-ref-doctor")}</tr>` +
-        `<tr>${cell("Age / Sex", ageText || sexText ? `${patientAge || "-"}/${sexText || "-"}` : "")}${cell("Report Submit", submitText, "report-submit-editor").replace("</td>", `${hiddenInvestigation}</td>`)}</tr>` +
+        `<tr>${cell("Age / Sex", ageText || sexText ? `${patientAge || "-"}/${sexText || "-"}` : "")}${cell("Report Submit", submitText, "report-submit-editor")}</tr>` +
         `</table>`;
       headerTables.forEach((table) => { table.outerHTML = gridHtml; });
     } catch (_e) { /* header grid is best-effort */ }

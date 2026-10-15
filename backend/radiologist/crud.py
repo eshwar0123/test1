@@ -992,7 +992,9 @@ def upsert_report(
               -- that's already stored.
               referring_doctor=COALESCE(NULLIF(EXCLUDED.referring_doctor, ''), radiology_schema.reports.referring_doctor),
               scan_datetime=EXCLUDED.scan_datetime,
-              clinical_indication=EXCLUDED.clinical_indication,
+              -- A save that carries no clinical indication must not erase one already stored
+              -- (the QC check reads this column).
+              clinical_indication=COALESCE(NULLIF(EXCLUDED.clinical_indication, ''), radiology_schema.reports.clinical_indication),
               technique=EXCLUDED.technique,
               findings=EXCLUDED.findings,
               impression=EXCLUDED.impression,
