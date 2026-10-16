@@ -231,16 +231,8 @@ def run_content_check(f):
 def run_pixel_check(f):
     results = []
 
-    rad_name  = f.get("radiologistName","").strip()
-    has_creds = bool(re.search(r'\b(MD|MBBS|DNB|FRCR|DMRD|DA|Dr\.)\b', rad_name, re.IGNORECASE))
-    rad_ok    = len(rad_name) > 5 and has_creds
-    results.append(Check(
-        "Pixel Check · Radiologist name & credentials", rad_ok, "error",
-        f'Radiologist: "{rad_name}"' if rad_ok
-        else (f'Credentials missing: "{rad_name}" — add MBBS/MD/DNB' if rad_name and not has_creds
-              else (f'Name too short: "{rad_name}"' if rad_name
-                    else "Radiologist name and credentials not provided — legally required")),
-        rad_name or None))
+    # "Radiologist name & credentials" check removed: radiologists created from the
+    # technician portal have no qualification on file, so it always failed for them.
 
     esig   = f.get("eSigned","").strip().lower()
     sig_ok = esig in ("yes","signed","true","1")

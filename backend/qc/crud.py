@@ -332,6 +332,58 @@ def ensure_assign_schema() -> None:
           ADD COLUMN IF NOT EXISTS assign_by_technician BOOLEAN NOT NULL DEFAULT FALSE
         """
     )
+    # First-login trigger (trg_create_radiologist_on_login). The original version wrote
+    # last_name = NULL for one-word usernames, which violates radiologists.last_name NOT
+    # NULL and crashed /login with a 500 for technician-created radiologists. This
+    # version skips users that already have a radiologists row and never writes NULL.
+    # Best-effort: a permissions problem must not break the technician portal.
+    try:
+        _exec(
+            r"""
+            CREATE OR REPLACE FUNCTION radiology_schema.create_radiologist_on_login()
+             RETURNS trigger
+             LANGUAGE plpgsql
+            AS $function$
+            DECLARE
+              uname text;
+              uemail text;
+            BEGIN
+              IF NEW.status <> 'success' OR NEW.role <> 'radiologist' THEN
+                RETURN NEW;
+              END IF;
+
+              IF EXISTS (SELECT 1 FROM radiology_schema.radiologists r WHERE r.user_id = NEW.user_id) THEN
+                RETURN NEW;
+              END IF;
+
+              SELECT u.username, u.email
+              INTO uname, uemail
+              FROM core_schema.users u
+              WHERE u.user_id = NEW.user_id
+                AND u.role = 'radiologist';
+
+              IF uname IS NULL THEN
+                RETURN NEW;
+              END IF;
+
+              INSERT INTO radiology_schema.radiologists
+                (user_id, first_name, last_name, email)
+              VALUES
+                (
+                  NEW.user_id,
+                  split_part(uname, ' ', 1),
+                  COALESCE(NULLIF(trim(regexp_replace(uname, '^\S+\s*', '')), ''), ''),
+                  uemail
+                )
+              ON CONFLICT (user_id) DO NOTHING;
+
+              RETURN NEW;
+            END;
+            $function$
+            """
+        )
+    except Exception as exc:
+        print(f"[assign-schema] could not update create_radiologist_on_login(): {exc}")
     _ASSIGN_SCHEMA_READY = True
 
 

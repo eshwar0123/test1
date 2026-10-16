@@ -472,6 +472,7 @@ export default function Dashboard() {
   const [qcModal, setQcModal] = useState(null);
   const [qcCardMode, setQcCardMode] = useState("upload"); // "upload" | "report" — controls card toggle only
   const [completedCasesModal, setCompletedCasesModal] = useState(false);
+  const [completedSearch, setCompletedSearch] = useState("");
   const [routineQueueModal, setRoutineQueueModal] = useState(false);
   const [pendingOverdueModal, setPendingOverdueModal] = useState(false);
   const [modalityStudyModal, setModalityStudyModal] = useState(null); // selected modality item | null
@@ -764,6 +765,16 @@ export default function Dashboard() {
   const COMPLETED_CASES = dashData && Array.isArray(dashData.completed)
     ? dashData.completed.map(decorateCase)
     : (dashData ? [] : DEFAULT_COMPLETED_CASES);
+
+  // Completed Cases search: matches patient id / name, case id, study type, modality,
+  // priority, radiologist and the uploaded / completed date text.
+  const completedFiltered = (() => {
+    const q = completedSearch.trim().toLowerCase();
+    if (!q) return COMPLETED_CASES;
+    return COMPLETED_CASES.filter((c) =>
+      [c.patientId, c.patientName, c.caseId, c.studyType, c.modality, c.priority, c.assignedTo, c.uploadedAt, c.completedAt]
+        .some((v) => String(v ?? "").toLowerCase().includes(q)));
+  })();
 
   // eslint-disable-next-line no-shadow
   const ROUTINE_QUEUE_CASES = dashData && Array.isArray(dashData.routine_queue)
@@ -3305,7 +3316,7 @@ export default function Dashboard() {
       {/* ── Completed Today Cases Modal ── */}
       {completedCasesModal && (
         <div
-          onClick={() => setCompletedCasesModal(false)}
+          onClick={() => { setCompletedCasesModal(false); setCompletedSearch(""); }}
           style={{
             position: "fixed", inset: 0, zIndex: 20000,
             background: "rgba(0,0,0,0.55)",
@@ -3346,6 +3357,34 @@ export default function Dashboard() {
                     : `↑ 8.4% vs target · ${new Date().toLocaleDateString(undefined, { day:"2-digit", month:"short", year:"numeric" })}`}
                 </div>
               </div>
+              {/* Search */}
+              <div style={{ flex: 1, display: "flex", justifyContent: "center", padding: "0 24px" }}>
+                <div style={{ position: "relative", width: "100%", maxWidth: 420 }}>
+                  <input
+                    type="text"
+                    value={completedSearch}
+                    onChange={(e) => setCompletedSearch(e.target.value)}
+                    placeholder={isTh ? "ค้นหาผู้ป่วย / รหัส / ประเภทการตรวจ" : "Search patient, ID, study type, radiologist…"}
+                    aria-label="Search completed cases"
+                    style={{
+                      width: "100%", boxSizing: "border-box", padding: "10px 36px 10px 14px",
+                      borderRadius: 10, border: "1px solid rgba(255,255,255,0.3)",
+                      background: "rgba(255,255,255,0.14)", color: "#fff", fontSize: 14, outline: "none",
+                    }}
+                  />
+                  {completedSearch && (
+                    <button
+                      onClick={() => setCompletedSearch("")}
+                      aria-label="Clear search"
+                      style={{
+                        position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)",
+                        background: "transparent", border: "none", color: "rgba(255,255,255,0.8)",
+                        cursor: "pointer", fontSize: 18, lineHeight: 1,
+                      }}
+                    >×</button>
+                  )}
+                </div>
+              </div>
               {/* Stats badges */}
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                 {[
@@ -3363,7 +3402,7 @@ export default function Dashboard() {
                   </div>
                 ))}
                 <button
-                  onClick={() => setCompletedCasesModal(false)}
+                  onClick={() => { setCompletedCasesModal(false); setCompletedSearch(""); }}
                   style={{
                     background: "rgba(255,255,255,0.15)", border: "none",
                     borderRadius: 10, color: "#fff", width: 34, height: 34,
@@ -3392,7 +3431,14 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {COMPLETED_CASES.map((c, i) => (
+                  {completedSearch.trim() && completedFiltered.length === 0 && (
+                    <tr>
+                      <td colSpan={9} style={{ padding: 40, textAlign: "center", color: textMuted, fontSize: 14 }}>
+                        No completed cases match "{completedSearch.trim()}"
+                      </td>
+                    </tr>
+                  )}
+                  {completedFiltered.map((c, i) => (
                     <tr key={c.caseId} style={{
                       background: i % 2 === 0
                         ? (isDark ? "rgba(255,255,255,0.02)" : "#fff")
@@ -3515,7 +3561,7 @@ export default function Dashboard() {
               background: isDark ? "rgba(15,23,42,0.98)" : "#f8fafc",
             }}>
               <span style={{ fontSize: 12, color: textMuted }}>
-                Showing {COMPLETED_CASES.length} completed case{COMPLETED_CASES.length === 1 ? "" : "s"} · {new Date().toLocaleDateString(undefined, { day:"2-digit", month:"short", year:"numeric" })}
+                Showing {completedSearch.trim() ? `${completedFiltered.length} of ${COMPLETED_CASES.length}` : COMPLETED_CASES.length} completed case{COMPLETED_CASES.length === 1 ? "" : "s"} ·{new Date().toLocaleDateString(undefined, { day:"2-digit", month:"short", year:"numeric" })}
               </span>
               <span style={{ fontSize: 12, color: textMuted }}>
                 Downloads include radiologist report + scan images (ZIP)

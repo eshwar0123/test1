@@ -1168,6 +1168,14 @@ export default function Repository1() {
                 </div>
               ))}
             </div>
+            <div className="r1-detail-actions" style={{ marginTop: 0, paddingBottom: 4 }}>
+              <button className="r1-btn-primary" onClick={() => openViewer(selectedCase)}>▶ Open Viewer</button>
+              {selectedCase.status !== 'completed' ? (
+                <button className="r1-btn-secondary r1-btn-complete" onClick={() => markComplete(selectedCase.id)}>✓ Mark Complete</button>
+              ) : (
+                <div className="r1-completed-badge">✅ Completed</div>
+              )}
+            </div>
             <div className="r1-detail-section">
               <div className="r1-ds-label">Scan Preview</div>
               <div className="r1-scan-preview">
@@ -1175,12 +1183,6 @@ export default function Repository1() {
               </div>
             </div>
             <div className="r1-detail-actions">
-              <button className="r1-btn-primary" onClick={() => openViewer(selectedCase)}>▶ Open Viewer</button>
-              {selectedCase.status !== 'completed' ? (
-                <button className="r1-btn-secondary r1-btn-complete" onClick={() => markComplete(selectedCase.id)}>✓ Mark Complete</button>
-              ) : (
-                <div className="r1-completed-badge">✅ Completed</div>
-              )}
               <button className="r1-btn-secondary" onClick={() => setReportOpen(true)}>📄 View Report</button>
               <button className="r1-btn-secondary" onClick={() => setSelectedCase(null)}>✕ Close</button>
             </div>

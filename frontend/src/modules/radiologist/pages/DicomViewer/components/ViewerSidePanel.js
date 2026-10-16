@@ -572,6 +572,13 @@ export default function ViewerSidePanel({
   const [pasteTplErr, setPasteTplErr] = useState("");
   const [pasteTplEditId, setPasteTplEditId] = useState(null); // id of template being edited
   const [savedTemplates, setSavedTemplates] = useState([]);
+  // Report Templates panel search (matches template name / modality / description).
+  const [tplSearch, setTplSearch] = useState("");
+  const tplQ = tplSearch.trim().toLowerCase();
+  const tplSavedShown = tplQ
+    ? savedTemplates.filter((t) => String(t?.name || "").toLowerCase().includes(tplQ))
+    : savedTemplates;
+  useEffect(() => { if (!showTemplates) setTplSearch(""); }, [showTemplates]);
 
   useEffect(() => {
     try {
@@ -2375,6 +2382,35 @@ const manualClientIdMap = {
                 Select a template to pre-fill the report structure. Existing content will be replaced.
               </div>
 
+              {/* Search templates */}
+              <div style={{ padding: "10px 12px", borderBottom: "1px solid #f3f4f6" }}>
+                <div style={{ position: "relative" }}>
+                  <input
+                    type="text"
+                    value={tplSearch}
+                    onChange={(e) => setTplSearch(e.target.value)}
+                    placeholder="Search templates (e.g. brain, knee, CT chest)…"
+                    aria-label="Search report templates"
+                    style={{
+                      width: "100%", boxSizing: "border-box", padding: "8px 30px 8px 10px",
+                      border: "1px solid #d1d5db", borderRadius: 6, fontSize: 13, color: "#111827",
+                      background: "#fff", outline: "none",
+                    }}
+                  />
+                  {tplSearch && (
+                    <button
+                      onClick={() => setTplSearch("")}
+                      aria-label="Clear template search"
+                      style={{
+                        position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)",
+                        background: "transparent", border: "none", color: "#6b7280",
+                        cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 2,
+                      }}
+                    >×</button>
+                  )}
+                </div>
+              </div>
+
               {/* Template wizard: Upload file → AI extracts header fields + sections → Review & edit → Save */}
               <div style={{ padding: "10px 12px", borderBottom: "1px solid #f3f4f6" }}>
                 <input ref={tplFileInputRef} type="file" accept=".txt,.docx,.pdf,.png,.jpg,.jpeg,.webp" style={{ display: "none" }} onChange={handleTemplateFileUpload} />
@@ -2403,10 +2439,10 @@ const manualClientIdMap = {
                 {/* REVIEW — rendered as full-screen modal, see below */}
               </div>
               <div style={{ overflowY: "auto", flex: 1, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
-                {savedTemplates.length > 0 && (
+                {tplSavedShown.length > 0 && (
                   <>
                     <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", color: "#9ca3af", padding: "6px 2px 2px" }}>MY TEMPLATES</div>
-                    {savedTemplates.map((tpl) => (
+                    {tplSavedShown.map((tpl) => (
                       <div
                         key={tpl.id}
                         onClick={() => applyTemplateHtml(tpl.html)}
@@ -2746,7 +2782,27 @@ const manualClientIdMap = {
                     // ── General ───────────────────────────────────────────────
                   ];
 
-                  return TEMPLATES.map((tpl) => tpl.type === "header" ? (
+                  // Search filter: keep templates matching name / modality / description, and
+                  // keep a section header only when at least one template under it matches.
+                  const tplMatches = (t) =>
+                    !tplQ || [t.name, t.modality, t.desc, t.id].some((v) => String(v || "").toLowerCase().includes(tplQ));
+                  const visibleTemplates = TEMPLATES.filter((t, i, arr) => {
+                    if (t.type !== "header") return tplMatches(t);
+                    if (!tplQ) return true;
+                    for (let j = i + 1; j < arr.length && arr[j].type !== "header"; j += 1) {
+                      if (tplMatches(arr[j])) return true;
+                    }
+                    return false;
+                  });
+                  if (tplQ && visibleTemplates.length === 0 && tplSavedShown.length === 0) {
+                    return (
+                      <div style={{ padding: "24px 8px", textAlign: "center", fontSize: 13, color: "#6b7280" }}>
+                        No templates match "{tplSearch.trim()}"
+                      </div>
+                    );
+                  }
+
+                  return visibleTemplates.map((tpl) => tpl.type === "header" ? (
                     <div
                       key={tpl.label}
                       style={{

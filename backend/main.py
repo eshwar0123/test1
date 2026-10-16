@@ -398,9 +398,9 @@ def login(data: LoginSchema, request: Request):
     cursor.execute("""
         SELECT user_id, username, email, password, role, is_verified
         FROM core_schema.users
-        WHERE email = %s
+        WHERE lower(email) = lower(btrim(%s))
     """, (data.email,))
-    
+
     user = cursor.fetchone()
 
     if not user:
