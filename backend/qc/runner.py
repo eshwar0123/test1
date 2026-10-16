@@ -96,7 +96,7 @@ def run_qc_for_row(row_id: int) -> None:
                 reason          = rollup["reason"][:1000],
             )
         else:
-            rad = qc_crud.find_available_radiologist()
+            rad = qc_crud.find_available_radiologist(row.get("org_id"))
             if rad:
                 wf_id = qc_crud.insert_case_workflow_with_rad(row, rad)
                 if wf_id:
@@ -299,7 +299,7 @@ def run_qc_for_case(case_meta: dict) -> None:
                     (row_id,),
                 )
                 if row:
-                    rad = qc_crud.find_available_radiologist()
+                    rad = qc_crud.find_available_radiologist(row.get("org_id"))
                     if rad:
                         wf_id = qc_crud.insert_case_workflow_with_rad(row, rad)
                         if wf_id:

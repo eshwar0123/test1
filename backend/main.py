@@ -29,6 +29,7 @@ from radiologist.router import router as radiologist_router
 from radiologist.series_manifest import router as series_manifest_router
 from organization.router import router as organization_router
 from technician.router import router as technician_router
+from share.router import router as share_router
 from ai.stt_router import router as stt_router
 from ai.llava_router import router as llava_router
 from admin.router import router as admin_router
@@ -175,6 +176,7 @@ app.include_router(radiologist_router)
 app.include_router(series_manifest_router)
 app.include_router(organization_router)
 app.include_router(technician_router)
+app.include_router(share_router)
 app.include_router(stt_router)
 app.include_router(llava_router)
 app.include_router(admin_router)

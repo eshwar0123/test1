@@ -1608,6 +1608,19 @@ def workflow_cases(user=Depends(get_current_user)):
     # Most recent first (the query orders by case_id for DISTINCT ON).
     rows = sorted(rows, key=lambda r: _sort_key_ts(r.get("bu_uploaded_at") or r.get("created_at")), reverse=True)
 
+    # rad_scans.assigned_rad_id per case (drives the technician "Assign To" column).
+    assigned_by_case: dict = {}
+    try:
+        _ids = [r.get("case_id") for r in rows if r.get("case_id")]
+        if _ids:
+            for a in crud._all(
+                "SELECT case_id, assigned_rad_id FROM radiology_schema.rad_scans WHERE case_id = ANY(%s)",
+                (_ids,),
+            ):
+                assigned_by_case[a["case_id"]] = a.get("assigned_rad_id")
+    except Exception as e:
+        print(f"[workflow_cases] assigned_rad_id lookup failed: {e}")
+
     cases = []
     for r in rows:
         # Normalize priority using the same helper as the dashboard endpoint
@@ -1653,6 +1666,7 @@ def workflow_cases(user=Depends(get_current_user)):
             "rad_last_name":    "",
             "subject_id":       r.get("subject_id") or "",
             "image_file_names": img_files,
+            "assigned_rad_id":  assigned_by_case.get(r.get("case_id")) or "",
         })
 
     return {"ok": True, "cases": cases}

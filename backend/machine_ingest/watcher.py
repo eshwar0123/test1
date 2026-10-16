@@ -369,7 +369,7 @@ def _process_case(client_folder: str, case_folder: str, s3_prefix: str, keys: Li
         if row_id:
             row = qc_crud._one("SELECT * FROM organization_schema.bulk_uploads WHERE id = %s", (row_id,))
             if row:
-                rad = qc_crud.find_available_radiologist()
+                rad = qc_crud.find_available_radiologist(row.get("org_id"))
                 if rad:
                     wf_id = qc_crud.insert_case_workflow_with_rad(row, rad)
                     if wf_id:

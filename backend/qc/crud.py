@@ -310,8 +310,57 @@ def insert_returned_case_from_meta(case_meta: Dict[str, Any], reason: str) -> in
     return int(row["returned_id"]) if row else 0
 
 
-def find_available_radiologist() -> Optional[Dict[str, Any]]:
+_ASSIGN_SCHEMA_READY = False
+
+
+def ensure_assign_schema() -> None:
+    """Columns for technician-managed radiologists / assignment (idempotent)."""
+    global _ASSIGN_SCHEMA_READY
+    if _ASSIGN_SCHEMA_READY:
+        return
+    _exec(
+        """
+        ALTER TABLE radiology_schema.radiologists
+          ADD COLUMN IF NOT EXISTS org_id     TEXT,
+          ADD COLUMN IF NOT EXISTS created_by UUID,
+          ADD COLUMN IF NOT EXISTS is_active  BOOLEAN NOT NULL DEFAULT TRUE
+        """
+    )
+    _exec(
+        """
+        ALTER TABLE organization_schema.org_profile
+          ADD COLUMN IF NOT EXISTS assign_by_technician BOOLEAN NOT NULL DEFAULT FALSE
+        """
+    )
+    _ASSIGN_SCHEMA_READY = True
+
+
+def org_assigns_by_technician(org_id) -> bool:
+    """True when this organization's cases are assigned only by its technician
+    (organization_schema.org_profile.assign_by_technician)."""
+    if not org_id:
+        return False
+    ensure_assign_schema()
+    row = _one(
+        "SELECT assign_by_technician FROM organization_schema.org_profile WHERE org_id = %s LIMIT 1",
+        (str(org_id),),
+    )
+    return bool(row and row.get("assign_by_technician"))
+
+
+# Returned instead of a radiologist when the case must wait for its technician.
+# Truthy, so call sites still create the case_workflow / rad_scans rows; those
+# insert functions store the case as unassigned.
+UNASSIGNED = {"unassigned": True}
+
+
+def find_available_radiologist(org_id=None) -> Optional[Dict[str, Any]]:
     """Find the best available radiologist using admin_schema.radiologist_availability.
+
+    If org_id belongs to an organization with assign_by_technician = TRUE the
+    case is NOT auto-assigned: UNASSIGNED is returned and the technician assigns
+    it later. Radiologists created by a technician (radiologists.org_id set) are
+    never part of the shared auto-assign pool, and inactive ones are skipped.
 
     Strategy (in priority order):
       1. Radiologist with a slot on TODAY whose availability_status = 'available'
@@ -324,6 +373,10 @@ def find_available_radiologist() -> Optional[Dict[str, Any]]:
     Returns a dict with keys: rad_id, rad_user_id, first_name, last_name,
     radiologist_name, specialization_name.
     """
+    if org_assigns_by_technician(org_id):
+        return dict(UNASSIGNED)
+    ensure_assign_schema()
+
     # --- Attempt 1: today's slot, current time within window ---
     rad = _one(
         """
@@ -345,6 +398,7 @@ def find_available_radiologist() -> Optional[Dict[str, Any]]:
         WHERE ra.available_date = CURRENT_DATE
           AND ra.availability_status = 'available'
           AND CURRENT_TIME BETWEEN ra.from_time AND ra.to_time
+          AND r.org_id IS NULL AND r.is_active
         GROUP BY r.rad_id, ra.radiologist_id, r.user_id, r.first_name, r.last_name,
                  ra.radiologist_name, ra.specialization_name, r.designation, r.department
         ORDER BY active_count ASC
@@ -373,6 +427,7 @@ def find_available_radiologist() -> Optional[Dict[str, Any]]:
                   AND LOWER(COALESCE(rs.status, '')) NOT IN ('complete', 'completed', 'done')
             WHERE ra.available_date = CURRENT_DATE
               AND ra.availability_status = 'available'
+              AND r.org_id IS NULL AND r.is_active
             GROUP BY r.rad_id, ra.radiologist_id, r.user_id, r.first_name, r.last_name,
                      ra.radiologist_name, ra.specialization_name, r.designation, r.department
             ORDER BY active_count ASC
@@ -397,6 +452,7 @@ def find_available_radiologist() -> Optional[Dict[str, Any]]:
             LEFT JOIN radiology_schema.rad_scans rs
                    ON rs.assigned_rad_id = r.rad_id
                   AND LOWER(COALESCE(rs.status, '')) NOT IN ('complete', 'completed', 'done')
+            WHERE r.org_id IS NULL AND r.is_active
             GROUP BY r.rad_id, r.user_id, r.first_name, r.last_name,
                      r.designation, r.department
             ORDER BY active_count ASC
@@ -417,6 +473,7 @@ def insert_case_workflow_with_rad(
     src_row — organization_schema.bulk_uploads row (read back after QC insert).
     rad     — result from find_available_radiologist().
     """
+    unassigned     = bool(rad.get("unassigned"))
     rad_user_id    = str(rad.get("rad_user_id") or rad.get("user_id") or "")
     rad_name       = (
         rad.get("radiologist_name")
@@ -425,6 +482,8 @@ def insert_case_workflow_with_rad(
     specialization = rad.get("specialization_name") or ""
     # rad_id from radiologist_availability.radiologist_id (or radiologists.rad_id fallback)
     rad_id         = str(rad.get("availability_rad_id") or rad.get("rad_id") or "")
+    if unassigned:
+        rad_user_id = rad_name = specialization = rad_id = None
 
     # Calculate due_at from priority
     priority = (src_row.get("priority_type") or "").strip().lower()
@@ -463,8 +522,8 @@ def insert_case_workflow_with_rad(
                 %s,
                 (SELECT org_name FROM organization_schema.org_profile
                   WHERE org_id = %s LIMIT 1),
-                'assigned',
-                NOW(),
+                CASE WHEN %s THEN 'unassigned' ELSE 'assigned' END,
+                CASE WHEN %s THEN NULL ELSE NOW() END,
                 NOW() + INTERVAL '%s hours',
                 %s,
                 %s,
@@ -490,6 +549,8 @@ def insert_case_workflow_with_rad(
             specialization,
             rad_id,
             src_row.get("org_id"),        # for the org_name subquery
+            unassigned,
+            unassigned,
             due_hours,
             src_row.get("qc_status"),
             src_row.get("uploaded_images_path"),
@@ -575,6 +636,10 @@ def insert_rad_scan_for_case(src_row: Dict[str, Any], rad: Dict[str, Any], thumb
     rad_user_id = str(rad.get("rad_user_id") or rad.get("user_id") or "")
     rad_id      = str(rad.get("rad_id") or "")
     org_id      = src_row.get("org_id")
+    if rad.get("unassigned"):
+        # Waiting for the technician: keep the uploader as the owner, no radiologist.
+        rad_user_id = str(src_row.get("user_id") or "")
+        rad_id      = None
 
     _exec(
         """
@@ -637,7 +702,7 @@ def insert_rad_scan_for_case(src_row: Dict[str, Any], rad: Dict[str, Any], thumb
            modality_study_type = EXCLUDED.modality_study_type,
            referring_doctor = EXCLUDED.referring_doctor,
            history          = EXCLUDED.history,
-           assigned_rad_id  = EXCLUDED.assigned_rad_id,
+           assigned_rad_id  = COALESCE(EXCLUDED.assigned_rad_id, radiology_schema.rad_scans.assigned_rad_id),
            due_date         = EXCLUDED.due_date,
            assigned_at      = EXCLUDED.assigned_at,
            qc_status        = EXCLUDED.qc_status

@@ -28,6 +28,20 @@ export async function fetchJson(path) {
   return r.json();
 }
 
+// Authenticated call to the technician endpoints. Throws Error(detail) on non-2xx.
+export async function apiFetch(path, options = {}) {
+  const r = await fetch(`/api${path}`, {
+    ...options,
+    headers: { ...authHeaders(), ...(options.headers || {}) },
+  });
+  const j = await r.json().catch(() => null);
+  if (!r.ok) {
+    const d = j?.detail;
+    throw new Error(typeof d === "string" ? d : Array.isArray(d) ? d.map((x) => x.msg).join(", ") : `HTTP ${r.status}`);
+  }
+  return j;
+}
+
 const drName = (n) => (n ? (/^\s*dr\b\.?/i.test(n) ? n : `Dr. ${n}`) : "Unassigned");
 
 // workflow-cases row -> Case Queue row
@@ -40,6 +54,7 @@ export const decorateWfCase = (c) => ({
   studyType: c.study_type || "—",
   priority: c.priority || "Routine",
   status: c.status || "Assigned",
+  assignedRadId: c.assigned_rad_id || "",
 });
 
 // dashboard/cases "completed" row -> Completed Cases row

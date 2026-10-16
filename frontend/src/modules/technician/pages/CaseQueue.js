@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { fetchJson, decorateWfCase, modalityStyle, priorityColor } from "../utils/caseData";
+import { fetchJson, apiFetch, decorateWfCase, modalityStyle, priorityColor } from "../utils/caseData";
 import { openCaseInEditor } from "../utils/openCaseInEditor";
 import { th, td, card, pill, EmptyRow } from "./tableStyles";
 
@@ -9,13 +9,40 @@ const TABS = ["All", "Critical", "Urgent", "Routine"];
 // Same data as the organization's "Case Queue" card
 // (GET /organization/dashboard/workflow-cases) + a Report column whose edit
 // icon opens that case in the radiologist report editor.
-export default function CaseQueue() {
+export default function CaseQueue({ canAssign = false }) {
   const navigate = useNavigate();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [tab, setTab] = useState("All");
   const [opening, setOpening] = useState(null);
+  const [radiologists, setRadiologists] = useState([]);
+  const [assigning, setAssigning] = useState(null);
+
+  useEffect(() => {
+    if (!canAssign) return;
+    apiFetch("/technician/radiologists?active_only=true")
+      .then((j) => setRadiologists(j.data || []))
+      .catch((e) => setError(e.message || "Failed to load radiologists"));
+  }, [canAssign]);
+
+  const assign = async (r, radId) => {
+    if (!radId || radId === r.assignedRadId) return;
+    setAssigning(r.caseId);
+    try {
+      await apiFetch(`/technician/cases/${encodeURIComponent(r.caseId)}/assign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rad_id: radId }),
+      });
+      setRows((all) => all.map((x) => (x.caseId === r.caseId ? { ...x, assignedRadId: radId, status: "Assigned" } : x)));
+      setError("");
+    } catch (e) {
+      setError(e.message || "Could not assign the case");
+    } finally {
+      setAssigning(null);
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -82,14 +109,14 @@ export default function CaseQueue() {
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
-              {["Patient ID", "Patient Name", "Uploaded", "Modality", "Study Type", "Priority", "Status", "Report"].map((h) => (
+              {["Patient ID", "Patient Name", "Uploaded", "Modality", "Study Type", "Priority", "Status", ...(canAssign ? ["Assign To"] : []), "Report"].map((h) => (
                 <th key={h} style={th}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {loading && <EmptyRow cols={8} text="Loading cases…" />}
-            {!loading && shown.length === 0 && <EmptyRow cols={8} text="No cases in the queue" />}
+            {loading && <EmptyRow cols={canAssign ? 9 : 8} text="Loading cases…" />}
+            {!loading && shown.length === 0 && <EmptyRow cols={canAssign ? 9 : 8} text="No cases in the queue" />}
             {shown.map((r, i) => {
               const ms = modalityStyle(r.modality);
               return (
@@ -102,7 +129,30 @@ export default function CaseQueue() {
                   <td style={td}>
                     <span style={{ color: priorityColor(r.priority), fontWeight: 700 }}>● {r.priority}</span>
                   </td>
-                  <td style={td}><span style={pill("#059669", "#d1fae5")}>● {r.status}</span></td>
+                  <td style={td}>
+                    {r.status === "Unassigned"
+                      ? <span style={pill("#b45309", "#fef3c7")}>● {r.status}</span>
+                      : <span style={pill("#059669", "#d1fae5")}>● {r.status}</span>}
+                  </td>
+                  {canAssign && (
+                    <td style={td}>
+                      <select
+                        aria-label={`Assign ${r.caseId} to a radiologist`}
+                        value={r.assignedRadId}
+                        disabled={assigning === r.caseId}
+                        onChange={(e) => assign(r, e.target.value)}
+                        style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", fontSize: 14, minWidth: 170 }}
+                      >
+                        <option value="" disabled>Select radiologist…</option>
+                        {radiologists.map((d) => (
+                          <option key={d.rad_id} value={d.rad_id}>{d.name}</option>
+                        ))}
+                        {r.assignedRadId && !radiologists.some((d) => d.rad_id === r.assignedRadId) && (
+                          <option value={r.assignedRadId} disabled>Assigned (other)</option>
+                        )}
+                      </select>
+                    </td>
+                  )}
                   <td style={td}>
                     <button
                       title="Edit report"

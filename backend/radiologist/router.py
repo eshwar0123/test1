@@ -872,6 +872,20 @@ def assign_scan(case_id: str, payload: AssignScanIn):
     conn = get_conn()
     try:
         with conn.cursor() as cur:
+            # Organizations with assign_by_technician = TRUE are assigned only
+            # through POST /technician/cases/{case_id}/assign.
+            from qc import crud as _qc_crud
+            cur.execute(
+                "SELECT id_organisation FROM radiology_schema.rad_scans WHERE case_id=%s LIMIT 1",
+                (case_id,),
+            )
+            _scan_org = cur.fetchone()
+            if _scan_org and _qc_crud.org_assigns_by_technician(_scan_org[0]):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Cases of this organization are assigned by its technician",
+                )
+
             cur.execute(
                 "SELECT user_id FROM radiology_schema.radiologists WHERE rad_id=%s",
                 (rad_id,),
@@ -1446,6 +1460,15 @@ def mark_report_completed_endpoint(case_id: str, user_id: str):
         except Exception as _sub_err:
             conn.rollback()
             print(f"[case_submission] ERROR: {_sub_err}")
+
+        # Patient image link: valid 24h from the submit time. A resubmit
+        # revokes the previous link and issues a new one. Never blocks submission.
+        try:
+            from share import crud as _share_crud
+            _share_crud.create_link_for_case(conn, case_id, str(uid))
+        except Exception as _link_err:
+            conn.rollback()
+            print(f"[patient-link] ERROR: {_link_err}")
 
         return {"success": True, "data": data}
     finally:

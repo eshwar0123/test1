@@ -1,7 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { fetchJson, decorateCase, modalityStyle, priorityColor } from "../utils/caseData";
+import { fetchJson, apiFetch, decorateCase, modalityStyle, priorityColor } from "../utils/caseData";
 import { makeReportDownloaders } from "../utils/reportDownloads";
 import { th, td, card, pill, EmptyRow } from "./tableStyles";
+
+// "Expires in 18h" / "Expires in 42m" for a link's expires_at.
+function expiresIn(expiresAt, now) {
+  const ms = new Date(expiresAt).getTime() - now;
+  if (!(ms > 0)) return null;
+  const mins = Math.floor(ms / 60000);
+  return mins >= 60 ? `Expires in ${Math.floor(mins / 60)}h` : `Expires in ${Math.max(mins, 1)}m`;
+}
 
 // Same data + downloads as the organization's "Completed Cases" card
 // (GET /organization/dashboard/cases -> completed[]).
@@ -11,6 +19,9 @@ export default function CompletedCases() {
   const [toast, setToast] = useState(null);
   const [downloadingCase, setDownloadingCase] = useState(null);
   const [downloadingFmt, setDownloadingFmt] = useState(null);
+  const [links, setLinks] = useState({}); // case_id -> { url, expires_at }
+  const [now, setNow] = useState(Date.now());
+  const [copied, setCopied] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -23,6 +34,41 @@ export default function CompletedCases() {
     return () => { alive = false; clearInterval(id); };
   }, []);
 
+  const rows = useMemo(
+    () => (Array.isArray(dashData?.completed) ? dashData.completed.map(decorateCase) : []),
+    [dashData],
+  );
+
+  // Patient links for the listed cases; clock ticks so "Expires in" stays current.
+  const caseIdsKey = rows.map((r) => r.caseId).filter(Boolean).join(",");
+  useEffect(() => {
+    if (!caseIdsKey) return undefined;
+    let alive = true;
+    apiFetch(`/technician/patient-links?case_ids=${encodeURIComponent(caseIdsKey)}`)
+      .then((j) => alive && setLinks(j.data || {}))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [caseIdsKey, dashData]); // dashData refreshes every 30s, so resubmitted cases pick up their new link
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  const copyLink = async (caseId, url) => {
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = url;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+    setCopied(caseId);
+    setTimeout(() => setCopied((c) => (c === caseId ? null : c)), 2000);
+  };
+
   const { handleDownloadCase, handleDownloadWord } = useMemo(
     () =>
       makeReportDownloaders({
@@ -34,10 +80,6 @@ export default function CompletedCases() {
     [dashData],
   );
 
-  const rows = useMemo(
-    () => (Array.isArray(dashData?.completed) ? dashData.completed.map(decorateCase) : []),
-    [dashData],
-  );
   const k = dashData?.kpis?.completed || {};
   const urgent = rows.filter((r) => r.priority === "Urgent" || r.priority === "STAT").length;
   const routine = rows.filter((r) => r.priority === "Routine").length;
@@ -92,14 +134,14 @@ export default function CompletedCases() {
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
-              {["Patient ID", "Patient Name", "Uploaded", "Modality", "Study Type", "Priority", "Completed", "Assigned To", "Download"].map((h) => (
+              {["Patient ID", "Patient Name", "Uploaded", "Modality", "Study Type", "Priority", "Completed", "Assigned To", "Link", "Download"].map((h) => (
                 <th key={h} style={th}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {!dashData && !error && <EmptyRow cols={9} text="Loading cases…" />}
-            {dashData && rows.length === 0 && <EmptyRow cols={9} text="No completed cases yet" />}
+            {!dashData && !error && <EmptyRow cols={10} text="Loading cases…" />}
+            {dashData && rows.length === 0 && <EmptyRow cols={10} text="No completed cases yet" />}
             {rows.map((r, i) => {
               const ms = modalityStyle(r.modality);
               return (
@@ -112,6 +154,30 @@ export default function CompletedCases() {
                   <td style={td}><span style={{ color: priorityColor(r.priority), fontWeight: 700 }}>● {r.priority}</span></td>
                   <td style={{ ...td, fontFamily: "monospace", color: "#059669" }}>{r.completedAt}</td>
                   <td style={{ ...td, fontWeight: 600 }}>{r.assignedTo}</td>
+                  <td style={td}>
+                    {(() => {
+                      const l = links[r.caseId];
+                      if (!l) return <span style={{ color: "#94a3b8" }}>—</span>;
+                      const left = expiresIn(l.expires_at, now);
+                      if (!left) {
+                        return (
+                          <span style={{ ...pill("#94a3b8", "#f1f5f9"), cursor: "not-allowed" }} title="This link has expired">Expired</span>
+                        );
+                      }
+                      return (
+                        <div style={{ display: "inline-flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
+                          <button
+                            onClick={() => copyLink(r.caseId, l.url)}
+                            title="Copy the patient link"
+                            style={{ padding: "5px 12px", borderRadius: 8, border: "1px solid #bfdbfe", background: "#eff6ff", color: "#1d4ed8", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
+                          >
+                            {copied === r.caseId ? "Copied ✓" : "Copy link"}
+                          </button>
+                          <span style={{ fontSize: 11, color: "#64748b" }}>{left}</span>
+                        </div>
+                      );
+                    })()}
+                  </td>
                   <td style={td}>
                     <div style={{ display: "inline-flex", gap: 8 }}>
                       {iconBtn("Download PDF report", () => handleDownloadCase(r), busy(r, "pdf"),

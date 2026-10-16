@@ -5,6 +5,7 @@ import RadiologyApp from "./modules/radiologist/RadiologyApp";
 import OrganizationApp from "./modules/organization/OrganizationApp";
 import AdminApp from "./modules/admin/AdminApp";
 import TechnicianApp from "./modules/technician/TechnicianApp";
+import PatientViewer from "./modules/share/PatientViewer";
 
 // Auth pages
 import Login from "./pages/login/Login";
@@ -68,12 +69,16 @@ function Layout() {
   // hide footer in fullscreen viewers
   const hideFooter =
     location.pathname.includes("/viewer/") ||
-    location.pathname.includes("/dcmviewer");
+    location.pathname.includes("/dcmviewer") ||
+    location.pathname.startsWith("/view/");
 
   return (
     <div className="app-shell">
       <div className="app-main">
         <Routes>
+        {/* ========= PUBLIC PATIENT IMAGE LINK (no login) ========= */}
+        <Route path="/view/:token" element={<PatientViewer />} />
+
         {/* ========= GLOBAL REDIRECT ========= */}
           <Route path="/" element={<Navigate to="/login" replace />} />
           {/* ✅ ADD THIS — the missing /login route */}

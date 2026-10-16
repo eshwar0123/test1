@@ -2,27 +2,36 @@ import React, { useEffect, useState } from "react";
 import { Routes, Route, Navigate, NavLink, useNavigate } from "react-router-dom";
 import CaseQueue from "./pages/CaseQueue";
 import CompletedCases from "./pages/CompletedCases";
+import Radiologists from "./pages/Radiologists";
 import { readToken } from "./utils/reportDownloads";
 
 const NAV = [
   { to: "/technician/case-queue", label: "Case Queue" },
   { to: "/technician/completed-cases", label: "Completed Cases" },
 ];
+// Only for organizations with assign_by_technician = TRUE.
+const RADIOLOGISTS_NAV = { to: "/technician/radiologists", label: "Radiologists" };
 
 export default function TechnicianApp() {
   const navigate = useNavigate();
   const [orgName, setOrgName] = useState("");
   const [orgError, setOrgError] = useState("");
+  const [canAssign, setCanAssign] = useState(false);
+  const [meLoaded, setMeLoaded] = useState(false);
 
   useEffect(() => {
     const tok = readToken();
     fetch("/api/technician/me", { headers: tok ? { Authorization: `Bearer ${tok}` } : {} })
       .then((r) => r.json().then((j) => ({ ok: r.ok, j })))
       .then(({ ok, j }) => {
-        if (ok && j?.data?.org_name) setOrgName(j.data.org_name);
+        if (ok && j?.data?.org_name) {
+          setOrgName(j.data.org_name);
+          setCanAssign(!!j.data.assign_by_technician);
+        }
         else setOrgError(j?.detail || "No organization matches your username");
       })
-      .catch(() => setOrgError("Could not reach the server"));
+      .catch(() => setOrgError("Could not reach the server"))
+      .finally(() => setMeLoaded(true));
   }, []);
 
   const logout = () => {
@@ -48,7 +57,7 @@ export default function TechnicianApp() {
           onError={(e) => { e.currentTarget.style.display = "none"; }}
         />
         <nav style={{ display: "flex", gap: 6, marginLeft: 12 }}>
-          {NAV.map((n) => (
+          {(canAssign ? [...NAV, RADIOLOGISTS_NAV] : NAV).map((n) => (
             <NavLink
               key={n.to}
               to={n.to}
@@ -79,12 +88,13 @@ export default function TechnicianApp() {
       )}
 
       <main style={{ padding: 28 }}>
-        <Routes>
+        {meLoaded && <Routes>
           <Route index element={<Navigate to="case-queue" replace />} />
-          <Route path="case-queue" element={<CaseQueue />} />
+          <Route path="case-queue" element={<CaseQueue canAssign={canAssign} />} />
           <Route path="completed-cases" element={<CompletedCases />} />
+          {canAssign && <Route path="radiologists" element={<Radiologists />} />}
           <Route path="*" element={<Navigate to="case-queue" replace />} />
-        </Routes>
+        </Routes>}
       </main>
     </div>
   );
