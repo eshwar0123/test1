@@ -16,6 +16,7 @@ import {
 import { createNiftiImageIdsAndCacheMetadata } from "@cornerstonejs/nifti-volume-loader";
 import { initCornerstoneOnce } from "./useCornerstoneInit";
 import { getFile } from "../../fileStore";
+import { isPlainImageUrl, imageUrlToDicomBlobUrl, getSavedSpacing } from "../utils/imageToDicom";
 
 /**
  * If fileUrl is a local-file key (from the file store), retrieve the File
@@ -74,6 +75,20 @@ export const toSameOriginUrl = (url) => {
     return `${window.location.origin}/api/radiology/file/${key}`;
   } catch {
     return url;
+  }
+};
+
+/** Wrap a JPG/PNG into an in-memory DICOM. Tries the same-origin URL first and, if that
+ *  404s (e.g. key mismatch in the streaming endpoint), the original URL as a fallback. */
+const convertImageUrl = async (url, originalUrl) => {
+  const opts = (u) => ({ mmPerPx: getSavedSpacing(u) });
+  try {
+    return await imageUrlToDicomBlobUrl(url, opts(url));
+  } catch (err) {
+    if (originalUrl && originalUrl !== url && !originalUrl.startsWith("blob:")) {
+      return await imageUrlToDicomBlobUrl(originalUrl, opts(url));
+    }
+    throw err;
   }
 };
 
@@ -522,6 +537,16 @@ export default function useViewerDataLoader({
           if (!resolvedUrls.length) {
             throw new Error("Requested DICOM slice files were not found (404).");
           }
+          // Plain JPG/JPEG/PNG X-rays: wrap each image into an in-memory DICOM so the
+          // normal DICOM pipeline (tools, W/L, measurements ...) can display it.
+          if (resolvedUrls.some(isPlainImageUrl)) {
+            resolvedUrls = await Promise.all(
+              resolvedUrls.map((u, i) =>
+                isPlainImageUrl(u) ? convertImageUrl(u, urls[i]) : u
+              )
+            );
+            if (cancelled) return;
+          }
           imageIds = resolvedUrls.map(buildImageId);
           console.log("[DICOM] imageIds count:", imageIds.length, "first:", imageIds[0], "last:", imageIds[imageIds.length-1]);
         } else {
@@ -529,7 +554,12 @@ export default function useViewerDataLoader({
             buildDicomUrlCandidates(resolvedFileUrl, getAbsoluteUrl)
           );
           // PERF: same-origin rewrite instead of download-then-blob.
+          const originalDicomUrl = resolvedDicomUrl;
           resolvedDicomUrl = toSameOriginUrl(resolvedDicomUrl);
+          if (isPlainImageUrl(resolvedDicomUrl)) {
+            resolvedDicomUrl = await convertImageUrl(resolvedDicomUrl, originalDicomUrl);
+            if (cancelled) return;
+          }
           imageIds = [buildImageId(resolvedDicomUrl)];
         }
         setDicomTotalSlices(imageIds.length || 1);

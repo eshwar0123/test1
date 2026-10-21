@@ -127,6 +127,9 @@ def pick_org_logo(seed: str) -> Optional[str]:
         return None
 
 
+_IMAGE_EXTS = {".jpg", ".jpeg", ".png"}
+
+
 def _is_legacy_absolute_scan_path(path: Optional[str]) -> bool:
     value = str(path or "").strip()
     return value.startswith("/mnt/onix/backend/radiologist/")
@@ -277,6 +280,11 @@ def list_dicom_series_files(request: Request, series_folder: str):
         raise HTTPException(status_code=404, detail="Series folder not found")
 
     dcm_files = sorted(series_path.rglob("*.dcm"))
+    kind = "dicom"
+    if not dcm_files:
+        # plain 2D images (JPG / PNG X-rays)
+        dcm_files = sorted(p for p in series_path.rglob("*") if p.is_file() and p.suffix.lower() in _IMAGE_EXTS)
+        kind = "image" if dcm_files else "dicom"
     base = str(request.base_url).rstrip("/")
 
     out = []
@@ -287,7 +295,7 @@ def list_dicom_series_files(request: Request, series_folder: str):
             "url": f"{base}/uploads/dicom-series/{series_folder}/{rel}",
         })
 
-    return {"success": True, "count": len(out), "files": out}
+    return {"success": True, "count": len(out), "files": out, "kind": kind}
 
 
 @router.api_route("/bulk-series/{case_folder:path}/files", methods=["GET", "HEAD"])
@@ -344,6 +352,11 @@ def list_bulk_series_files(request: Request, case_folder: str):
         return Response(status_code=200)
 
     dcm_files = sorted(series_path.rglob("*.dcm"))
+    kind = "dicom"
+    if not dcm_files:
+        # plain 2D images (JPG / PNG X-rays)
+        dcm_files = sorted(p for p in series_path.rglob("*") if p.is_file() and p.suffix.lower() in _IMAGE_EXTS)
+        kind = "image" if dcm_files else "dicom"
     base = str(request.base_url).rstrip("/")
 
     out = []
@@ -354,7 +367,7 @@ def list_bulk_series_files(request: Request, case_folder: str):
             "url": f"{base}/api/uploads/organization/bulk_cases/{case_folder}/{rel}",
         })
 
-    return {"success": True, "count": len(out), "files": out}
+    return {"success": True, "count": len(out), "files": out, "kind": kind}
 
 
 # -----------------------------

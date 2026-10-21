@@ -553,6 +553,13 @@ def generate_case_thumbnail(image_dir: str, filenames: List[str], output_folder:
                 arr = np.asarray(arr, dtype=np.float32) * slope + intercept
                 if _save_thumb_from_pixels(arr, out_path):
                     return thumb_filename
+            elif lower.endswith((".png", ".jpg", ".jpeg")) and PILLOW:
+                # Plain 2D images (X-ray photos / exports): resize the image itself.
+                with PILImage.open(fpath) as src_img:
+                    img = src_img.convert("L") if src_img.mode not in ("L", "RGB") else src_img.copy()
+                img.thumbnail((384, 384), PILImage.LANCZOS)
+                img.save(out_path, format="PNG", optimize=True)
+                return thumb_filename
             elif (lower.endswith(".nii") or lower.endswith(".nii.gz")) and NIBABEL:
                 vol = nib.load(fpath).get_fdata()
                 if vol.ndim == 4:

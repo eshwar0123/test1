@@ -1819,6 +1819,9 @@ def serve_scan_file(subject_id: str, filename: str, user=Depends(get_current_use
         ".nii":  "application/octet-stream",
         ".gz":   "application/gzip",
         ".zip":  "application/zip",
+        ".png":  "image/png",
+        ".jpg":  "image/jpeg",
+        ".jpeg": "image/jpeg",
     }
     media_type = mime_map.get(ext, "application/octet-stream")
 

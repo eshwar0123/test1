@@ -963,6 +963,47 @@ export default function ViewerSidePanel({
   // Patient history (typed text + optional attached file) for the Metadata tab.
   const [caseHistory, setCaseHistory] = useState(null); // { history, history_file_name, history_url }
 
+  // Keep the signature image in the editor pointing at the (assigned) radiologist's current
+  // signature. The editor can be filled from an older saved snapshot whose signature <img>
+  // was already marked "not found" (its failed-load state is saved with the HTML), or be
+  // built before the profile arrived — so re-point any signature image whenever the content
+  // or the signature path changes, trying the rebuilt URL first and the stored path second.
+  useEffect(() => {
+    const root = reportEditorRef?.current;
+    if (!root || !showReport) return undefined;
+    const rp = RADIOLOGIST_PROFILE(reportData || {});
+    if (!rp.signatureUrl) return undefined;
+    const urls = [rp.signatureUrl, rp.signatureAltUrl].filter((u, i, a) => u && a.indexOf(u) === i);
+    let timer = null;
+    const repair = () => {
+      root.querySelectorAll('img.report-sign, img[alt="Radiologist Signature"]').forEach((img) => {
+        if (img.dataset.sigFor === rp.signatureUrl) return;
+        img.dataset.sigFor = rp.signatureUrl;
+        const note = img.nextElementSibling && img.nextElementSibling.classList.contains("report-sign-text")
+          ? img.nextElementSibling : null;
+        let tried = 0;
+        img.onload = () => {
+          img.style.display = "";
+          if (note) note.style.display = "none";
+        };
+        img.onerror = () => {
+          tried += 1;
+          if (tried < urls.length) { img.src = urls[tried]; return; }
+          img.style.display = "none";
+          if (note) note.style.display = "block";
+        };
+        img.style.display = "";
+        if (note) note.style.display = "none";
+        img.src = urls[0];
+      });
+    };
+    const observer = new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(repair, 150); });
+    observer.observe(root, { childList: true, subtree: true });
+    repair();
+    return () => { clearTimeout(timer); observer.disconnect(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showReport, reportData?.signature_path]);
+
   // Study Date & Time / Report Submit come from the tables (case history + saved report).
   // They can arrive after the editor was built (technician report-only mode opens the
   // editor before the case history loads), so fill any still-empty cell when they do.

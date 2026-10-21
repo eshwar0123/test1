@@ -917,6 +917,7 @@ export default function Repository1() {
               ...item,
               seriesFiles: seriesData.urls.map(u => u.url),
               fileUrl:     seriesData.urls[0].url,
+              isImage:     seriesData.kind === 'image',   // plain JPG/PNG case (backend flag)
             };
             fileUrl = seriesData.urls[0].url;
           } else {
@@ -953,10 +954,18 @@ export default function Repository1() {
       (filename || '').toLowerCase().endsWith('.nii') ||
       (filename || '').toLowerCase().endsWith('.nii.gz');
 
-    const route = isSeries && !isNifti ? '/radiologist/dcmviewer-cpu' : '/radiologist/dcmviewer';
+    // Plain 2D images (JPG / JPEG / PNG X-rays) open in the viewer's image mode.
+    const isImageUrl = (u) => /\.(jpe?g|png)(?:[?#]|$)/i.test(String(u || ''));
+    const isImage =
+      !!item.isImage ||
+      isImageUrl(fileUrl) || isImageUrl(filename) || isImageUrl(item.s3Key) ||
+      (Array.isArray(item.seriesFiles) && item.seriesFiles.length > 0 && isImageUrl(item.seriesFiles[0]));
+
+    const route = isImage ? '/radiologist/dcmviewer' : (isSeries && !isNifti ? '/radiologist/dcmviewer-cpu' : '/radiologist/dcmviewer');
 
     navigate(route, {
       state: {
+        isImage,
         fileUrl:     fileUrl,
         filename:    filename,
         seriesFiles: item.seriesFiles || null,

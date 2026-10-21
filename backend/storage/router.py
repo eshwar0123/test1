@@ -120,7 +120,16 @@ def presigned_series(prefix: str):
     try:
         from s3_storage import s3, S3_BUCKET, presigned_download
         resp = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix=prefix)
-        keys = [o["Key"] for o in resp.get("Contents", []) if o["Key"].lower().endswith(".dcm")]
+        all_keys = [o["Key"] for o in resp.get("Contents", [])]
+        keys = [k for k in all_keys if k.lower().endswith(".dcm")]
+
+        if not keys:
+            # No DICOM files: a case of plain 2D images (JPG / PNG X-rays). Return them
+            # sorted by name so the viewer's image mode can page through them.
+            image_keys = sorted(k for k in all_keys if k.lower().endswith((".jpg", ".jpeg", ".png")))
+            if image_keys:
+                urls = [{"key": k, "url": presigned_download(k)} for k in image_keys]
+                return {"urls": urls, "count": len(urls), "kind": "image"}
 
         to_check = [k for k in keys if k not in _verified_dcm_keys]
         if to_check:

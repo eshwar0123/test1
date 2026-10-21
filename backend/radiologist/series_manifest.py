@@ -982,7 +982,30 @@ def stream_instance(key: str, request: Request):
         get_kwargs["Range"] = range_header
 
     try:
-        obj = s3.get_object(**get_kwargs)
+        try:
+            obj = s3.get_object(**get_kwargs)
+        except Exception as first_exc:  # noqa: BLE001
+            # Key mismatch (case of the extension, "+" vs space, stray encoding): look the
+            # object up in its folder and compare loosely before giving up.
+            code0 = str((getattr(first_exc, "response", None) or {}).get("Error", {}).get("Code", ""))
+            if "NoSuchKey" not in code0 and "404" not in code0:
+                raise
+            folder, _, base = key.rpartition("/")
+
+            def _norm(s: str) -> str:
+                return unquote(s).replace("+", " ").lower()
+
+            match = None
+            listing = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix=(folder + "/") if folder else "")
+            for o in listing.get("Contents", []):
+                if _norm(o["Key"].rpartition("/")[2]) == _norm(base):
+                    match = o["Key"]
+                    break
+            if not match:
+                log.warning("[file] not found in S3: %r", key)
+                raise
+            get_kwargs["Key"] = match
+            obj = s3.get_object(**get_kwargs)
     except Exception as exc:  # noqa: BLE001
         # boto3 raises ClientError for a missing key, not a distinctly-named
         # exception — the code lives in .response["Error"]["Code"]. Checking

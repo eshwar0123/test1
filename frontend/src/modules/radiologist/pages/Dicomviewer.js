@@ -41,6 +41,8 @@
   import ViewerHeader from "./DicomViewer/components/ViewerHeader";
   import ViewerImageOverlay from "./DicomViewer/components/ViewerImageOverlay";
   import ViewerSidePanel from "./DicomViewer/components/ViewerSidePanel";
+  import ImageScaleBar from "./DicomViewer/components/ImageScaleBar";
+  import { imageUrlToDicomBlobUrl, sourceUrlOfBlob, getSavedSpacing, saveSpacing } from "./DicomViewer/utils/imageToDicom";
   import { actingReportUserId } from "./DicomViewer/utils/actingReportUserId";
   import NiftiToolbar from "./DicomViewer/nifti/components/NiftiToolbar";
   import NiftiCanvasGrid from "./DicomViewer/nifti/components/NiftiCanvasGrid";
@@ -235,10 +237,21 @@
   const {
     fileUrl, filename, seriesFiles, patientName, patientAge, patientSex, caseId, clientId,
     priority, status, study, modality: caseModality, referredBy, location: caseLocation, waitMins,
+    isImage: stateIsImage,
   } = hasRouterState ? location.state : (queryState || {});
+
+  // Plain 2D images (JPG / JPEG / PNG X-rays) open in this same DICOM viewer (each image is
+  // wrapped into an in-memory DICOM). Detected from the worklist flag or the file extension.
+  const _isImgUrl = (u) => /\.(jpe?g|png)(?:[?#]|$)/i.test(String(u || ""));
+  const _hasSeriesFiles = Array.isArray(seriesFiles) && seriesFiles.length > 0;
+  const isImage = !!stateIsImage || (_hasSeriesFiles ? _isImgUrl(seriesFiles[0]) : (_isImgUrl(fileUrl) || _isImgUrl(filename)));
+  const imageUrls = isImage ? (_hasSeriesFiles ? seriesFiles : [fileUrl]) : [];
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    // JPG/PNG cases open in the normal DICOM viewer: each image is wrapped into an in-memory
+    // DICOM (see utils/imageToDicom.js), so every DICOM tool works on it.
+    const [imageSpacing, setImageSpacing] = useState(() => (isImage ? getSavedSpacing(toSameOriginUrl(imageUrls[0])) : null));
 
     const [isNifti, setIsNifti] = useState(false);
     const [isCornerstoneNifti, setIsCornerstoneNifti] = useState(false);
@@ -559,7 +572,7 @@
     const seriesGrouping = useSeriesGrouping({
       caseId,
       seriesFiles: effectiveSeriesFilesForGrouping,
-      enabled: !isNifti && Array.isArray(effectiveSeriesFilesForGrouping) && effectiveSeriesFilesForGrouping.length > 1,
+      enabled: !isNifti && !isImage && Array.isArray(effectiveSeriesFilesForGrouping) && effectiveSeriesFilesForGrouping.length > 1,
     });
     const mprSeriesList = React.useMemo(() => {
       const list = seriesGrouping.series;
@@ -3601,6 +3614,41 @@
                     (anatomyLabel?.voxel ? ` · vox ${anatomyLabel.voxel.join(",")}` : "")))
       : null;
 
+    /* ─── Plain-image scale (JPG/PNG have no pixel spacing) ───────────────
+      Rebuilds the wrapped DICOM(s) with PixelSpacing = spacing (mm per pixel; 0 clears it)
+      and re-mounts the stack at the same image. Existing measurements are cleared because
+      their values were in the old units. */
+    const rebuildImageStack = async (spacing) => {
+      const vp = renderingEngineRef.current?.getViewport?.("DICOM_SINGLE");
+      if (!vp) return "The viewer is not ready yet.";
+      const ids = dicomImageIdsRef.current || [];
+      const sources = ids.map((id) => sourceUrlOfBlob(String(id).replace(/^wadouri:/i, ""))).filter(Boolean);
+      if (!sources.length) return "Could not find the source image to rescale.";
+      const blobs = await Promise.all(sources.map((u) => imageUrlToDicomBlobUrl(u, { mmPerPx: spacing })));
+      const newIds = blobs.map(buildImageId);
+      const idx = Math.max(0, Number(vp.getCurrentImageIdIndex?.() ?? 0));
+      try { csAnnotation.state.removeAllAnnotations(); } catch { /* ignore */ }
+      await vp.setStack(newIds, Math.min(idx, newIds.length - 1));
+      vp.render();
+      dicomImageIdsRef.current = newIds;
+      sources.forEach((u) => saveSpacing(u, spacing));
+      setImageSpacing(spacing > 0 ? spacing : null);
+      return null;
+    };
+
+    const applyImageScale = async (mm) => {
+      const all = csAnnotation.state.getAllAnnotations?.() || [];
+      const lengths = all.filter((a) => (a?.metadata?.toolName || a?.toolName) === LengthTool.toolName);
+      const pts = lengths[lengths.length - 1]?.data?.handles?.points;
+      if (!pts || pts.length < 2) {
+        return "Draw a Length line over a known distance first (Measure → Length), then enter its real size.";
+      }
+      const worldDist = Math.hypot(pts[1][0] - pts[0][0], pts[1][1] - pts[0][1], pts[1][2] - pts[0][2]);
+      const px = worldDist / (imageSpacing || 1);   // the line's length in image pixels
+      if (!(px > 0)) return "That line is too short — draw a longer one.";
+      return rebuildImageStack(mm / px);
+    };
+
     return (
       <div ref={viewerRootRef} style={{ height: "100vh", width: "100%", background: "#000", overflow: "hidden" }}>
         <CCard className="h-100 d-flex flex-column">
@@ -3912,6 +3960,10 @@
                       renderingEngine={renderingEngineRef.current}
                       viewportId={getDicomViewportIdForSlot(activeDicomSlot)}
                     />
+
+                    {isImage && !showDicomTriPlanar && (
+                      <ImageScaleBar spacing={imageSpacing} onApply={applyImageScale} onClear={() => rebuildImageStack(0)} />
+                    )}
 
                     {showDicomTriPlanar ? (
                       <CornerstoneDicomGrid
@@ -4919,4 +4971,5 @@
       </div>
     );
   }
+
 

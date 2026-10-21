@@ -36,13 +36,27 @@ export const HOSPITAL_PROFILE = (reportData) => ({
   website: "",
 });
 
+// Signature files are always saved under uploads/radiologist/signature/ (see the
+// upload-signature endpoint and the technician "add radiologist" form), but the
+// directory part stored in radiologists.signature_path varies between records. Rebuild
+// the URL from just the file name, like the organization dashboard's report download does.
+const signatureUrlFromPath = (path) => {
+  const p = String(path || "").trim();
+  if (!p) return "";
+  if (/^https?:\/\//i.test(p)) return p;
+  const fname = p.split(/[\\/]/).pop();
+  return fname ? `/uploads/radiologist/signature/${encodeURIComponent(fname)}` : "";
+};
+
 export const RADIOLOGIST_PROFILE = (reportData) => ({
   name: stripDrPrefix(reportData?.radiologist_name),
   qualification: reportData?.qualification || "",
   designation: reportData?.designation || "",
   registrationNumber: reportData?.dmc_no || "",
 
-  signatureUrl: toPublicUrl(reportData?.signature_path), // will work once backend sends it
+  signatureUrl: signatureUrlFromPath(reportData?.signature_path),
+  // the path exactly as stored — tried second if the rebuilt URL doesn't load
+  signatureAltUrl: toPublicUrl(reportData?.signature_path),
 });
 
 export const NIFTI_COLORMAP_PRESETS = [
