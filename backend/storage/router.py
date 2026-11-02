@@ -1,8 +1,9 @@
 import os
+from urllib.parse import quote
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
 from s3_storage import (
     build_key,
     upload_fileobj,
@@ -112,7 +113,7 @@ def list_s3_keys(prefix: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/presigned-series")
-def presigned_series(prefix: str):
+def presigned_series(prefix: str, request: Request):
     """Return presigned download URLs for all files under an S3 prefix.
     Self-heals every not-yet-verified .dcm file in the series first (in
     parallel — a case can be a few hundred files, checking them one at a
@@ -128,7 +129,10 @@ def presigned_series(prefix: str):
             # sorted by name so the viewer's image mode can page through them.
             image_keys = sorted(k for k in all_keys if k.lower().endswith((".jpg", ".jpeg", ".png")))
             if image_keys:
-                urls = [{"key": k, "url": presigned_download(k)} for k in image_keys]
+                # Served as DICOM, converted on the fly by the backend (nothing is stored):
+                # website and mobile open these like any .dcm.
+                base = str(request.base_url).rstrip("/")
+                urls = [{"key": k, "url": f"{base}/api/radiology/image-dicom/{quote(k)}.dcm"} for k in image_keys]
                 return {"urls": urls, "count": len(urls), "kind": "image"}
 
         to_check = [k for k in keys if k not in _verified_dcm_keys]

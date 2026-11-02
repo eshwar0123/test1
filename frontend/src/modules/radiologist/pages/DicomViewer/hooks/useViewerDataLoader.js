@@ -16,7 +16,7 @@ import {
 import { createNiftiImageIdsAndCacheMetadata } from "@cornerstonejs/nifti-volume-loader";
 import { initCornerstoneOnce } from "./useCornerstoneInit";
 import { getFile } from "../../fileStore";
-import { isPlainImageUrl, imageUrlToDicomBlobUrl, getSavedSpacing } from "../utils/imageToDicom";
+import { isPlainImageUrl, imageUrlToBackendDicomUrl } from "../utils/imageDicomUrl";
 
 /**
  * If fileUrl is a local-file key (from the file store), retrieve the File
@@ -75,20 +75,6 @@ export const toSameOriginUrl = (url) => {
     return `${window.location.origin}/api/radiology/file/${key}`;
   } catch {
     return url;
-  }
-};
-
-/** Wrap a JPG/PNG into an in-memory DICOM. Tries the same-origin URL first and, if that
- *  404s (e.g. key mismatch in the streaming endpoint), the original URL as a fallback. */
-const convertImageUrl = async (url, originalUrl) => {
-  const opts = (u) => ({ mmPerPx: getSavedSpacing(u) });
-  try {
-    return await imageUrlToDicomBlobUrl(url, opts(url));
-  } catch (err) {
-    if (originalUrl && originalUrl !== url && !originalUrl.startsWith("blob:")) {
-      return await imageUrlToDicomBlobUrl(originalUrl, opts(url));
-    }
-    throw err;
   }
 };
 
@@ -537,13 +523,15 @@ export default function useViewerDataLoader({
           if (!resolvedUrls.length) {
             throw new Error("Requested DICOM slice files were not found (404).");
           }
-          // Plain JPG/JPEG/PNG X-rays: wrap each image into an in-memory DICOM so the
-          // normal DICOM pipeline (tools, W/L, measurements ...) can display it.
-          if (resolvedUrls.some(isPlainImageUrl)) {
+          // Plain JPG/JPEG/PNG X-rays: the backend converts each one to DICOM on the fly
+          // (/api/radiology/image-dicom/...), so they load like any .dcm.
+          if (urls.some(isPlainImageUrl) || resolvedUrls.some(isPlainImageUrl)) {
+            const same = urls.length === resolvedUrls.length;
             resolvedUrls = await Promise.all(
-              resolvedUrls.map((u, i) =>
-                isPlainImageUrl(u) ? convertImageUrl(u, urls[i]) : u
-              )
+              resolvedUrls.map((u, i) => {
+                const src = same ? urls[i] : u;
+                return isPlainImageUrl(src) ? imageUrlToBackendDicomUrl(src) : u;
+              })
             );
             if (cancelled) return;
           }
@@ -556,8 +544,8 @@ export default function useViewerDataLoader({
           // PERF: same-origin rewrite instead of download-then-blob.
           const originalDicomUrl = resolvedDicomUrl;
           resolvedDicomUrl = toSameOriginUrl(resolvedDicomUrl);
-          if (isPlainImageUrl(resolvedDicomUrl)) {
-            resolvedDicomUrl = await convertImageUrl(resolvedDicomUrl, originalDicomUrl);
+          if (isPlainImageUrl(originalDicomUrl)) {
+            resolvedDicomUrl = await imageUrlToBackendDicomUrl(originalDicomUrl);
             if (cancelled) return;
           }
           imageIds = [buildImageId(resolvedDicomUrl)];

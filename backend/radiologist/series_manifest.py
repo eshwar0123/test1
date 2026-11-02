@@ -1069,3 +1069,245 @@ def get_segmentations(case_id: str):
     and keep returning 204 for cases that genuinely have none.
     """
     return Response(status_code=204)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# JPG / JPEG / PNG X-rays → DICOM, converted on the fly (nothing is stored)
+# ════════════════════════════════════════════════════════════════════════════
+#
+#   GET /api/radiology/image-dicom/{key}.dcm[?mm_per_px=0.2]
+#       Reads the image from S3 / local disk, wraps it into a minimal single-frame DICOM
+#       (MONOCHROME2, 8-bit) in memory and streams it back as application/dicom. The website
+#       viewer and the mobile app open it exactly like a .dcm file.
+#       mm_per_px: omitted -> use the scale saved for this image (if any); 0 -> no scale.
+#
+#   GET /api/radiology/image-scale?key=...            -> {"mm_per_px": 0.21 | null}
+#   PUT /api/radiology/image-scale {key, mm_per_px}   (0 / null clears it)
+#       JPG/PNG carry no pixel spacing, so the radiologist calibrates it once (known length
+#       in mm) and it is kept per image in radiology_schema.image_scale - shared by every
+#       client - and written into the DICOM as PixelSpacing.
+#
+# Only a small in-memory LRU of recent conversions is kept (cleared on restart).
+
+from collections import OrderedDict
+from pydicom.dataset import Dataset, FileMetaDataset
+from pydicom.uid import ExplicitVRLittleEndian, SecondaryCaptureImageStorage, generate_uid
+from pydantic import BaseModel
+
+_IMG_EXTS = (".jpg", ".jpeg", ".png")
+_img_dicom_cache: "OrderedDict[tuple, bytes]" = OrderedDict()
+_IMG_CACHE_MAX = 48
+_scale_table_ready = False
+
+
+def _normalize_image_key(key: str) -> str:
+    key = (key or "").strip().lstrip("/")
+    if re.search(r"%[0-9A-Fa-f]{2}", key):
+        key = unquote(key)
+    if not key or ".." in key.split("/"):
+        raise HTTPException(status_code=400, detail="Invalid key")
+    try:
+        from s3_storage import S3_BUCKET as _bucket
+        if _bucket and key.startswith(f"{_bucket}/"):
+            key = key[len(_bucket) + 1:]
+    except Exception:  # noqa: BLE001
+        pass
+    return key
+
+
+def _read_image_bytes(key: str) -> bytes:
+    # legacy URL form of the dicom_series folder
+    local_key = key
+    if local_key.startswith("uploads/dicom-series/"):
+        local_key = "radiologist/dicom_series/" + local_key[len("uploads/dicom-series/"):]
+
+    # 1. local disk (same roots as stream_instance)
+    for root in (Path(BULK_CASES_DIR).parent.parent, Path(BASE_DIR).parent):
+        try:
+            candidate = (root / local_key).resolve()
+            candidate.relative_to(root.resolve())
+        except (ValueError, OSError):
+            continue
+        if candidate.is_file():
+            return candidate.read_bytes()
+
+    # 2. S3 (exact key, then a loose file-name match in the same folder)
+    try:
+        from s3_storage import s3, S3_BUCKET
+    except Exception as exc:  # noqa: BLE001
+        log.error("[image-dicom] no local copy of %s and S3 unavailable: %s", key, exc)
+        raise HTTPException(status_code=404, detail="File not found")
+
+    def _missing(exc: Exception) -> bool:
+        err = (getattr(exc, "response", None) or {}).get("Error", {})
+        code = str(err.get("Code", ""))
+        return "NoSuchKey" in code or "404" in code
+
+    try:
+        return s3.get_object(Bucket=S3_BUCKET, Key=key)["Body"].read()
+    except Exception as exc:  # noqa: BLE001
+        if not _missing(exc):
+            log.error("[image-dicom] S3 get_object failed for %s: %s", key, exc)
+            raise HTTPException(status_code=502, detail="Upstream storage error")
+
+    folder, _, base = key.rpartition("/")
+
+    def norm(s: str) -> str:
+        return unquote(s).replace("+", " ").lower()
+
+    try:
+        listing = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix=(folder + "/") if folder else "")
+        for o in listing.get("Contents", []):
+            if norm(o["Key"].rpartition("/")[2]) == norm(base):
+                return s3.get_object(Bucket=S3_BUCKET, Key=o["Key"])["Body"].read()
+    except Exception as exc:  # noqa: BLE001
+        log.error("[image-dicom] S3 lookup failed for %s: %s", key, exc)
+    log.warning("[image-dicom] not found: %r", key)
+    raise HTTPException(status_code=404, detail="File not found")
+
+
+def _image_to_dicom_bytes(raw: bytes, mm_per_px: Optional[float]) -> bytes:
+    try:
+        img = PILImage.open(io.BytesIO(raw))
+        img.load()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=422, detail=f"Not a readable image: {exc}")
+
+    if img.mode in ("I;16", "I;16L", "I;16B", "I", "F"):
+        arr = np.asarray(img).astype(np.float32)
+        lo, hi = float(arr.min()), float(arr.max())
+        arr = np.zeros_like(arr) if hi <= lo else (arr - lo) * (255.0 / (hi - lo))
+        gray = arr.clip(0, 255).astype(np.uint8)
+    else:
+        gray = np.asarray(img.convert("L"), dtype=np.uint8)
+    rows, cols = gray.shape
+
+    meta = FileMetaDataset()
+    meta.MediaStorageSOPClassUID = SecondaryCaptureImageStorage
+    meta.MediaStorageSOPInstanceUID = generate_uid()
+    meta.TransferSyntaxUID = ExplicitVRLittleEndian
+    meta.ImplementationClassUID = "1.2.826.0.1.3680043.9.7133.1"
+
+    ds = Dataset()
+    ds.file_meta = meta
+    ds.SOPClassUID = meta.MediaStorageSOPClassUID
+    ds.SOPInstanceUID = meta.MediaStorageSOPInstanceUID
+    ds.Modality = "CR"
+    ds.StudyInstanceUID = generate_uid()
+    ds.SeriesInstanceUID = generate_uid()
+    ds.InstanceNumber = 1
+    ds.SamplesPerPixel = 1
+    ds.PhotometricInterpretation = "MONOCHROME2"
+    ds.Rows = int(rows)
+    ds.Columns = int(cols)
+    if mm_per_px and mm_per_px > 0:
+        ds.PixelSpacing = [round(mm_per_px, 6), round(mm_per_px, 6)]
+    ds.BitsAllocated = 8
+    ds.BitsStored = 8
+    ds.HighBit = 7
+    ds.PixelRepresentation = 0
+    ds.WindowCenter = 127
+    ds.WindowWidth = 256
+    ds.PixelData = gray.tobytes()
+    ds["PixelData"].VR = "OB"
+
+    buf = io.BytesIO()
+    ds.save_as(buf, write_like_original=False)
+    return buf.getvalue()
+
+
+def _ensure_scale_table(cur) -> None:
+    global _scale_table_ready
+    if _scale_table_ready:
+        return
+    cur.execute("CREATE SCHEMA IF NOT EXISTS radiology_schema")
+    cur.execute(
+        """CREATE TABLE IF NOT EXISTS radiology_schema.image_scale (
+               img_key    text PRIMARY KEY,
+               mm_per_px  double precision NOT NULL,
+               updated_at timestamptz NOT NULL DEFAULT now()
+           )"""
+    )
+    _scale_table_ready = True
+
+
+def _get_saved_scale(key: str) -> Optional[float]:
+    if get_conn is None:
+        return None
+    try:
+        conn = get_conn()
+        try:
+            with conn.cursor() as cur:
+                _ensure_scale_table(cur)
+                conn.commit()
+                cur.execute("SELECT mm_per_px FROM radiology_schema.image_scale WHERE img_key = %s", (key,))
+                row = cur.fetchone()
+        finally:
+            conn.close()
+        return float(row[0]) if row and row[0] and row[0] > 0 else None
+    except Exception as exc:  # noqa: BLE001
+        log.warning("[image-scale] read failed for %s: %s", key, exc)
+        return None
+
+
+@router.get("/image-dicom/{key:path}")
+def image_as_dicom(key: str, mm_per_px: Optional[float] = None):
+    # URLs end in ".dcm" (<image key>.dcm) so nginx's static-image rules don't intercept them.
+    if key.lower().endswith(".dcm"):
+        key = key[:-4]
+    key = _normalize_image_key(key)
+    if not key.lower().endswith(_IMG_EXTS):
+        raise HTTPException(status_code=400, detail="Not a JPG/PNG image")
+    spacing = _get_saved_scale(key) if mm_per_px is None else (mm_per_px if mm_per_px > 0 else None)
+
+    ck = (key, round(spacing, 6) if spacing else None)
+    data = _img_dicom_cache.get(ck)
+    if data is None:
+        data = _image_to_dicom_bytes(_read_image_bytes(key), spacing)
+        _img_dicom_cache[ck] = data
+        while len(_img_dicom_cache) > _IMG_CACHE_MAX:
+            _img_dicom_cache.popitem(last=False)
+    else:
+        _img_dicom_cache.move_to_end(ck)
+    return Response(
+        content=data,
+        media_type="application/dicom",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@router.get("/image-scale")
+def get_image_scale(key: str):
+    return {"mm_per_px": _get_saved_scale(_normalize_image_key(key))}
+
+
+class ImageScaleIn(BaseModel):
+    key: str
+    mm_per_px: Optional[float] = None
+
+
+@router.put("/image-scale")
+def set_image_scale(body: ImageScaleIn):
+    key = _normalize_image_key(body.key)
+    if get_conn is None:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    keep = bool(body.mm_per_px and body.mm_per_px > 0)
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            _ensure_scale_table(cur)
+            if keep:
+                cur.execute(
+                    """INSERT INTO radiology_schema.image_scale (img_key, mm_per_px)
+                       VALUES (%s, %s)
+                       ON CONFLICT (img_key) DO UPDATE SET mm_per_px = EXCLUDED.mm_per_px, updated_at = now()""",
+                    (key, float(body.mm_per_px)),
+                )
+            else:
+                cur.execute("DELETE FROM radiology_schema.image_scale WHERE img_key = %s", (key,))
+        conn.commit()
+    finally:
+        conn.close()
+    for ck in [c for c in _img_dicom_cache if c[0] == key]:
+        _img_dicom_cache.pop(ck, None)
+    return {"success": True, "mm_per_px": float(body.mm_per_px) if keep else None}

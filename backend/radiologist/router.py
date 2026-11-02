@@ -1,5 +1,6 @@
 # radiology/router.py
 import os
+from urllib.parse import quote
 from collections import OrderedDict
 import re
 import json
@@ -292,7 +293,8 @@ def list_dicom_series_files(request: Request, series_folder: str):
         rel = p.relative_to(series_path).as_posix()
         out.append({
             "name": rel,
-            "url": f"{base}/uploads/dicom-series/{series_folder}/{rel}",
+            "url": (f"{base}/api/radiology/image-dicom/radiologist/dicom_series/{quote(series_folder)}/{quote(rel)}.dcm"
+                    if kind == "image" else f"{base}/uploads/dicom-series/{series_folder}/{rel}"),
         })
 
     return {"success": True, "count": len(out), "files": out, "kind": kind}
@@ -364,7 +366,8 @@ def list_bulk_series_files(request: Request, case_folder: str):
         rel = p.relative_to(series_path).as_posix()
         out.append({
             "name": rel,
-            "url": f"{base}/api/uploads/organization/bulk_cases/{case_folder}/{rel}",
+            "url": (f"{base}/api/radiology/image-dicom/uploads/organization/bulk_cases/{quote(case_folder)}/{quote(rel)}.dcm"
+                    if kind == "image" else f"{base}/api/uploads/organization/bulk_cases/{case_folder}/{rel}"),
         })
 
     return {"success": True, "count": len(out), "files": out, "kind": kind}
@@ -646,6 +649,24 @@ def _get_cached_scan(s3_key: str):
                     "rows": int(data.shape[0]) if data.ndim >= 1 else None,
                     "columns": int(data.shape[1]) if data.ndim >= 2 else None,
                 }
+            except Exception:
+                pass
+        elif lower_key.endswith((".jpg", ".jpeg", ".png")):
+            # Plain 2D X-ray image: decode to a grayscale pixel array (same shape of data the
+            # DICOM branch yields) so scan_preview / scan_metadata work for the mobile viewer.
+            img = Image.open(io.BytesIO(raw_bytes))
+            img.load()
+            if img.mode in ("I;16", "I;16L", "I;16B", "I", "F"):
+                arr = np.asarray(img).astype(np.float32)
+            else:
+                arr = np.asarray(img.convert("L"), dtype=np.float32)
+            meta = {"rows": int(arr.shape[0]), "columns": int(arr.shape[1])}
+            try:
+                from .series_manifest import _get_saved_scale
+                mm = _get_saved_scale(s3_key)
+                if mm:
+                    meta["pixel_spacing_row_mm"] = mm
+                    meta["pixel_spacing_col_mm"] = mm
             except Exception:
                 pass
         else:
