@@ -88,6 +88,9 @@ const pickDefaultAvatar = (userId) => {
   return DEFAULT_AVATARS[sum % DEFAULT_AVATARS.length];
 };
 
+const DEFAULT_QUALIFICATION = "M.B.B.S M.D. RADIODIAGNOSIS";
+const DEFAULT_DESIGNATION = "CONSULTANT RADIOLOGIST";
+
 const Profile = () => {
   const auth = useMemo(() => {
     try {
@@ -108,8 +111,10 @@ const Profile = () => {
   const [signaturePreview, setSignaturePreview] = useState("");
 
   // form state
-  const [qualification, setQualification] = useState("");
+  const [qualification, setQualification] = useState(DEFAULT_QUALIFICATION);
+  const [designation, setDesignation] = useState(DEFAULT_DESIGNATION);
   const [dmcNo, setDmcNo] = useState("");
+  const [regNo, setRegNo] = useState("");
 
   // alerts
   const [error, setError] = useState("");
@@ -185,8 +190,16 @@ const Profile = () => {
       const data = res.data?.data;
 
       setProfile(data);
-      setQualification((data?.qualification || "").toUpperCase());
+      // legacy rows only hold a bare "MD"/"MBBS" — show the full default for those
+      const savedQual = (data?.qualification || "").trim();
+      setQualification(
+        !savedQual || ["MD", "MBBS"].includes(savedQual.toUpperCase())
+          ? DEFAULT_QUALIFICATION
+          : savedQual
+      );
+      setDesignation((data?.designation || "").trim() || DEFAULT_DESIGNATION);
       setDmcNo(data?.dmc_no || "");
+      setRegNo(data?.reg_no || "");
 
       // ----- Photo (DB -> else default random) -----
       const savedAvatar = localStorage.getItem("avatarUrl") || "";
@@ -353,8 +366,10 @@ const Profile = () => {
       setSuccess("");
 
       const form = new FormData();
-      form.append("qualification", qualification || "MD");
+      form.append("qualification", (qualification || "").trim() || DEFAULT_QUALIFICATION);
+      form.append("designation", (designation || "").trim() || DEFAULT_DESIGNATION);
       form.append("dmc_no", (dmcNo || "").trim());
+      form.append("reg_no", (regNo || "").trim());
 
       const res = await api.post(`/radiology/profile/${userId}/save`, form);
 
@@ -465,6 +480,20 @@ const Profile = () => {
                 </div>
 
                 <div className="profile-row-new">
+                  <div className="label">Reg No</div>
+                  <div className="value">
+                    <CFormInput
+                      size="sm"
+                      placeholder="Enter registration number"
+                      value={regNo}
+                      onChange={(e) => setRegNo(e.target.value)}
+                      style={{ maxWidth: 220 }}
+                    />
+                  </div>
+                  <div />
+                </div>
+
+                <div className="profile-row-new">
                   <div className="label">Email</div>
                   <div className="value">{lockedEmail || "-"}</div>
                   <div />
@@ -473,10 +502,11 @@ const Profile = () => {
                 <div className="profile-row-new">
                   <div className="label">Qualification</div>
                   <div className="value">
-                 
-                      <span style={{ fontWeight: 500 }}>MD Radiodiagnosis</span>
-                 
-
+                    <CFormInput
+                      size="sm"
+                      value={qualification}
+                      onChange={(e) => setQualification(e.target.value)}
+                    />
                   </div>
                   <div />
                 </div>
@@ -512,7 +542,11 @@ const Profile = () => {
                 <div className="profile-row-new">
                   <div className="label">Designation</div>
                   <div className="value">
-                    {profile?.designation || "Consultant Radiologist"}
+                    <CFormInput
+                      size="sm"
+                      value={designation}
+                      onChange={(e) => setDesignation(e.target.value)}
+                    />
                   </div>
 
                   <div />

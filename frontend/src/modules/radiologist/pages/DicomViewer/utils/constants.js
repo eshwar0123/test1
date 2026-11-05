@@ -48,11 +48,53 @@ const signatureUrlFromPath = (path) => {
   return fname ? `/uploads/radiologist/signature/${encodeURIComponent(fname)}` : "";
 };
 
+// ── Organization-specific signature block ──
+// Only reports of BRAHM SHAKTI SANJIVANI SUPER SPECIALITY HOSPITAL carry the
+// signature / name / qualification / designation / Reg.No / report date /
+// disclaimer sign-off; every other organization keeps the standard card.
+export const BRAHM_SHAKTI_DISCLAIMER =
+  "It is an online interpretation of medical imaging based on clinical data. All modern machines/procedures have their own limitation. If there is any clinical discrepancy ,this investigation may be repeated or reassessed by other tests. Patients identification in online reporting is not established, so in no way this report can be utilized for any medico legal purpose. In case of any discrepancy due to typing error or machinery error please get it rectified immediately.";
+
+export const isBrahmShaktiOrg = (orgName) =>
+  /brahm\s*shakti\s*sanjivani/i.test(String(orgName || ""));
+
+// dd-mm-yyyy hh:mm AM/PM
+export const formatSignReportDate = (value) => {
+  const d = value instanceof Date ? value : new Date(value);
+  if (isNaN(d.getTime())) return "";
+  const p2 = (n) => String(n).padStart(2, "0");
+  const h = d.getHours();
+  return `${p2(d.getDate())}-${p2(d.getMonth() + 1)}-${d.getFullYear()} ${p2(h % 12 || 12)}:${p2(d.getMinutes())} ${h >= 12 ? "PM" : "AM"}`;
+};
+
+// `rp` is RADIOLOGIST_PROFILE(...); the Report Date lives in a .report-sign-date
+// span that is stamped with the submit time when the report is submitted.
+export const buildBrahmShaktiSignatureHtml = (rp, reportDate = "") => {
+  const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const line = (t) => (t ? `<div style="font-size:13px;line-height:1.35;">${esc(t)}</div>` : "");
+  return (
+    `<div class="report-sign-section report-sign-org" style="text-align:left;margin-top:10px;width:100%;">` +
+      (rp.signatureUrl
+        ? `<img class="report-sign" src="${esc(rp.signatureUrl)}" alt="Radiologist Signature" style="max-height:80px;max-width:220px;object-fit:contain;display:block;margin:0 0 4px;" onerror="this.style.display='none'" />`
+        : "") +
+      (rp.name ? line(`Dr. ${rp.name.toUpperCase()}`) : "") +
+      line(rp.qualification) +
+      line(rp.designation) +
+      (rp.regNo ? line(`Reg.No:${rp.regNo}`) : "") +
+      `<div style="font-size:13px;margin-top:14px;">Report Date : <span class="report-sign-date">${esc(reportDate)}</span></div>` +
+      `<div style="font-size:11px;line-height:1.35;margin-top:4px;"><b>Disclaimer-</b>${esc(BRAHM_SHAKTI_DISCLAIMER)}</div>` +
+    `</div>`
+  );
+};
+
 export const RADIOLOGIST_PROFILE = (reportData) => ({
   name: stripDrPrefix(reportData?.radiologist_name),
   qualification: reportData?.qualification || "",
   designation: reportData?.designation || "",
   registrationNumber: reportData?.dmc_no || "",
+  regNo: reportData?.reg_no || "",
+  organizationName: reportData?.organization_name || "",
+  isBrahmShakti: isBrahmShaktiOrg(reportData?.organization_name),
 
   signatureUrl: signatureUrlFromPath(reportData?.signature_path),
   // the path exactly as stored — tried second if the rebuilt URL doesn't load

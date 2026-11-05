@@ -2,9 +2,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { actingReportUserId } from "../utils/actingReportUserId";
 import { CButton } from "@coreui/react";
-import { BACKEND_URL, RADIOLOGIST_PROFILE } from "../utils/constants";
+import { BACKEND_URL, RADIOLOGIST_PROFILE, buildBrahmShaktiSignatureHtml, formatSignReportDate } from "../utils/constants";
 import onixIcon from "/icon.png";
-import ReportRewriteOverlay from "./ReportRewriteOverlay";
+import ReportRewriteOverlayRe from "./ReportRewriteOverlay";
 import useReportGhostAutocomplete from "../hooks/useReportGhostAutocomplete";
 import { regionFromStudy } from "../utils/radiologyPhrases";
 import { readReportFileToText } from "../utils/reportFileReader";
@@ -690,7 +690,9 @@ export default function ViewerSidePanel({
       const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
       const hasSig = !!(rp.signatureUrl || rp.name);
       if (hasSig) {
-        const card =
+        const card = rp.isBrahmShakti
+          ? buildBrahmShaktiSignatureHtml(rp, reportData?.completed_at ? formatSignReportDate(reportData.completed_at) : "")
+          :
           `<div class="report-sign-section" style="display:flex;justify-content:flex-end;margin-top:10px;width:100%;">` +
             `<div style="min-width:260px;text-align:center;display:flex;flex-direction:column;align-items:center;">` +
               `<div style="font-size:13px;font-weight:700;margin:0 0 6px;">Signature</div>` +
@@ -1033,6 +1035,7 @@ export default function ViewerSidePanel({
     };
     fill(".report-scan-editor", studyText);
     fill(".report-submit-editor", submitText);
+    if (reportData?.completed_at) fill(".report-sign-date", formatSignReportDate(reportData.completed_at));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showReport, caseHistory?.study_time, dicomStudyDateTime, reportData?.scan_datetime, reportData?.completed_at]);
   useEffect(() => {
@@ -1150,7 +1153,30 @@ export default function ViewerSidePanel({
     }
   };
 
+  // On submit, drop the "Clinical Indication" section when it is blank or still
+  // holds the "[Enter clinical indication]" template placeholder.
+  const removeEmptyClinicalIndication = () => {
+    const root = reportEditorRef?.current;
+    if (!root) return;
+    root.querySelectorAll("p").forEach((p) => {
+      const label = (p.textContent || "").replace(/[:：]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+      if (label !== "clinical indication") return;
+      const body = p.nextElementSibling;
+      if (!body || body.tagName !== "DIV") return;
+      const text = (body.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+      if (text === "" || text === "[enter clinical indication]") {
+        body.remove();
+        p.remove();
+      }
+    });
+  };
+
   const handleSubmitReportWithHistory = async () => {
+    removeEmptyClinicalIndication();
+    // org signature block: Report Date = the moment of submission
+    reportEditorRef?.current?.querySelectorAll(".report-sign-date").forEach((el) => {
+      el.textContent = formatSignReportDate(new Date());
+    });
     await saveReportVersion("Submitted");
     if (typeof submitReport === "function") submitReport();
   };
@@ -2511,9 +2537,145 @@ const manualClientIdMap = {
                 )}
                 {(() => {
                   const H = `<div style="font-family:Arial,sans-serif;font-size:13px;line-height:1.7;color:#111827;padding:8px;"><p style="text-align:center;font-style:italic;font-weight:700;font-size:14px;margin:0 0 10px;">ORGANIZATION NAME</p><table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px;"><tr><td style="font-weight:700;width:160px;padding:3px 0;">Age / Sex</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;min-width:160px;padding:3px 2px;" contenteditable="true"></td></tr><tr><td style="font-weight:700;padding:3px 0;">Case Id</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr><tr><td style="font-weight:700;padding:3px 0;">Referring Doctor</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr><tr><td style="font-weight:700;padding:3px 0;">Date &amp; Time</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr><tr><td style="font-weight:700;padding:3px 0;">Investigation</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr></table>`;
-                  const F = `<p style="font-weight:700;margin:10px 0 4px;">IMPRESSION:</p><div style="min-height:60px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true"></div><p style="font-weight:700;margin:10px 0 4px;">Clinical Advice:</p><div style="min-height:36px;border-bottom:1px solid #d1d5db;margin-bottom:20px;" contenteditable="true"></div><p style="font-weight:700;margin:10px 0 4px;">Signature</p><div style="min-height:36px;" contenteditable="true"></div></div>`;
+                  const F = `<p style="font-weight:700;margin:10px 0 4px;">IMPRESSION:</p><div style="min-height:60px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true"></div><p style="font-weight:700;margin:10px 0 4px;">Clinical Advice:</p><div style="min-height:36px;border-bottom:1px solid #d1d5db;margin-bottom:20px;" contenteditable="true">Clinical Correlation for further evaluation</div><p style="font-weight:700;margin:10px 0 4px;">Signature</p><div style="min-height:36px;" contenteditable="true"></div></div>`;
                   const s = (label, body) => `<p style="font-weight:700;margin:10px 0 4px;">${label}</p><div style="min-height:${body ? '32' : '60'}px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true">${body || ''}</div>`;
                   const title = (t) => `<p style="text-align:center;font-weight:700;text-decoration:underline;font-size:14px;margin:12px 0;" contenteditable="true">${t}</p>`;
+                  // CT default-report builders: P = plain lines, B = bold sub-heading, K = bold label + text
+                  const P = (...a) => a.map((x) => `<p>${x}</p>`).join("");
+                  const B = (x) => `<p><strong>${x}</strong></p>`;
+                  const K = (l, x) => `<p><strong>${l}:</strong> ${x}</p>`;
+                  const ctp = (t, tech, findings, impression) =>
+                    H + title(t) + s("Clinical Indication:", "[Enter clinical indication]") + s("Technique:", tech) + s("FINDINGS", findings) + F.replace('contenteditable="true"></div>', `contenteditable="true">${impression}</div>`);
+                  const CT_HEAD_PLAIN = ctp("CT BRAIN – PLAIN",
+                    "Non-contrast axial CT images of the brain were obtained with multiplanar reformations.",
+                    P("Brain parenchyma demonstrates normal attenuation with preserved gray-white matter differentiation.", "No acute intracranial hemorrhage, focal mass lesion or significant mass effect.", "No CT evidence of acute large territorial infarction.", "Ventricular system is normal in size and configuration.", "Basal cisterns and cortical sulci are preserved.", "No midline shift or extra-axial collection.", "Brainstem and cerebellum are unremarkable.", "Visualized paranasal sinuses and mastoid air cells are clear.", "Visualized calvarium shows no acute abnormality."),
+                    P("No acute intracranial abnormality detected on non-contrast CT."));
+                  const CT_HEAD_CONTRAST = ctp("CT BRAIN – CONTRAST ENHANCED",
+                    "Axial CT images of the brain were acquired following intravenous administration of iodinated contrast, with multiplanar reformations.",
+                    P("Brain parenchyma demonstrates normal attenuation and preserved gray-white matter differentiation.", "No focal intracranial mass lesion, edema or mass effect.", "No abnormal intracranial enhancement.", "Ventricular system and basal cisterns are normal.", "No midline shift or extra-axial collection.", "Major visualized intracranial vascular structures demonstrate expected enhancement.", "Brainstem and cerebellum are unremarkable.", "Visualized paranasal sinuses, mastoid air cells and calvarium show no significant abnormality."),
+                    P("No abnormal intracranial enhancement or focal intracranial lesion identified.", "No significant intracranial abnormality detected on this examination."));
+                  const CT_CAP = ctp("CT THORAX, ABDOMEN AND PELVIS – CONTRAST ENHANCED",
+                    "Contrast-enhanced CT of the thorax, abdomen and pelvis was performed following intravenous administration of iodinated contrast, with multiplanar reformations. [Specify contrast phase(s) and oral contrast administration, if applicable.]",
+                    B("THORAX") + K("Lungs and Airways", "Trachea and major bronchi are patent. Both lungs are clear. No focal consolidation, suspicious pulmonary nodule or mass.") + K("Pleura", "No pleural effusion or pneumothorax.") + K("Mediastinum and Hila", "No pathologically enlarged mediastinal or hilar lymph nodes.") + K("Heart and Great Vessels", "Heart size is within normal limits. Thoracic aorta is normal in caliber.") + K("Chest Wall", "No significant abnormality.") +
+                    B("ABDOMEN") + K("Liver", "Normal in size, contour and enhancement. No focal hepatic lesion.") + K("Gallbladder and Biliary Tree", "Gallbladder is unremarkable. No biliary ductal dilatation.") + K("Pancreas", "Normal morphology and enhancement. No focal lesion or pancreatic ductal dilatation.") + K("Spleen", "Normal in size and enhancement. No focal lesion.") + K("Adrenal Glands", "Both adrenal glands are unremarkable.") + K("Kidneys and Ureters", "Both kidneys show normal size and enhancement. No hydronephrosis or focal renal lesion.") + K("Bowel", "No bowel obstruction or abnormal bowel wall thickening.") + K("Peritoneum and Retroperitoneum", "No free intraperitoneal fluid, free air or lymphadenopathy.") + K("Abdominal Vasculature", "Abdominal aorta is normal in caliber.") +
+                    B("PELVIS") + K("Urinary Bladder", "Unremarkable for the degree of distension.") + K("Pelvic Organs", "[Prostate and seminal vesicles / Uterus and adnexa] show no significant CT abnormality.") + K("Pelvic Lymph Nodes", "No pathologically enlarged pelvic lymph nodes.") +
+                    B("BONES") + P("No suspicious focal osseous lesion or acute osseous abnormality identified."),
+                    P("No significant abnormality detected in the thorax, abdomen or pelvis on this examination."));
+                  const CT_PELVIS = ctp("CT PELVIS – CONTRAST ENHANCED",
+                    "Contrast-enhanced CT images of the pelvis were obtained with multiplanar reformations.",
+                    K("Urinary Bladder", "Adequately distended with smooth wall contours. No focal wall thickening or intraluminal lesion identified.") + K("Pelvic Organs", "[Uterus and adnexa / Prostate and seminal vesicles] demonstrate no significant CT abnormality.") + K("Bowel", "Visualized pelvic bowel loops are normal in caliber without focal wall thickening.") + K("Peritoneum", "No pelvic free fluid or localized collection.") + K("Lymph Nodes", "No pathologically enlarged pelvic lymph nodes.") + K("Vascular Structures", "Visualized iliac vessels are normal in caliber with expected enhancement.") + K("Bones and Joints", "Pelvic bones show normal alignment and preserved cortical integrity. Bilateral hip joints and sacroiliac joints are unremarkable. No acute fracture or suspicious focal osseous lesion.") + K("Soft Tissues", "No significant abnormality in the visualized pelvic soft tissues."),
+                    P("No significant CT abnormality detected in the pelvis."));
+                  const CT_NECK = ctp("CT NECK – CONTRAST ENHANCED",
+                    "Contrast-enhanced CT of the neck was performed with multiplanar reformations.",
+                    K("Nasopharynx and Oropharynx", "Nasopharyngeal and oropharyngeal soft tissues are symmetrical without a focal mass.") + K("Oral Cavity", "Visualized oral cavity and tongue show no focal abnormality.") + K("Hypopharynx and Larynx", "Hypopharyngeal and laryngeal structures are unremarkable. Airway is patent.") + K("Salivary Glands", "Bilateral parotid and submandibular glands are normal in size and enhancement. No focal lesion.") + K("Thyroid Gland", "Normal in size and enhancement without a discrete focal lesion.") + K("Lymph Nodes", "No pathologically enlarged or morphologically suspicious cervical lymph nodes.") + K("Vascular Structures", "Major cervical vascular structures demonstrate expected contrast enhancement.") + K("Deep Neck Spaces", "Parapharyngeal, retropharyngeal and prevertebral spaces are unremarkable. No abnormal collection.") + K("Bones", "Visualized cervical spine and osseous structures show no acute abnormality.") + K("Lung Apices", "Visualized lung apices are clear."),
+                    P("No significant abnormality detected on contrast-enhanced CT of the neck."));
+                  const CT_BRAIN_PC = ctp("CT BRAIN – PLAIN AND CONTRAST",
+                    "Non-contrast and post-contrast axial CT images of the brain were obtained following intravenous administration of iodinated contrast, with multiplanar reformations.",
+                    K("Brain Parenchyma", "Normal attenuation and preserved gray-white matter differentiation. No acute intracranial hemorrhage or CT evidence of acute large territorial infarction. No focal mass lesion, surrounding edema or significant mass effect.") + K("Post-Contrast Findings", "No abnormal intracranial parenchymal or meningeal enhancement identified.") + K("Ventricular System", "Ventricles are normal in size and configuration.") + K("Extra-Axial Spaces", "No extra-axial collection. Basal cisterns and cortical sulci are preserved.") + K("Midline Structures", "No midline shift.") + K("Posterior Fossa", "Brainstem and cerebellum appear unremarkable.") + K("Vascular Structures", "Major visualized intracranial vascular structures demonstrate expected enhancement.") + K("Skull and Extracranial Structures", "Visualized calvarium is intact. Visualized paranasal sinuses and mastoid air cells are clear."),
+                    P("No acute intracranial abnormality.", "No focal intracranial mass lesion or abnormal enhancement identified."));
+                  const CT_CSPINE = ctp("CT CERVICAL SPINE – PLAIN",
+                    "Non-contrast CT of the cervical spine was performed with sagittal and coronal reformations.",
+                    P("Cervical lordosis and vertebral alignment are maintained.", "Vertebral body heights are preserved.", "No acute fracture or traumatic subluxation.", "Intervertebral disc spaces are maintained.", "Facet joints are normally aligned.", "No significant osseous spinal canal or neural foraminal narrowing.", "Prevertebral and paravertebral soft tissues are unremarkable.", "Craniocervical junction is intact."),
+                    P("No acute osseous abnormality or traumatic malalignment of the cervical spine."));
+                  const CT_TSPINE = ctp("CT THORACIC SPINE – PLAIN",
+                    "Non-contrast CT of the thoracic spine was performed with sagittal and coronal reformations.",
+                    P("Normal thoracic kyphosis and vertebral alignment.", "Vertebral body heights and intervertebral disc spaces are maintained.", "No acute fracture or compression deformity.", "Posterior elements are intact.", "Facet joint alignment is preserved.", "No significant osseous spinal canal or neural foraminal narrowing.", "Paravertebral soft tissues are unremarkable."),
+                    P("No acute osseous abnormality of the thoracic spine."));
+                  const CT_LSPINE = ctp("CT LUMBAR SPINE – PLAIN",
+                    "Non-contrast CT of the lumbar spine was performed with sagittal and coronal reformations.",
+                    P("Normal lumbar lordosis and vertebral alignment.", "Vertebral body heights and intervertebral disc spaces are preserved.", "No acute fracture or spondylolisthesis.", "Posterior elements and facet joints are intact.", "No significant osseous spinal canal or neural foraminal narrowing.", "Visualized sacroiliac joints are unremarkable.", "Paravertebral soft tissues show no significant abnormality."),
+                    P("No acute osseous abnormality or significant CT-detectable degenerative change of the lumbar spine."));
+                  // X-ray default-report builder: P = plain lines
+                  const xrp = (t, tech, findings, impression) =>
+                    H + title(t) + s("Clinical History:") + s("Technique:", tech) + s("Findings:", P(...findings)) + F.replace('contenteditable="true"></div>', `contenteditable="true">${P(...impression)}</div>`);
+                  const XR_CHEST_PA = xrp("X-RAY CHEST – PA VIEW", "Single frontal PA radiograph of the chest.",
+                    ["Trachea is central.", "Both lung fields are clear without focal consolidation.", "Cardiomediastinal silhouette is within normal limits.", "Bilateral hilar shadows are unremarkable.", "Costophrenic angles are clear.", "No pleural effusion or pneumothorax.", "Visualized osseous structures show no acute abnormality."],
+                    ["No acute cardiopulmonary abnormality."]);
+                  const XR_CHEST_AP = xrp("X-RAY CHEST – AP VIEW", "Single frontal AP radiograph of the chest.",
+                    ["Trachea is central.", "Both lung fields are clear without focal airspace opacity.", "Cardiomediastinal silhouette is not grossly enlarged, allowing for AP projection.", "No pleural effusion or pneumothorax.", "Visualized osseous structures show no acute abnormality."],
+                    ["No acute cardiopulmonary abnormality."]);
+                  const XR_ABD = xrp("X-RAY ABDOMEN – ERECT AND SUPINE VIEWS", "AP supine and erect radiographs of the abdomen.",
+                    ["Bowel gas pattern is non-obstructive.", "No abnormally dilated bowel loops or significant air-fluid levels.", "No free subdiaphragmatic air is identified on the erect radiograph.", "No abnormal radiopaque calculus is identified.", "Visualized osseous structures show no acute abnormality."],
+                    ["Non-obstructive bowel gas pattern.", "No radiographic evidence of bowel obstruction or pneumoperitoneum."]);
+                  const XR_CS = xrp("X-RAY CERVICAL SPINE – AP AND LATERAL VIEWS", "AP and lateral radiographs of the cervical spine.",
+                    ["Cervical vertebral alignment and lordosis are maintained.", "Vertebral body heights and intervertebral disc spaces are preserved.", "No acute fracture or subluxation is identified.", "Prevertebral soft tissues are unremarkable.", "Visualized osseous structures show no focal abnormality."],
+                    ["No significant radiographic abnormality of the cervical spine."]);
+                  const XR_TS = xrp("X-RAY THORACIC SPINE – AP AND LATERAL VIEWS", "AP and lateral radiographs of the thoracic spine.",
+                    ["Thoracic kyphosis and vertebral alignment are maintained.", "Vertebral body heights and intervertebral disc spaces are preserved.", "Pedicles are intact.", "No acute compression deformity or malalignment is identified.", "Paravertebral soft tissues are unremarkable."],
+                    ["No significant radiographic abnormality of the thoracic spine."]);
+                  const XR_LS = xrp("X-RAY LUMBAR SPINE – AP AND LATERAL VIEWS", "AP and lateral radiographs of the lumbar spine.",
+                    ["Lumbar lordosis and vertebral alignment are maintained.", "Vertebral body heights and intervertebral disc spaces are preserved.", "Pedicles are intact.", "No acute fracture or spondylolisthesis is identified.", "Visualized sacroiliac joints are unremarkable.", "Paravertebral soft tissues show no significant abnormality."],
+                    ["No significant radiographic abnormality of the lumbar spine."]);
+                  const XR_PEL = xrp("X-RAY PELVIS WITH BOTH HIP JOINTS – AP VIEW", "AP radiograph of the pelvis including both hip joints.",
+                    ["Pelvic ring is intact.", "Both femoral heads are normally located within the acetabula.", "Bilateral hip joint spaces are maintained.", "Articular surfaces are smooth and congruent.", "Sacroiliac joints and pubic symphysis are unremarkable.", "No acute fracture or dislocation is identified.", "Visualized soft tissues are unremarkable."],
+                    ["No significant radiographic abnormality of the pelvis or bilateral hip joints."]);
+                  const XR_KNEE = xrp("X-RAY KNEE – AP, LATERAL AND SKYLINE VIEWS", "AP, lateral and skyline radiographs of the [right/left/ Bilateral] knee.",
+                    ["Normal alignment of the knee joint.", "Medial and lateral tibiofemoral joint spaces are maintained.", "Patellofemoral joint space is preserved.", "Articular surfaces are smooth and intact.", "No acute fracture or dislocation is identified.", "No significant suprapatellar joint effusion.", "Surrounding soft tissues are unremarkable."],
+                    ["No significant radiographic abnormality of the [right/left] knee."]);
+                  const XR_SH = xrp("X-RAY SHOULDER – AP AND AXILLARY VIEWS", "AP and axillary radiographs of the [right/left] shoulder.",
+                    ["Normal alignment of the glenohumeral and acromioclavicular joints.", "Glenohumeral and acromioclavicular joint spaces are maintained.", "Articular surfaces are smooth and congruent.", "No acute fracture or dislocation is identified.", "No abnormal periarticular soft tissue calcification.", "Visualized soft tissues are unremarkable."],
+                    ["No significant radiographic abnormality of the [right/left] shoulder."]);
+                  // MRI default-report builder: each finding group is a bold label followed by its lines
+                  const mrp = (t, side, ind, tech, cmp, groups, impression) =>
+                    H + title(t) + (side ? s("Side:", side) : "") + s("Clinical Indication:", ind || "[Enter clinical indication]") + s("Technique:", tech) +
+                    s("FINDINGS", groups.map(([l, ls]) => `<p><strong>${l}:</strong></p>${P(...ls)}`).join("")) +
+                    F.replace('contenteditable="true"></div>', `contenteditable="true">${P(...impression)}</div>`);
+                  const MR_BRAIN = mrp("MRI BRAIN – PLAIN", null, null,
+                    "Multiplanar, multisequence MRI of the brain was performed, including T1, T2, FLAIR, diffusion-weighted imaging (DWI/ADC) and susceptibility-sensitive sequences.", "[None / Previous MRI dated DD-MM-YYYY]",
+                    [["Brain Parenchyma", ["Normal signal intensity and morphology of the cerebral hemispheres.", "Gray-white matter differentiation is preserved.", "No focal abnormal parenchymal signal intensity or intracranial mass lesion.", "No diffusion restriction to suggest acute infarction.", "No abnormal susceptibility to suggest intracranial hemorrhage."]], ["Ventricular System and CSF Spaces", ["Ventricles are normal in size and configuration.", "Cortical sulci and basal cisterns are preserved.", "No hydrocephalus or extra-axial collection."]], ["Midline Structures", ["Corpus callosum, pituitary region and other midline structures are unremarkable.", "No midline shift."]], ["Posterior Fossa", ["Brainstem and cerebellum show normal signal intensity and morphology.", "Cerebellopontine angle regions are unremarkable."]], ["Vascular Flow Voids", ["Major intracranial arterial flow voids are maintained."]], ["Orbits and Paranasal Sinuses", ["Visualized orbits, paranasal sinuses and mastoid air cells are unremarkable."]]],
+                    ["No significant intracranial abnormality detected.", "No acute infarction, intracranial hemorrhage or mass lesion."]);
+                  const MR_CS = mrp("MRI CERVICAL SPINE – PLAIN", null, null,
+                    "Multiplanar, multisequence MRI of the cervical spine was performed using T1- and T2-weighted sequences, including fluid-sensitive imaging.", "[None / Previous study dated DD-MM-YYYY]",
+                    [["Alignment and Vertebral Bodies", ["Normal cervical lordosis and vertebral alignment.", "Vertebral body heights and marrow signal intensity are maintained.", "No acute compression fracture or marrow edema."]], ["Intervertebral Discs", ["Disc heights and signal intensities are preserved.", "No focal disc protrusion or extrusion."]], ["Spinal Canal", ["Spinal canal caliber is maintained.", "No significant central canal stenosis."]], ["Spinal Cord", ["Cervical spinal cord demonstrates normal caliber and signal intensity.", "No intramedullary focal signal abnormality."]], ["Neural Foramina", ["Bilateral neural foramina are patent without significant narrowing."]], ["Facet Joints and Soft Tissues", ["Facet joints are unremarkable.", "Prevertebral and paravertebral soft tissues are normal."]], ["Craniovertebral Junction", ["Craniovertebral junction is unremarkable."]]],
+                    ["Normal MRI appearance of the cervical spine.", "No significant disc herniation, spinal canal stenosis or neural foraminal narrowing.", "No cervical cord signal abnormality."]);
+                  const MR_TS = mrp("MRI THORACIC SPINE – PLAIN", null, null,
+                    "Multiplanar, multisequence MRI of the thoracic spine was performed using T1- and T2-weighted sequences, including fluid-sensitive imaging.", "[None / Previous study dated DD-MM-YYYY]",
+                    [["Alignment", ["Normal thoracic kyphosis and vertebral alignment."]], ["Vertebral Bodies", ["Vertebral body heights and marrow signal are maintained.", "No compression fracture or marrow edema."]], ["Intervertebral Discs", ["Disc heights and signal intensities are preserved.", "No significant disc bulge or herniation."]], ["Spinal Canal", ["Spinal canal caliber is normal.", "No significant canal stenosis."]], ["Spinal Cord", ["Thoracic spinal cord is normal in caliber and signal intensity.", "No focal intramedullary signal abnormality."]], ["Neural Foramina", ["Bilateral neural foramina are patent."]], ["Paravertebral Soft Tissues", ["No significant paravertebral soft tissue abnormality."]]],
+                    ["Normal MRI appearance of the thoracic spine.", "No significant disc herniation, spinal canal stenosis or spinal cord abnormality."]);
+                  const MR_LS = mrp("MRI LUMBAR SPINE – PLAIN", null, null,
+                    "Multiplanar, multisequence MRI of the lumbar spine was performed using T1- and T2-weighted sequences, including fluid-sensitive imaging.", "[None / Previous study dated DD-MM-YYYY]",
+                    [["Alignment and Vertebral Bodies", ["Normal lumbar lordosis and vertebral alignment.", "Vertebral body heights and marrow signal intensity are preserved.", "No acute compression deformity or marrow edema."]], ["Intervertebral Discs", ["Intervertebral disc heights and signal intensities are maintained.", "No significant disc bulge, protrusion or extrusion."]], ["Level-Wise Assessment", ["T12–L1: No significant disc abnormality, canal stenosis or neural foraminal narrowing.", "L1–L2: No significant disc abnormality, canal stenosis or neural foraminal narrowing.", "L2–L3: No significant disc abnormality, canal stenosis or neural foraminal narrowing.", "L3–L4: No significant disc abnormality, canal stenosis or neural foraminal narrowing.", "L4–L5: No significant disc abnormality, canal stenosis or neural foraminal narrowing.", "L5–S1: No significant disc abnormality, canal stenosis or neural foraminal narrowing."]], ["Spinal Canal and Neural Elements", ["Conus medullaris terminates at a normal level and demonstrates normal signal intensity.", "Cauda equina nerve roots are unremarkable."]], ["Facet Joints", ["Facet joints are unremarkable."]], ["Paraspinal Soft Tissues", ["No significant paraspinal soft tissue abnormality."]]],
+                    ["Normal MRI appearance of the lumbar spine.", "No significant disc herniation, spinal canal stenosis or neural foraminal narrowing."]);
+                  const MR_PEL = mrp("MRI PELVIS – PLAIN", null, null,
+                    "Multiplanar, multisequence MRI of the pelvis was performed using T1-, T2- and diffusion-weighted sequences.", "[None / Previous study dated DD-MM-YYYY]",
+                    [["Urinary Bladder", ["Urinary bladder is adequately distended with smooth wall contours.", "No focal wall thickening or intraluminal mass."]], ["Pelvic Organs", ["[Select appropriate anatomy.]", "Female: Uterus is normal in size and morphology. Myometrial and endometrial signal appearances are within normal limits. Cervix is unremarkable. Both ovaries show normal morphology without suspicious adnexal lesion.", "Male: Prostate is normal in size and morphology. Seminal vesicles are symmetrical and unremarkable."]], ["Bowel and Rectum", ["Visualized pelvic bowel loops are unremarkable.", "No focal rectal wall thickening."]], ["Peritoneal Cavity", ["No significant pelvic free fluid or localized collection."]], ["Lymph Nodes", ["No pathologically enlarged pelvic lymph nodes."]], ["Bones and Muscles", ["Visualized pelvic bones demonstrate normal marrow signal.", "Bilateral hip joints and surrounding musculature are unremarkable.", "No focal osseous or soft tissue lesion."]]],
+                    ["No significant MRI abnormality detected in the pelvis."]);
+                  const MR_KNEE = mrp("MRI KNEE – PLAIN", "[Right / Left]", null,
+                    "Multiplanar, multisequence MRI of the [right/left] knee was performed using proton density, T1- and fluid-sensitive sequences.", "[None / Previous study dated DD-MM-YYYY]",
+                    [["Menisci", ["Medial meniscus demonstrates normal morphology and signal intensity without tear.", "Lateral meniscus demonstrates normal morphology and signal intensity without tear."]], ["Cruciate Ligaments", ["Anterior cruciate ligament (ACL) is intact with normal signal.", "Posterior cruciate ligament (PCL) is intact."]], ["Collateral Ligaments", ["Medial collateral ligament complex is intact.", "Lateral collateral ligament complex is intact."]], ["Articular Cartilage", ["Medial and lateral tibiofemoral articular cartilage is preserved.", "Patellofemoral articular cartilage is maintained without focal defect."]], ["Extensor Mechanism", ["Quadriceps and patellar tendons are intact.", "Patellar alignment is normal.", "Medial and lateral patellar retinacula are intact."]], ["Bones and Marrow", ["Normal marrow signal intensity.", "No fracture, bone contusion or osteochondral lesion."]], ["Joint and Soft Tissues", ["No significant joint effusion.", "No popliteal cyst.", "Surrounding muscles and soft tissues are unremarkable."]]],
+                    ["Normal MRI appearance of the [right/left] knee.", "No meniscal tear, ligament injury or significant chondral abnormality."]);
+                  const MR_BREAST = mrp("MRI BILATERAL BREASTS – DYNAMIC CONTRAST ENHANCED", null, "[Screening / High-risk screening / Other indication]",
+                    "Bilateral breast MRI was performed using multiplanar T1- and T2-weighted sequences, including pre-contrast and dynamic post-contrast fat-suppressed T1-weighted sequences following intravenous gadolinium administration. Subtraction images and multiplanar reconstructions were reviewed.", "[None / Prior mammogram, ultrasound or MRI dated DD-MM-YYYY]",
+                    [["Breast Composition", ["Amount of fibroglandular tissue: [Almost entirely fatty / Scattered / Heterogeneous / Extreme]", "Background parenchymal enhancement: [Minimal / Mild / Moderate / Marked], symmetric."]], ["Right Breast", ["No suspicious enhancing mass or non-mass enhancement.", "No suspicious architectural distortion.", "Skin, nipple-areolar complex and chest wall are unremarkable."]], ["Left Breast", ["No suspicious enhancing mass or non-mass enhancement.", "No suspicious architectural distortion.", "Skin, nipple-areolar complex and chest wall are unremarkable."]], ["Axillary and Internal Mammary Regions", ["No suspicious axillary or internal mammary lymphadenopathy."]], ["Chest Wall", ["Visualized pectoral muscles and chest wall structures are unremarkable."]]],
+                    ["No suspicious enhancing mass or non-mass enhancement in either breast.", "BI-RADS Category 1 – Negative.", "Recommendation: Continue routine breast screening appropriate to the patient's age and individual risk profile."]);
+                  const MR_THIGH = mrp("MRI THIGH – PLAIN", "[Right / Left]", null,
+                    "Multiplanar, multisequence MRI of the [right/left] thigh was performed using T1-, T2- and fluid-sensitive sequences.", "[None / Previous study dated DD-MM-YYYY]",
+                    [["Muscles", ["Muscle groups of the anterior, medial and posterior thigh compartments demonstrate normal bulk and signal intensity.", "No muscle tear, edema or atrophy."]], ["Tendons", ["Visualized musculotendinous structures are intact."]], ["Bones", ["Visualized femoral shaft demonstrates normal marrow signal and intact cortex.", "No fracture or focal marrow lesion."]], ["Neurovascular Structures", ["Visualized major neurovascular structures are unremarkable."]], ["Soft Tissues", ["Subcutaneous soft tissues are normal.", "No focal mass, fluid collection or abnormal soft tissue edema."]]],
+                    ["Normal MRI appearance of the [right/left] thigh.", "No significant musculotendinous, osseous or soft tissue abnormality."]);
+                  const MR_LEG = mrp("MRI LOWER LEG – PLAIN", "[Right / Left]", null,
+                    "Multiplanar, multisequence MRI of the [right/left] lower leg was performed using T1-, T2- and fluid-sensitive sequences.", "[None / Previous study dated DD-MM-YYYY]",
+                    [["Bones", ["Tibia and fibula demonstrate normal marrow signal and intact cortices.", "No fracture, stress reaction or focal osseous lesion."]], ["Muscles", ["Anterior, lateral and posterior compartment muscles demonstrate normal morphology and signal.", "No muscle edema, tear or atrophy."]], ["Tendons", ["Visualized tendons are intact."]], ["Neurovascular Structures", ["Major visualized neurovascular bundles are unremarkable."]], ["Soft Tissues", ["No abnormal soft tissue mass, edema or collection."]]],
+                    ["Normal MRI appearance of the [right/left] lower leg.", "No significant osseous, muscular or soft tissue abnormality."]);
+                  const MR_ANKLE = mrp("MRI ANKLE – PLAIN", "[Right / Left]", null,
+                    "Multiplanar, multisequence MRI of the [right/left] ankle was performed using proton density, T1- and fluid-sensitive sequences.", "[None / Previous study dated DD-MM-YYYY]",
+                    [["Bones and Joints", ["Normal alignment of the ankle and visualized hindfoot joints.", "Bone marrow signal is preserved.", "No fracture, marrow edema or osteochondral lesion.", "Tibiotalar and subtalar articular cartilage is maintained."]], ["Lateral Ligament Complex", ["Anterior talofibular, calcaneofibular and posterior talofibular ligaments are intact."]], ["Medial Ligament Complex", ["Deltoid ligament complex is intact."]], ["Syndesmosis", ["Visualized distal tibiofibular syndesmotic ligaments are intact."]], ["Tendons", ["Achilles, peroneal, anterior extensor and medial flexor tendons are intact without significant tenosynovitis."]], ["Plantar Fascia", ["Plantar fascia demonstrates normal thickness and signal."]], ["Soft Tissues", ["No significant joint effusion or periarticular soft tissue edema.", "Sinus tarsi and tarsal tunnel regions are unremarkable."]]],
+                    ["Normal MRI appearance of the [right/left] ankle.", "No ligament tear, tendon injury or osteochondral abnormality."]);
+                  const MR_CARD = mrp("CARDIAC MRI – FUNCTION AND TISSUE CHARACTERIZATION", null, null,
+                    "ECG-gated cardiac MRI was performed using multiplanar localizer and cine balanced steady-state free precession sequences for ventricular function assessment. T1- and T2-weighted or parametric mapping sequences were acquired as per protocol. Late gadolinium enhancement (LGE) images were obtained following intravenous contrast administration.", "[None / Previous study dated DD-MM-YYYY]",
+                    [["Left Ventricle", ["Normal left ventricular cavity size and myocardial wall thickness.", "Normal global and regional systolic function.", "No regional wall motion abnormality."]], ["Left Ventricular Measurements", ["• LV end-diastolic volume (LVEDV): [___] mL", "• LV end-systolic volume (LVESV): [___] mL", "• LV stroke volume: [___] mL", "• LV ejection fraction (LVEF): [___] %", "• LV myocardial mass: [___] g"]], ["Right Ventricle", ["Normal right ventricular cavity size and global systolic function.", "No regional wall motion abnormality."]], ["Right Ventricular Measurements", ["• RV end-diastolic volume (RVEDV): [___] mL", "• RV end-systolic volume (RVESV): [___] mL", "• RV stroke volume: [___] mL", "• RV ejection fraction (RVEF): [___] %"]], ["Atria", ["Both atria are normal in size."]], ["Valves", ["No significant valvular abnormality identified on the acquired cine images."]], ["Myocardial Tissue Characterization", ["No myocardial edema on the acquired fluid-sensitive sequences.", "No abnormal myocardial late gadolinium enhancement."]], ["Pericardium", ["No significant pericardial thickening or effusion."]], ["Great Vessels", ["Visualized thoracic aorta and main pulmonary artery are normal in caliber."]]],
+                    ["Normal biventricular size and systolic function.", "No regional wall motion abnormality.", "No evidence of myocardial edema or abnormal late gadolinium enhancement."]);
+                  const MR_SH = mrp("MRI SHOULDER – PLAIN", "[Right / Left]", null,
+                    "Multiplanar, multisequence MRI of the [right/left] shoulder was performed using T1-, proton density- and fluid-sensitive sequences.", "[None / Previous study dated DD-MM-YYYY]",
+                    [["Rotator Cuff", ["Supraspinatus tendon is intact with normal signal and thickness.", "Infraspinatus tendon is intact.", "Subscapularis tendon is intact.", "Teres minor tendon is intact.", "No rotator cuff tear or significant tendinosis."]], ["Long Head of Biceps Tendon", ["Normally positioned within the bicipital groove.", "No tear or significant tenosynovitis."]], ["Labrum", ["No discrete labral tear identified on this non-arthrographic study."]], ["Glenohumeral Joint", ["Normal alignment.", "Articular cartilage is preserved.", "No significant joint effusion."]], ["Acromioclavicular Joint", ["Acromioclavicular joint is unremarkable.", "No significant capsular hypertrophy or degenerative change."]], ["Subacromial-Subdeltoid Bursa", ["No significant bursal fluid or inflammatory change."]], ["Bones", ["Normal marrow signal intensity.", "No fracture or focal osseous lesion."]], ["Muscles", ["Rotator cuff muscles demonstrate normal bulk and signal without atrophy."]]],
+                    ["Normal MRI appearance of the [right/left] shoulder.", "No rotator cuff tear or significant internal derangement identified."]);
+                  const MR_ABD = mrp("MRI ABDOMEN – PLAIN AND CONTRAST", null, null,
+                    "Multiplanar, multisequence MRI of the upper abdomen was performed using T1-, T2- and diffusion-weighted sequences, including dynamic multiphasic imaging following intravenous gadolinium administration.", "[None / Previous study dated DD-MM-YYYY]",
+                    [["Liver", ["Liver is normal in size, contour and signal intensity.", "No significant hepatic steatosis.", "No focal hepatic lesion or abnormal enhancement.", "Intrahepatic bile ducts are not dilated."]], ["Gallbladder and Biliary Tree", ["Gallbladder is normally distended without wall thickening or pericholecystic fluid.", "No biliary ductal dilatation."]], ["Pancreas", ["Normal size, morphology and signal intensity.", "No focal pancreatic lesion or abnormal enhancement.", "Main pancreatic duct is not dilated."]], ["Spleen", ["Normal in size and signal intensity.", "No focal splenic lesion."]], ["Adrenal Glands", ["Both adrenal glands are normal in morphology.", "No focal adrenal mass."]], ["Kidneys", ["Both kidneys demonstrate normal size, morphology and enhancement.", "No focal renal lesion or hydronephrosis."]], ["Bowel", ["Visualized bowel loops are normal in caliber.", "No obvious bowel wall thickening."]], ["Vascular Structures", ["Abdominal aorta is normal in caliber.", "Visualized portal and hepatic veins demonstrate expected enhancement."]], ["Lymph Nodes", ["No pathologically enlarged abdominal lymph nodes."]], ["Peritoneum", ["No ascites or localized collection."]], ["Bones and Soft Tissues", ["Visualized osseous and abdominal wall structures show no significant abnormality."]]],
+                    ["No significant abnormality detected on MRI of the upper abdomen."]);
+                  const MR_NECK = mrp("MRI NECK – PLAIN AND CONTRAST", null, null,
+                    "Multiplanar, multisequence MRI of the neck was performed using T1-, T2-, fat-suppressed and diffusion-weighted sequences, including post-contrast fat-suppressed T1-weighted imaging following intravenous gadolinium administration.", "[None / Previous study dated DD-MM-YYYY]",
+                    [["Nasopharynx", ["Nasopharyngeal soft tissues are symmetrical.", "No focal mass lesion or abnormal enhancement."]], ["Oropharynx", ["Oropharyngeal structures demonstrate normal morphology and signal intensity.", "No focal lesion."]], ["Hypopharynx and Larynx", ["Hypopharyngeal and laryngeal structures are unremarkable.", "Airway is patent."]], ["Salivary Glands", ["Bilateral parotid and submandibular glands demonstrate normal size, morphology and signal intensity.", "No focal lesion or abnormal enhancement."]], ["Thyroid Gland", ["Thyroid gland is normal in size and morphology.", "No obvious focal lesion."]], ["Lymph Nodes", ["No pathologically enlarged or morphologically suspicious cervical lymph nodes."]], ["Deep Neck Spaces", ["Parapharyngeal, retropharyngeal, masticator, carotid and prevertebral spaces are unremarkable.", "No abnormal collection."]], ["Vascular Structures", ["Major cervical vascular flow voids are maintained."]], ["Muscles and Soft Tissues", ["Visualized cervical musculature and subcutaneous soft tissues are unremarkable."]], ["Bones", ["Visualized cervical spine and skull base demonstrate no suspicious marrow signal abnormality."]]],
+                    ["No significant MRI abnormality detected in the neck.", "No focal soft tissue mass or cervical lymphadenopathy."]);
 
                   const TEMPLATES = [
                     { type: "header", label: "GENERAL" },
@@ -2525,270 +2687,167 @@ const manualClientIdMap = {
                     { type: "header", label: "MRI" },
                     {
                       id: "mri-brain", name: "MRI Brain", modality: "MRI", icon: "brain",
-                    desc: "T1/T2/FLAIR sequences, brain parenchyma",
-                    html: `<div style="font-family:Arial,sans-serif;font-size:13px;line-height:1.7;color:#111827;padding:8px;">
-<p style="text-align:center;font-style:italic;font-weight:700;font-size:14px;margin:0 0 10px;">ORGANIZATION NAME</p>
-<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px;">
-<tr><td style="font-weight:700;width:160px;padding:3px 0;">Age / Sex</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;min-width:160px;padding:3px 2px;" contenteditable="true"></td></tr>
-<tr><td style="font-weight:700;padding:3px 0;">Case Id</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr>
-<tr><td style="font-weight:700;padding:3px 0;">Referring Doctor</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr>
-<tr><td style="font-weight:700;padding:3px 0;">Date &amp; Time</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr>
-<tr><td style="font-weight:700;padding:3px 0;">Investigation</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr>
-</table>
-<p style="text-align:center;font-weight:700;text-decoration:underline;font-size:14px;margin:12px 0;" contenteditable="true">M.R.I OF BRAIN</p>
-<p style="font-weight:700;margin:10px 0 4px;">Clinical History:</p>
-<div style="min-height:40px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true"></div>
-<p style="font-weight:700;margin:10px 0 4px;">Sequences:</p>
-<div style="min-height:32px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true">T1W, T2W, FLAIR, DWI, SWI sequences in axial, coronal and sagittal planes.</div>
-<p style="font-weight:700;margin:10px 0 4px;">Study reveals:</p>
-<div style="min-height:120px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true"><p>Brain parenchyma: </p><p>Grey-white matter differentiation: </p><p>Ventricles and sulci: </p><p>Midline: </p><p>Cerebellum and brainstem: </p><p>Basal ganglia and thalami: </p><p>Corpus callosum: </p><p>Sella and parasellar region: </p><p>Orbits: </p><p>Paranasal sinuses and mastoids: </p></div>
-<p style="font-weight:700;margin:10px 0 4px;">IMPRESSION:</p>
-<div style="min-height:60px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true"></div>
-<p style="font-weight:700;margin:10px 0 4px;">Clinical Advice:</p>
-<div style="min-height:36px;border-bottom:1px solid #d1d5db;margin-bottom:20px;" contenteditable="true"></div>
-<p style="font-weight:700;margin:10px 0 4px;">Signature</p>
-<div style="min-height:36px;" contenteditable="true"></div>
-</div>`,
-                  },
-                  {
-                    id: "mri-spine", name: "MRI Spine", modality: "MRI", icon: "spine",
-                    desc: "Lumbar / Cervical / Thoracic spine",
-                    html: `<div style="font-family:Arial,sans-serif;font-size:13px;line-height:1.7;color:#111827;padding:8px;">
-<p style="text-align:center;font-style:italic;font-weight:700;font-size:14px;margin:0 0 10px;">ORGANIZATION NAME</p>
-<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px;">
-<tr><td style="font-weight:700;width:160px;padding:3px 0;">Age / Sex</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;min-width:160px;padding:3px 2px;" contenteditable="true"></td></tr>
-<tr><td style="font-weight:700;padding:3px 0;">Case Id</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr>
-<tr><td style="font-weight:700;padding:3px 0;">Referring Doctor</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr>
-<tr><td style="font-weight:700;padding:3px 0;">Date &amp; Time</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr>
-<tr><td style="font-weight:700;padding:3px 0;">Investigation</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr>
-</table>
-<p style="text-align:center;font-weight:700;text-decoration:underline;font-size:14px;margin:12px 0;" contenteditable="true">M.R.I OF LUMBO-SACRAL SPINE</p>
-<p style="font-weight:700;margin:10px 0 4px;">Clinical History:</p>
-<div style="min-height:40px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true"></div>
-<p style="font-weight:700;margin:10px 0 4px;">Sequences:</p>
-<div style="min-height:32px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true">Sagittal T1W, T2W, STIR; Axial T2W sequences.</div>
-<p style="font-weight:700;margin:10px 0 4px;">Study reveals:</p>
-<div style="min-height:140px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true"><p>Vertebral alignment: </p><p>Vertebral body height and marrow signal: </p><p>Intervertebral disc spaces (L1-S1): </p><p>Disc at L1-L2: </p><p>Disc at L2-L3: </p><p>Disc at L3-L4: </p><p>Disc at L4-L5: </p><p>Disc at L5-S1: </p><p>Spinal canal and cord/conus: </p><p>Neural foramina: </p><p>Facet joints and ligaments: </p><p>Paraspinal soft tissues: </p></div>
-<p style="font-weight:700;margin:10px 0 4px;">IMPRESSION:</p>
-<div style="min-height:60px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true"></div>
-<p style="font-weight:700;margin:10px 0 4px;">Clinical Advice:</p>
-<div style="min-height:36px;border-bottom:1px solid #d1d5db;margin-bottom:20px;" contenteditable="true"></div>
-<p style="font-weight:700;margin:10px 0 4px;">Signature</p>
-<div style="min-height:36px;" contenteditable="true"></div>
-</div>`,
-                  },
-                  {
-                    id: "mri-pelvis", name: "MRI Pelvis", modality: "MRI", icon: "bone",
-                    desc: "Pelvic structures, multi-sequence",
-                    html: `<div style="font-family:Arial,sans-serif;font-size:13px;line-height:1.7;color:#111827;padding:8px;">
-<p style="text-align:center;font-style:italic;font-weight:700;font-size:14px;margin:0 0 10px;">ORGANIZATION NAME</p>
-<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px;">
-<tr><td style="font-weight:700;width:160px;padding:3px 0;">Age / Sex</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;min-width:160px;padding:3px 2px;" contenteditable="true"></td></tr>
-<tr><td style="font-weight:700;padding:3px 0;">Case Id</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr>
-<tr><td style="font-weight:700;padding:3px 0;">Referring Doctor</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr>
-<tr><td style="font-weight:700;padding:3px 0;">Date &amp; Time</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr>
-<tr><td style="font-weight:700;padding:3px 0;">Investigation</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr>
-</table>
-<p style="text-align:center;font-weight:700;text-decoration:underline;font-size:14px;margin:12px 0;" contenteditable="true">M.R.I OF PELVIS</p>
-<p style="font-weight:700;margin:10px 0 4px;">Clinical History:</p>
-<div style="min-height:40px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true"></div>
-<p style="font-weight:700;margin:10px 0 4px;">Sequences:</p>
-<div style="min-height:32px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true">T2W coronal, axial, sagittal; T1W axial; STIR sequences.</div>
-<p style="font-weight:700;margin:10px 0 4px;">Study reveals:</p>
-<div style="min-height:130px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true"><p>Uterus (size, signal, morphology): </p><p>Endometrium: </p><p>Cervix: </p><p>Ovaries (right / left): </p><p>Adnexal region: </p><p>Urinary bladder: </p><p>Rectum and sigmoid: </p><p>Lymph nodes: </p><p>Pelvic floor and muscles: </p><p>Bony pelvis: </p></div>
-<p style="font-weight:700;margin:10px 0 4px;">IMPRESSION:</p>
-<div style="min-height:60px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true"></div>
-<p style="font-weight:700;margin:10px 0 4px;">Clinical Advice:</p>
-<div style="min-height:36px;border-bottom:1px solid #d1d5db;margin-bottom:20px;" contenteditable="true"></div>
-<p style="font-weight:700;margin:10px 0 4px;">Signature</p>
-<div style="min-height:36px;" contenteditable="true"></div>
-</div>`,
-                  },
-                  {
-                    id: "mri-knee", name: "MRI Knee", modality: "MRI", icon: "knee",
-                    desc: "Knee joint, meniscus, ligaments",
-                    html: `<div style="font-family:Arial,sans-serif;font-size:13px;line-height:1.7;color:#111827;padding:8px;">
-<p style="text-align:center;font-style:italic;font-weight:700;font-size:14px;margin:0 0 10px;">ORGANIZATION NAME</p>
-<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px;">
-<tr><td style="font-weight:700;width:160px;padding:3px 0;">Age / Sex</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;min-width:160px;padding:3px 2px;" contenteditable="true"></td></tr>
-<tr><td style="font-weight:700;padding:3px 0;">Case Id</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr>
-<tr><td style="font-weight:700;padding:3px 0;">Referring Doctor</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr>
-<tr><td style="font-weight:700;padding:3px 0;">Date &amp; Time</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr>
-<tr><td style="font-weight:700;padding:3px 0;">Investigation</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr>
-</table>
-<p style="text-align:center;font-weight:700;text-decoration:underline;font-size:14px;margin:12px 0;" contenteditable="true">M.R.I OF KNEE JOINT</p>
-<p style="font-weight:700;margin:10px 0 4px;">Clinical History:</p>
-<div style="min-height:40px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true"></div>
-<p style="font-weight:700;margin:10px 0 4px;">Sequences:</p>
-<div style="min-height:32px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true">PD FS, T2W, T1W sequences in sagittal, coronal and axial planes.</div>
-<p style="font-weight:700;margin:10px 0 4px;">Study reveals:</p>
-<div style="min-height:140px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true"><p>Medial meniscus: </p><p>Lateral meniscus: </p><p>Anterior cruciate ligament (ACL): </p><p>Posterior cruciate ligament (PCL): </p><p>Medial collateral ligament (MCL): </p><p>Lateral collateral ligament (LCL): </p><p>Articular cartilage (femoral/tibial/patellar): </p><p>Joint effusion: </p><p>Baker's cyst: </p><p>Bony marrow signal: </p><p>Quadriceps/patellar tendons: </p></div>
-<p style="font-weight:700;margin:10px 0 4px;">IMPRESSION:</p>
-<div style="min-height:60px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true"></div>
-<p style="font-weight:700;margin:10px 0 4px;">Clinical Advice:</p>
-<div style="min-height:36px;border-bottom:1px solid #d1d5db;margin-bottom:20px;" contenteditable="true"></div>
-<p style="font-weight:700;margin:10px 0 4px;">Signature</p>
-<div style="min-height:36px;" contenteditable="true"></div>
-</div>`,
-                  },
-                    // ── new MRI templates ────────────────────────────────────
-                    {
-                      id: "mri-breast", name: "MRI Breast", modality: "MRI", icon: "breast",
-                      desc: "Bilateral breast MRI with DCE",
-                      html: H + title("M.R.I OF BREAST") + s("Clinical History:") + s("Sequences:", "Axial T1W, T2W FS, DCE (pre + post-contrast) sequences.") + s("Study reveals:", "<p>Breast composition (fibroglandular tissue): </p><p>Background parenchymal enhancement: </p><p>Right breast (mass / NME / focus): </p><p>Left breast (mass / NME / focus): </p><p>Kinetic curve analysis: </p><p>Skin and nipple-areolar complex: </p><p>Chest wall and pectoral muscles: </p><p>Axillary lymph nodes (right / left): </p>") + F,
+                      desc: "Plain MRI brain",
+                      html: MR_BRAIN,
                     },
                     {
-                      id: "mri-leg", name: "MRI Leg", modality: "MRI", icon: "leg",
-                      desc: "Thigh, leg or ankle joint",
-                      html: H + title("M.R.I OF LEG") + s("Clinical History:") + s("Sequences:", "T1W, T2W FS, STIR sequences in axial and coronal planes.") + s("Study reveals:", "<p>Muscles and soft tissues: </p><p>Bone marrow signal (femur / tibia / fibula): </p><p>Subcutaneous fat: </p><p>Vessels: </p><p>Tendons and ligaments: </p><p>Neurovascular bundle: </p><p>Joints included in FOV: </p>") + F,
+                      id: "mri-spine", name: "MRI Cervical Spine", modality: "MRI", icon: "spine",
+                      desc: "Cervical spine, plain",
+                      html: MR_CS,
+                    },
+                    {
+                      id: "mri-thoracic-spine", name: "MRI Thoracic Spine", modality: "MRI", icon: "spine",
+                      desc: "Thoracic spine, plain",
+                      html: MR_TS,
+                    },
+                    {
+                      id: "mri-lumbar-spine", name: "MRI Lumbar Spine", modality: "MRI", icon: "spine",
+                      desc: "Lumbar spine, plain",
+                      html: MR_LS,
+                    },
+                    {
+                      id: "mri-pelvis", name: "MRI Pelvis", modality: "MRI", icon: "bone",
+                      desc: "Pelvic organs, bones and soft tissues",
+                      html: MR_PEL,
+                    },
+                    {
+                      id: "mri-knee", name: "MRI Knee", modality: "MRI", icon: "knee",
+                      desc: "Menisci, ligaments, cartilage",
+                      html: MR_KNEE,
+                    },
+                    {
+                      id: "mri-breast", name: "MRI Breast", modality: "MRI", icon: "breast",
+                      desc: "Bilateral dynamic contrast enhanced (DCE)",
+                      html: MR_BREAST,
+                    },
+                    {
+                      id: "mri-leg", name: "MRI Thigh", modality: "MRI", icon: "leg",
+                      desc: "Thigh, plain",
+                      html: MR_THIGH,
+                    },
+                    {
+                      id: "mri-lower-leg", name: "MRI Lower Leg", modality: "MRI", icon: "leg",
+                      desc: "Tibia, fibula and calf, plain",
+                      html: MR_LEG,
+                    },
+                    {
+                      id: "mri-ankle", name: "MRI Ankle", modality: "MRI", icon: "leg",
+                      desc: "Ankle joint, plain",
+                      html: MR_ANKLE,
                     },
                     {
                       id: "mri-cardiac", name: "MRI Cardiac", modality: "MRI", icon: "heart",
-                      desc: "Cardiac structure and function",
-                      html: H + title("CARDIAC MRI") + s("Clinical History:") + s("Sequences:", "Cine SSFP (4-chamber, 2-chamber, LVOT, RVOT, SAX stack); LGE T1 inversion recovery; T2 STIR; mapping sequences.") + s("Study reveals:", "<p>Left ventricle (size, wall thickness, EF%): </p><p>Right ventricle (size, function): </p><p>Left atrium: </p><p>Right atrium: </p><p>Valves (mitral / aortic / tricuspid / pulmonary): </p><p>Myocardial signal (T2 STIR): </p><p>Late gadolinium enhancement (LGE): </p><p>Pericardium: </p><p>Great vessels: </p>") + F,
+                      desc: "Cardiac function and tissue characterization",
+                      html: MR_CARD,
                     },
                     {
                       id: "mri-shoulder", name: "MRI Shoulder", modality: "MRI", icon: "shoulder",
                       desc: "Rotator cuff, labrum, AC joint",
-                      html: H + title("M.R.I OF SHOULDER JOINT") + s("Clinical History:") + s("Sequences:", "Coronal PD FS, T1W; Sagittal T2W FS; Axial PD FS sequences.") + s("Study reveals:", "<p>Rotator cuff (supraspinatus / infraspinatus / subscapularis / teres minor): </p><p>Subacromial space and bursa: </p><p>Biceps tendon (long head): </p><p>Glenohumeral joint (effusion, cartilage): </p><p>Glenoid labrum: </p><p>Acromioclavicular joint: </p><p>Bony marrow signal (humeral head / glenoid): </p><p>Neurovascular structures: </p>") + F,
+                      html: MR_SH,
                     },
                     {
                       id: "mri-abdomen", name: "MRI Abdomen", modality: "MRI", icon: "abdomen",
-                      desc: "Upper abdomen, liver, pancreas, kidneys",
-                      html: H + title("M.R.I OF ABDOMEN") + s("Clinical History:") + s("Sequences:", "T1W in-phase/out-of-phase, T2W FS, DWI, dynamic post-contrast (arterial/portal/delayed) sequences.") + s("Study reveals:", "<p>Liver (size, signal, focal lesions): </p><p>Gallbladder and biliary tree: </p><p>Spleen: </p><p>Pancreas (parenchyma / duct): </p><p>Right kidney: </p><p>Left kidney: </p><p>Adrenal glands: </p><p>Bowel loops: </p><p>Mesentery and peritoneum: </p><p>Lymph nodes: </p><p>Vasculature (aorta / IVC / portal vein): </p>") + F,
+                      desc: "Upper abdomen, plain and contrast",
+                      html: MR_ABD,
                     },
                     {
                       id: "mri-neck", name: "MRI Neck", modality: "MRI", icon: "neck",
-                      desc: "Cervical soft tissues, lymph nodes",
-                      html: H + title("M.R.I OF NECK") + s("Clinical History:") + s("Sequences:", "T1W, T2W FS, STIR in axial, coronal and sagittal planes; post-contrast T1W FS.") + s("Study reveals:", "<p>Thyroid gland: </p><p>Parathyroid region: </p><p>Lymph nodes (levels I–VI): </p><p>Salivary glands (parotid / submandibular / sublingual): </p><p>Pharynx and larynx: </p><p>Carotid and jugular vessels: </p><p>Cervical vertebrae and spinal canal: </p><p>Prevertebral / retropharyngeal space: </p><p>Muscles and deep fascial spaces: </p>") + F,
+                      desc: "Cervical soft tissues, plain and contrast",
+                      html: MR_NECK,
                     },
                     // ── CT templates ─────────────────────────────────────────
                     { type: "header", label: "CT" },
                     {
                       id: "ct-head", name: "CT Head", modality: "CT", icon: "brain",
                       desc: "Plain / contrast CT brain",
-                      html: `<div style="font-family:Arial,sans-serif;font-size:13px;line-height:1.7;color:#111827;padding:8px;">
-<p style="text-align:center;font-style:italic;font-weight:700;font-size:14px;margin:0 0 10px;">ORGANIZATION NAME</p>
-<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px;">
-<tr><td style="font-weight:700;width:160px;padding:3px 0;">Age / Sex</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;min-width:160px;padding:3px 2px;" contenteditable="true"></td></tr>
-<tr><td style="font-weight:700;padding:3px 0;">Case Id</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr>
-<tr><td style="font-weight:700;padding:3px 0;">Referring Doctor</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr>
-<tr><td style="font-weight:700;padding:3px 0;">Date &amp; Time</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr>
-<tr><td style="font-weight:700;padding:3px 0;">Investigation</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr>
-</table>
-<p style="text-align:center;font-weight:700;text-decoration:underline;font-size:14px;margin:12px 0;" contenteditable="true">C.T. OF BRAIN</p>
-<p style="font-weight:700;margin:10px 0 4px;">Clinical History:</p>
-<div style="min-height:40px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true"></div>
-<p style="font-weight:700;margin:10px 0 4px;">Technique:</p>
-<div style="min-height:32px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true">Axial CT sections of the brain were obtained without intravenous contrast.</div>
-<p style="font-weight:700;margin:10px 0 4px;">Study reveals:</p>
-<div style="min-height:120px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true"><p>Brain parenchyma: </p><p>Grey-white matter differentiation: </p><p>Hypodense / hyperdense lesions: </p><p>Ventricles: </p><p>Midline shift: </p><p>Sulci and cisterns: </p><p>Cerebellum and brainstem: </p><p>Bony calvarium: </p><p>Paranasal sinuses and mastoids: </p></div>
-<p style="font-weight:700;margin:10px 0 4px;">IMPRESSION:</p>
-<div style="min-height:60px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true"></div>
-<p style="font-weight:700;margin:10px 0 4px;">Clinical Advice:</p>
-<div style="min-height:36px;border-bottom:1px solid #d1d5db;margin-bottom:20px;" contenteditable="true"></div>
-<p style="font-weight:700;margin:10px 0 4px;">Signature</p>
-<div style="min-height:36px;" contenteditable="true"></div>
-</div>`,
+                      html: CT_HEAD_PLAIN,
+                    },
+                    {
+                      id: "ct-head-contrast", name: "CT Head – Contrast", modality: "CT", icon: "brain",
+                      desc: "Contrast-enhanced CT brain",
+                      html: CT_HEAD_CONTRAST,
                     },
                     {
                       id: "ct-chest-abdomen", name: "CT Chest/Abdomen", modality: "CT", icon: "lungs",
                       desc: "Thorax, abdomen and pelvis",
-                      html: `<div style="font-family:Arial,sans-serif;font-size:13px;line-height:1.7;color:#111827;padding:8px;">
-<p style="text-align:center;font-style:italic;font-weight:700;font-size:14px;margin:0 0 10px;">ORGANIZATION NAME</p>
-<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px;">
-<tr><td style="font-weight:700;width:160px;padding:3px 0;">Age / Sex</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;min-width:160px;padding:3px 2px;" contenteditable="true"></td></tr>
-<tr><td style="font-weight:700;padding:3px 0;">Case Id</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr>
-<tr><td style="font-weight:700;padding:3px 0;">Referring Doctor</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr>
-<tr><td style="font-weight:700;padding:3px 0;">Date &amp; Time</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr>
-<tr><td style="font-weight:700;padding:3px 0;">Investigation</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr>
-</table>
-<p style="text-align:center;font-weight:700;text-decoration:underline;font-size:14px;margin:12px 0;" contenteditable="true">C.T. CHEST &amp; ABDOMEN</p>
-<p style="font-weight:700;margin:10px 0 4px;">Clinical History:</p>
-<div style="min-height:40px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true"></div>
-<p style="font-weight:700;margin:10px 0 4px;">Technique:</p>
-<div style="min-height:32px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true">Axial CT sections with coronal and sagittal reconstructions.</div>
-<p style="font-weight:700;margin:10px 0 4px;">Study reveals:</p>
-<div style="min-height:160px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true"><p><strong>CHEST:</strong></p><p>Lungs and pleura: </p><p>Mediastinum and hila: </p><p>Heart and pericardium: </p><p>Chest wall and bony thorax: </p><p><br/></p><p><strong>ABDOMEN:</strong></p><p>Liver: </p><p>Gallbladder and biliary system: </p><p>Spleen: </p><p>Pancreas: </p><p>Kidneys and adrenals: </p><p>Bowel loops: </p><p>Lymph nodes: </p><p>Peritoneum and ascites: </p></div>
-<p style="font-weight:700;margin:10px 0 4px;">IMPRESSION:</p>
-<div style="min-height:60px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true"></div>
-<p style="font-weight:700;margin:10px 0 4px;">Clinical Advice:</p>
-<div style="min-height:36px;border-bottom:1px solid #d1d5db;margin-bottom:20px;" contenteditable="true"></div>
-<p style="font-weight:700;margin:10px 0 4px;">Signature</p>
-<div style="min-height:36px;" contenteditable="true"></div>
-</div>`,
+                      html: CT_CAP,
                     },
                     {
                       id: "ct-pelvis", name: "CT Pelvis", modality: "CT", icon: "bone",
                       desc: "Pelvic organs, bones and vessels",
-                      html: H + title("C.T. OF PELVIS") + s("Clinical History:") + s("Technique:", "Axial CT sections with coronal and sagittal reconstructions; oral and IV contrast administered.") + s("Study reveals:", "<p>Urinary bladder: </p><p>Prostate / Uterus and cervix: </p><p>Rectum and sigmoid colon: </p><p>Iliac vessels: </p><p>Inguinal and pelvic lymph nodes: </p><p>Bony pelvis (ilium / ischium / pubis / sacrum): </p><p>Hip joints (in FOV): </p><p>Pelvic floor muscles: </p><p>Free fluid / ascites: </p>") + F,
+                      html: CT_PELVIS,
                     },
                     {
                       id: "ct-neck", name: "CT Neck", modality: "CT", icon: "neck",
                       desc: "Cervical soft tissues and vessels",
-                      html: H + title("C.T. OF NECK") + s("Clinical History:") + s("Technique:", "Axial CT sections from skull base to thoracic inlet with IV contrast; coronal and sagittal reconstructions.") + s("Study reveals:", "<p>Thyroid gland: </p><p>Lymph nodes (levels I–VI, retropharyngeal): </p><p>Pharynx and larynx: </p><p>Salivary glands: </p><p>Carotid arteries and jugular veins: </p><p>Cervical vertebrae: </p><p>Prevertebral space: </p><p>Trachea and oesophagus: </p>") + F,
+                      html: CT_NECK,
                     },
                     {
                       id: "ct-brain", name: "CT Head/Brain", modality: "CT", icon: "brain",
                       desc: "Plain + contrast brain protocol",
-                      html: H + title("C.T. OF HEAD / BRAIN") + s("Clinical History:") + s("Technique:", "Pre- and post-contrast axial CT sections of the brain with bone and soft tissue windows.") + s("Study reveals:", "<p>Brain parenchyma (plain): </p><p>Grey-white differentiation: </p><p>Haemorrhage / infarct / oedema: </p><p>Post-contrast enhancement pattern: </p><p>Ventricles and CSF spaces: </p><p>Midline: </p><p>Cerebellum and brainstem: </p><p>Bony calvarium (bone window): </p><p>Orbits: </p><p>Paranasal sinuses and mastoids: </p>") + F,
+                      html: CT_BRAIN_PC,
                     },
                     {
-                      id: "ct-spine", name: "CT Spine", modality: "CT", icon: "spine",
-                      desc: "Cervical / Thoracic / Lumbar spine",
-                      html: H + title("C.T. OF SPINE") + s("Clinical History:") + s("Technique:", "Axial CT sections with sagittal and coronal reconstructions.") + s("Study reveals:", "<p>Vertebral alignment: </p><p>Vertebral body height and density: </p><p>Fracture / lytic / sclerotic lesions: </p><p>Disc spaces: </p><p>Spinal canal diameter: </p><p>Neural foramina: </p><p>Facet joints: </p><p>Paraspinal soft tissues: </p>") + F,
+                      id: "ct-spine", name: "CT Cervical Spine", modality: "CT", icon: "spine",
+                      desc: "Cervical spine, plain",
+                      html: CT_CSPINE,
+                    },
+                    {
+                      id: "ct-thoracic-spine", name: "CT Thoracic Spine", modality: "CT", icon: "spine",
+                      desc: "Thoracic spine, plain",
+                      html: CT_TSPINE,
+                    },
+                    {
+                      id: "ct-lumbar-spine", name: "CT Lumbar Spine", modality: "CT", icon: "spine",
+                      desc: "Lumbar spine, plain",
+                      html: CT_LSPINE,
                     },
                     // ── X-Ray templates ───────────────────────────────────────
                     { type: "header", label: "X-RAY" },
                     {
                       id: "xray-chest", name: "X-Ray Chest", modality: "XR", icon: "lungs",
-                      desc: "PA / AP chest radiograph",
-                      html: `<div style="font-family:Arial,sans-serif;font-size:13px;line-height:1.7;color:#111827;padding:8px;">
-<p style="text-align:center;font-style:italic;font-weight:700;font-size:14px;margin:0 0 10px;">ORGANIZATION NAME</p>
-<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px;">
-<tr><td style="font-weight:700;width:160px;padding:3px 0;">Age / Sex</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;min-width:160px;padding:3px 2px;" contenteditable="true"></td></tr>
-<tr><td style="font-weight:700;padding:3px 0;">Case Id</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr>
-<tr><td style="font-weight:700;padding:3px 0;">Referring Doctor</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr>
-<tr><td style="font-weight:700;padding:3px 0;">Date &amp; Time</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr>
-<tr><td style="font-weight:700;padding:3px 0;">Investigation</td><td style="padding:3px 4px;">:</td><td style="border-bottom:1px dashed #999;padding:3px 2px;" contenteditable="true"></td></tr>
-</table>
-<p style="text-align:center;font-weight:700;text-decoration:underline;font-size:14px;margin:12px 0;" contenteditable="true">X-RAY CHEST PA VIEW</p>
-<p style="font-weight:700;margin:10px 0 4px;">Clinical History:</p>
-<div style="min-height:40px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true"></div>
-<p style="font-weight:700;margin:10px 0 4px;">Study reveals:</p>
-<div style="min-height:120px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true"><p>Trachea and carina: </p><p>Lung fields (right / left): </p><p>Hilar shadows: </p><p>Costophrenic angles: </p><p>Diaphragm: </p><p>Cardiac size and contour (CTR): </p><p>Mediastinum: </p><p>Bony thorax: </p><p>Soft tissues: </p></div>
-<p style="font-weight:700;margin:10px 0 4px;">IMPRESSION:</p>
-<div style="min-height:60px;border-bottom:1px solid #d1d5db;margin-bottom:10px;" contenteditable="true"></div>
-<p style="font-weight:700;margin:10px 0 4px;">Clinical Advice:</p>
-<div style="min-height:36px;border-bottom:1px solid #d1d5db;margin-bottom:20px;" contenteditable="true"></div>
-<p style="font-weight:700;margin:10px 0 4px;">Signature</p>
-<div style="min-height:36px;" contenteditable="true"></div>
-</div>`,
+                      desc: "PA chest radiograph",
+                      html: XR_CHEST_PA,
+                    },
+                    {
+                      id: "xray-chest-ap", name: "X-Ray Chest AP", modality: "XR", icon: "lungs",
+                      desc: "AP chest radiograph",
+                      html: XR_CHEST_AP,
                     },
                     {
                       id: "xray-abdomen", name: "X-Ray Abdomen", modality: "XR", icon: "abdomen",
                       desc: "Erect and supine abdomen",
-                      html: H + title("X-RAY ABDOMEN") + s("Clinical History:") + s("Study reveals:", "<p>Gas pattern (small bowel / large bowel): </p><p>Air-fluid levels: </p><p>Free gas under diaphragm: </p><p>Psoas shadows: </p><p>Renal outlines: </p><p>Calcifications (renal / biliary / vascular): </p><p>Bony structures (vertebrae / pelvis): </p><p>Soft tissue shadows: </p>") + F,
+                      html: XR_ABD,
                     },
                     {
-                      id: "xray-spine", name: "X-Ray Spine", modality: "XR", icon: "spine",
-                      desc: "Cervical / Thoracic / Lumbar spine",
-                      html: H + title("X-RAY SPINE") + s("Clinical History:") + s("Study reveals:", "<p>Vertebral alignment (AP and lateral): </p><p>Vertebral body height and density: </p><p>Disc spaces: </p><p>Posterior elements (pedicles / laminae / spinous processes): </p><p>Foramina: </p><p>Sacroiliac joints (if lumbar): </p><p>Prevertebral soft tissues: </p>") + F,
+                      id: "xray-spine", name: "X-Ray Cervical Spine", modality: "XR", icon: "spine",
+                      desc: "Cervical spine, AP and lateral",
+                      html: XR_CS,
+                    },
+                    {
+                      id: "xray-thoracic-spine", name: "X-Ray Thoracic Spine", modality: "XR", icon: "spine",
+                      desc: "Thoracic spine, AP and lateral",
+                      html: XR_TS,
+                    },
+                    {
+                      id: "xray-lumbar-spine", name: "X-Ray Lumbar Spine", modality: "XR", icon: "spine",
+                      desc: "Lumbar spine, AP and lateral",
+                      html: XR_LS,
                     },
                     {
                       id: "xray-pelvis", name: "X-Ray Pelvis", modality: "XR", icon: "bone",
                       desc: "AP pelvis and hip joints",
-                      html: H + title("X-RAY PELVIS AP VIEW") + s("Clinical History:") + s("Study reveals:", "<p>Pelvic ring (ilium / ischium / pubis / sacrum): </p><p>Symphysis pubis: </p><p>Sacroiliac joints: </p><p>Hip joints (right / left): </p><p>Femoral heads and necks: </p><p>Acetabuli: </p><p>Soft tissue shadows: </p>") + F,
+                      html: XR_PEL,
                     },
                     {
                       id: "xray-knee", name: "X-Ray Knee", modality: "XR", icon: "knee",
                       desc: "AP, lateral and skyline views",
-                      html: H + title("X-RAY KNEE JOINT") + s("Clinical History:") + s("Study reveals:", "<p>Alignment (varus / valgus): </p><p>Joint spaces (medial / lateral / patellofemoral): </p><p>Femoral condyles: </p><p>Tibial plateaux: </p><p>Patella (position, density): </p><p>Tibial tuberosity: </p><p>Osteophytes: </p><p>Soft tissue calcifications: </p><p>Periarticular soft tissues: </p>") + F,
+                      html: XR_KNEE,
                     },
                     {
                       id: "xray-shoulder", name: "X-Ray Shoulder", modality: "XR", icon: "shoulder",
                       desc: "AP and axillary shoulder views",
-                      html: H + title("X-RAY SHOULDER JOINT") + s("Clinical History:") + s("Study reveals:", "<p>Glenohumeral joint (alignment, joint space): </p><p>Humeral head (density, contour): </p><p>Glenoid: </p><p>Acromioclavicular joint: </p><p>Acromion morphology: </p><p>Coracoid: </p><p>Subacromial space: </p><p>Soft tissue calcifications: </p><p>Periarticular soft tissues: </p>") + F,
+                      html: XR_SH,
                     },
                     // ── Mammography ───────────────────────────────────────────
                     { type: "header", label: "MAMMOGRAPHY" },
@@ -5174,3 +5233,4 @@ const manualClientIdMap = {
     </>
   );
 }
+

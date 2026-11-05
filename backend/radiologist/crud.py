@@ -90,6 +90,17 @@ def _ensure_dmc_no_column(conn: connection) -> None:
     conn.commit()
 
 
+def _ensure_reg_no_column(conn: connection) -> None:
+    """Lazily adds radiologists.reg_no (registration number) — same
+    self-healing pattern as _ensure_dmc_no_column."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "ALTER TABLE radiology_schema.radiologists "
+            "ADD COLUMN IF NOT EXISTS reg_no TEXT"
+        )
+    conn.commit()
+
+
 def _ensure_reports_completed_at_column(conn: connection) -> None:
     """Lazily adds radiology_schema.reports.completed_at (plain TIMESTAMP holding
     IST wall-clock time). If the column ever exists as timestamptz it is converted
@@ -425,6 +436,35 @@ def set_scan_status(
     return {"case_id": row[0], "status": row[1]}
 
 
+def get_case_org_name(conn: connection, case_id: str) -> str:
+    """Name of the organization the case belongs to. rad_scans stores the org
+    as an id (org_id text or the org user's UUID) in id_organisation /
+    ref_organisation; resolve it through organization_schema.org_profile and
+    fall back to the raw column text (some rows hold the name directly)."""
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT rs.id_organisation, rs.ref_organisation,
+                       (SELECT op.org_name FROM organization_schema.org_profile op
+                         WHERE op.org_id::text IN (rs.id_organisation::text, rs.ref_organisation::text)
+                            OR op.user_id::text IN (rs.id_organisation::text, rs.ref_organisation::text)
+                         LIMIT 1)
+                FROM radiology_schema.rad_scans rs
+                WHERE rs.case_id=%s
+                LIMIT 1
+                """,
+                (case_id,),
+            )
+            row = cur.fetchone()
+        if not row:
+            return ""
+        return (row[2] or row[1] or row[0] or "").strip()
+    except Exception:
+        conn.rollback()
+        return ""
+
+
 def get_scan_by_case(conn: connection, case_id: str) -> Dict[str, Any]:
     with conn.cursor() as cur:
         cur.execute(
@@ -464,6 +504,7 @@ def get_scan_by_case(conn: connection, case_id: str) -> Dict[str, Any]:
 # -----------------------------
 def get_radiologist(conn: connection, user_id: UUID) -> dict:
     _ensure_dmc_no_column(conn)
+    _ensure_reg_no_column(conn)
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -471,7 +512,7 @@ def get_radiologist(conn: connection, user_id: UUID) -> dict:
                 verification_status, profile_image_path, degree_path,
                 signature_path, designation,
                 user_lab_name, lab_address, department, lab_logo_url,
-                rad_id, dmc_no
+                rad_id, dmc_no, reg_no
             FROM radiology_schema.radiologists
             WHERE user_id=%s
             """,
@@ -497,6 +538,7 @@ def get_radiologist(conn: connection, user_id: UUID) -> dict:
             "lab_logo_url": row[13] or "",
             "rad_id": row[14] or "",
             "dmc_no": row[15] or "",
+            "reg_no": row[16] or "",
         }
 
 
@@ -584,6 +626,20 @@ def update_dmc_no(conn: connection, user_id: UUID, dmc_no: str) -> None:
             WHERE user_id=%s
             """,
             (dmc_no, str(user_id))
+        )
+    conn.commit()
+
+
+def update_reg_no(conn: connection, user_id: UUID, reg_no: str) -> None:
+    _ensure_reg_no_column(conn)
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE radiology_schema.radiologists
+            SET reg_no=%s, updated_at=NOW()
+            WHERE user_id=%s
+            """,
+            (reg_no, str(user_id))
         )
     conn.commit()
 

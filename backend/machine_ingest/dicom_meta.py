@@ -62,6 +62,29 @@ def age_from_birth_date(birth: Any, study: Any) -> Optional[int]:
     return years if years >= 0 else None
 
 
+# A number that follows the patient name, e.g. "AISHWARIYA KHURANA 33/F", "NARENDER KUMAR 34Y/M",
+# "RAMESH 45", "SITA (28 F)". It must stand apart from the name (start / space / comma / bracket
+# before it) so a digit that is part of the name itself ("TEST1") is never read as an age.
+_NAME_AGE_RE = re.compile(
+    r"(?:^|[\s,(\-_])(\d{1,3})\s*(?:Y(?:RS?|EARS?)?)?\s*(?:[/\-]?\s*(?:MALE|FEMALE|M|F|O))?\s*\)?\s*$",
+    re.IGNORECASE,
+)
+
+
+def age_from_patient_name(raw: Any) -> Optional[int]:
+    """Fallback when neither PatientAge nor PatientBirthDate gives an age: some scanners append
+    the age to PatientName ('NAME 33/F'). Returns the whole-years age found after the name."""
+    s = str(raw or "").replace("^", " ")
+    s = " ".join(s.split())
+    if not s:
+        return None
+    m = _NAME_AGE_RE.search(s)
+    if not m:
+        return None
+    age = int(m.group(1))
+    return age if 1 <= age <= 120 else None
+
+
 def format_study_date(raw: Any) -> Optional[str]:
     """DICOM StudyDate is YYYYMMDD -> 'YYYY-MM-DD' (parsed by
     organization/crud.py:_parse_date)."""
@@ -145,8 +168,10 @@ def extract_case_metadata(ds) -> Dict[str, Any]:
     return {
         "patient_name": normalise_person_name(getattr(ds, "PatientName", None)),
         "patient_id": (str(getattr(ds, "PatientID", "") or "").strip() or None),
+        # PatientAge tag -> birth date vs study date -> a number written after the patient name
         "age": parse_patient_age(getattr(ds, "PatientAge", None))
-        or age_from_birth_date(getattr(ds, "PatientBirthDate", None), getattr(ds, "StudyDate", None)),
+        or age_from_birth_date(getattr(ds, "PatientBirthDate", None), getattr(ds, "StudyDate", None))
+        or age_from_patient_name(getattr(ds, "PatientName", None)),
         "gender": normalise_gender(getattr(ds, "PatientSex", None)),
         "study_date_str": format_study_date(getattr(ds, "StudyDate", None)),
         "study_datetime_str": study_datetime_from_dataset(ds),

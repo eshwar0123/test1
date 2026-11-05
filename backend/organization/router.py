@@ -1174,6 +1174,12 @@ def dashboard_cases(user=Depends(get_current_user)):
         }
 
     org_id = profile["org_id"]
+    # Orgs with a fixed default radiologist: sweep up any still-unassigned cases.
+    try:
+        from qc import crud as _qc_crud
+        _qc_crud.backfill_default_radiologist(org_id)
+    except Exception as _e:
+        print(f"[dashboard_cases] default-radiologist backfill failed: {_e}")
     rows = crud.list_submissions_for_org(org_id)
 
     # De-duplicate: a case_id can end up with more than one row in

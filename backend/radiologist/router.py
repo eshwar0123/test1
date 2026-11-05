@@ -1,3 +1,5 @@
+import threading
+import requests
 # radiology/router.py
 import os
 from urllib.parse import quote
@@ -983,9 +985,16 @@ def get_or_create_report(case_id: str, user_id: str):
         # still return the current radiologist's profile fields so the report
         # template can render the signature card (name/qualification/signature),
         # rather than a blank "Signature image not found" block.
+        # reg_no + organization_name feed the org-specific signature block
+        def _with_sig_extras(d):
+            if isinstance(d, dict):
+                d["reg_no"] = crud.get_radiologist(conn, uid).get("reg_no") or ""
+                d["organization_name"] = crud.get_case_org_name(conn, case_id)
+            return d
+
         existing = crud.get_report(conn, case_id, uid)
         if existing:
-            return {"success": True, "data": existing}
+            return {"success": True, "data": _with_sig_extras(existing)}
         try:
             data = crud.get_or_create_report(conn, case_id, uid)
         except ValueError:
@@ -1027,8 +1036,10 @@ def get_or_create_report(case_id: str, user_id: str):
                 "dmc_no": rad.get("dmc_no") or "",
                 "scan_datetime": scan_iso,
                 "completed_at": completed_iso,
+                "reg_no": rad.get("reg_no") or "",
+                "organization_name": crud.get_case_org_name(conn, case_id),
             }}
-        return {"success": True, "data": data or None}
+        return {"success": True, "data": _with_sig_extras(data) or None}
     finally:
         conn.close()
 
@@ -1217,6 +1228,7 @@ def get_ai_cache(case_id: str):
                 "referring_doctor":    ref_doc,
                 "scan_datetime":       scan_dt.isoformat() if hasattr(scan_dt, "isoformat") else (str(scan_dt) if scan_dt else None),
                 "clinical_indication": clin_ind,
+                "organization_name":   crud.get_case_org_name(conn, c_id or case_id),
             },
         }
     finally:
@@ -2703,22 +2715,26 @@ def save_radiologist_profile(
     user_id: str,
     qualification: Optional[str] = Form(None),
     dmc_no: Optional[str] = Form(None),
+    reg_no: Optional[str] = Form(None),
+    designation: Optional[str] = Form(None),
 ):
     try:
         uid = UUID(user_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid user_id")
 
-    q = (qualification or "MD").strip().upper()
-    if q not in ("MBBS", "MD"):
-        q = "MD"
+    q = (qualification or "").strip() or "M.B.B.S M.D. RADIODIAGNOSIS"
+    d = (designation or "").strip() or "CONSULTANT RADIOLOGIST"
 
     conn = get_conn()
     try:
         crud.ensure_radiologist_row(conn, uid)
         crud.update_qualification(conn, uid, q)
+        crud.update_designation(conn, uid, d)
         if dmc_no is not None:
             crud.update_dmc_no(conn, uid, dmc_no.strip())
+        if reg_no is not None:
+            crud.update_reg_no(conn, uid, reg_no.strip())
         rad_id = crud.ensure_rad_id(conn, uid)
         data = crud.get_radiologist(conn, uid)
     finally:
@@ -3116,6 +3132,112 @@ def _ensure_notifications_table(cur):
     """)
 
 
+EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
+
+
+def _ensure_push_tokens_table(cur):
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS admin_schema.push_tokens (
+            user_id    TEXT NOT NULL,
+            push_token TEXT NOT NULL,
+            platform   TEXT,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (user_id, push_token)
+        )
+    """)
+
+
+class PushTokenIn(BaseModel):
+    user_id: str
+    push_token: str
+    platform: str = "android"
+
+
+@router.post("/push-token")
+def register_push_token(payload: PushTokenIn):
+    if not payload.push_token.startswith("ExponentPushToken["):
+        raise HTTPException(status_code=400, detail="Invalid Expo push token")
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            _ensure_push_tokens_table(cur)
+            cur.execute(
+                "DELETE FROM admin_schema.push_tokens WHERE push_token = %s AND user_id <> %s",
+                (payload.push_token, payload.user_id),
+            )
+            cur.execute(
+                """
+                INSERT INTO admin_schema.push_tokens (user_id, push_token, platform)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (user_id, push_token)
+                DO UPDATE SET platform = EXCLUDED.platform
+                """,
+                (payload.user_id, payload.push_token, payload.platform),
+            )
+        conn.commit()
+        return {"success": True}
+    finally:
+        conn.close()
+
+
+class PushTokenRemoveIn(BaseModel):
+    user_id: str
+    push_token: str
+
+
+@router.post("/push-token/remove")
+def remove_push_token(payload: PushTokenRemoveIn):
+    """Called on logout so this phone stops receiving the user's alerts."""
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM admin_schema.push_tokens WHERE user_id = %s AND push_token = %s",
+                (payload.user_id, payload.push_token),
+            )
+        conn.commit()
+        return {"success": True}
+    finally:
+        conn.close()
+
+
+def _send_expo_push(tokens, title, message, case_id):
+    """Background send; logs Expo's reply and removes dead tokens."""
+    if not tokens:
+        return
+    msgs = [{
+        "to": t,
+        "title": title,
+        "body": message or "",
+        "sound": "default",
+        "priority": "high",
+        "channelId": "new-cases",
+        "data": {"caseId": case_id},
+    } for t in tokens]
+    try:
+        r = requests.post(
+            EXPO_PUSH_URL, json=msgs, timeout=10,
+            headers={"Accept": "application/json", "Content-Type": "application/json"},
+        )
+        print(f"[push] status={r.status_code} body={r.text[:500]}")
+        items = (r.json() or {}).get("data", [])
+        dead = [
+            t for t, it in zip(tokens, items)
+            if it.get("status") == "error"
+            and (it.get("details") or {}).get("error") == "DeviceNotRegistered"
+        ]
+        if dead:
+            c = get_conn()
+            try:
+                with c.cursor() as cur:
+                    cur.execute("DELETE FROM admin_schema.push_tokens WHERE push_token = ANY(%s)", (dead,))
+                c.commit()
+            finally:
+                c.close()
+    except Exception as e:
+        print(f"[push] send failed: {e}")
+
+
 def _create_notification(cur, user_id, case_id, title, message, ntype="case_assigned"):
     """Best-effort notification insert — never raises, so it can't break the
     assignment flow it's attached to."""
@@ -3130,6 +3252,19 @@ def _create_notification(cur, user_id, case_id, title, message, ntype="case_assi
             """,
             (str(user_id), case_id, ntype, title, message),
         )
+        try:
+            cur.execute("SAVEPOINT push_sp")
+            cur.execute(
+                "SELECT push_token FROM admin_schema.push_tokens WHERE user_id = %s",
+                (str(user_id),),
+            )
+            tokens = [r[0] for r in cur.fetchall()]
+            threading.Thread(
+                target=_send_expo_push, args=(tokens, title, message, case_id), daemon=True
+            ).start()
+        except Exception as pe:
+            cur.execute("ROLLBACK TO SAVEPOINT push_sp")
+            print(f"[push] token lookup failed: {pe}")
     except Exception as e:
         print(f"[notifications] failed to create notification: {e}")
 

@@ -6,10 +6,10 @@ backend/share/router.py
   POST /share/patient/{token}         public. Body {password}. Wrong password -> 403 (the link is
                                       locked after PATIENT_LINK_MAX_ATTEMPTS wrong tries -> 429).
                                       Correct -> images only (presigned URLs, ~15 min).
-  GET  /technician/patient-links      technician only. {case_id: {url, password, expires_at, expired}}
+  GET  /organization/patient-links    organization only. {case_id: {url, password, expires_at, expired}}
                                       for the given cases of the caller's organization.
-  POST /technician/patient-links/{case_id}
-                                      technician only. Issues a NEW link + password (24h from now)
+  POST /organization/patient-links/{case_id}
+                                      organization only. Issues a NEW link + password (24h from now)
                                       for a submitted case; the previous link stops working.
 """
 import json
@@ -202,32 +202,46 @@ def patient_view(token: str, body: PatientOpenIn):
         conn.close()
 
 
-@router.get("/technician/patient-links")
-def technician_patient_links(
+def _organization_org_id(user) -> str:
+    """Organization-side callers only: technicians (role checked in the DB) are refused.
+    Returns the caller's org_id."""
+    from uuid import UUID
+    from organization import crud as org_crud
+
+    uid = user.get("user_id")
+    if not uid:
+        raise HTTPException(401, "Invalid token payload (user_id missing)")
+    row = org_crud._one("SELECT role FROM core_schema.users WHERE user_id = %s", (str(uid),))
+    if row and str(row.get("role") or "").strip().lower() == "technician":
+        raise HTTPException(403, "Patient links are available to the organization only")
+    org_id = org_crud.get_org_id_for_user(UUID(org_crud.resolve_org_user_id(uid)))
+    if not org_id:
+        raise HTTPException(404, "Organization profile not found — complete org setup first")
+    return str(org_id)
+
+
+@router.get("/organization/patient-links")
+def organization_patient_links(
     case_ids: str = Query("", description="comma-separated case ids"),
     user=Depends(get_current_user),
 ):
-    from technician.router import _technician_org
-
-    t = _technician_org(user)
+    org_id = _organization_org_id(user)
     ids = [c.strip() for c in case_ids.split(",") if c.strip()][:500]
     conn = get_conn()
     try:
-        links = crud.latest_links_for_cases(conn, ids, t["org_id"])
+        links = crud.latest_links_for_cases(conn, ids, org_id)
     finally:
         conn.close()
     return {"success": True, "data": links}
 
 
-@router.post("/technician/patient-links/{case_id}")
-def technician_new_patient_link(case_id: str, user=Depends(get_current_user)):
-    from technician.router import _technician_org
-
-    t = _technician_org(user)
+@router.post("/organization/patient-links/{case_id}")
+def organization_new_patient_link(case_id: str, user=Depends(get_current_user)):
+    org_id = _organization_org_id(user)
     conn = get_conn()
     try:
         try:
-            link = crud.create_fresh_link(conn, case_id, t["org_id"])
+            link = crud.create_fresh_link(conn, case_id, org_id)
         except ValueError as exc:
             conn.rollback()
             raise HTTPException(400, str(exc))

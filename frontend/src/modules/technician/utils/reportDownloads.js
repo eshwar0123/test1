@@ -2,7 +2,12 @@
 // Extracted verbatim from organization/views/dashboard/Dashboard.js
 // (handleDownloadCase / handleDownloadWord) so a technician downloads the
 // exact same report the organization does.
-import { downloadReportPdfFromHtml } from "../../radiologist/pages/DicomViewer/services/reportService";
+import { downloadReportPdfFromHtml, buildSavedReportHtml } from "../../radiologist/pages/DicomViewer/services/reportService";
+import {
+  BRAHM_SHAKTI_DISCLAIMER,
+  isBrahmShaktiOrg,
+  formatSignReportDate,
+} from "../../radiologist/pages/DicomViewer/utils/constants";
 
 export const API_BASE_DASH =
   (typeof import.meta !== "undefined" && import.meta.env &&
@@ -83,9 +88,11 @@ export function makeReportDownloaders({ setDownloadingCase, setDownloadingFmt, s
                 // valid id works), and signature_path's directory portion isn't
                 // reliable (same issue fixed elsewhere this session), so rebuild the
                 // URL from just the filename against the known-correct uploads layout.
-                let signatureImgHtml = "";
+                let sigUrl = "";
                 let qualification = "";
                 let designation = "";
+                let profName = "";
+                let dmcNo = "";
                 if (rep.user_id) {
                   try {
                     const profRes = await fetch(`${API_BASE_DASH}/radiology/profile/${encodeURIComponent(rep.user_id)}`);
@@ -93,43 +100,21 @@ export function makeReportDownloaders({ setDownloadingCase, setDownloadingFmt, s
                     const prof = profJson?.data;
                     qualification = prof?.qualification || "";
                     designation = prof?.designation || "";
+                    profName = `${prof?.first_name || ""} ${prof?.last_name || ""}`.trim();
+                    dmcNo = prof?.dmc_no || "";
                     if (prof?.signature_path) {
-                      const fname = String(prof.signature_path).split("/").pop();
-                      if (fname) {
-                        const sigUrl = `/uploads/radiologist/signature/${encodeURIComponent(fname)}`;
-                        signatureImgHtml = `<img src="${sigUrl}" style="max-height:52px; max-width:220px; display:block; margin-bottom:4px;" />`;
-                      }
+                      const fname = String(prof.signature_path).split(/[\/]/).pop();
+                      if (fname) sigUrl = `/uploads/radiologist/signature/${encodeURIComponent(fname)}`;
                     }
                   } catch (_e) {
                     // no signature image available — text-only sign-off below still renders
                   }
                 }
-                const bodyHtml = `
-                  <div style="font-family:Arial, sans-serif; color:#111827;">
-                    <h2 style="margin:0 0 12px; font-size:16px;">Radiology Report</h2>
-                    <table style="width:100%; border-collapse:collapse; font-size:12px;">
-                      <tr><td style="font-weight:700; width:150px; padding:3px 0;">Patient ID</td><td>: ${caseItem.patientId && caseItem.patientId !== "—" ? caseItem.patientId : caseItem.caseId}</td></tr>
-                      <tr><td style="font-weight:700; padding:3px 0;">Study Type</td><td>: ${caseItem.studyType}</td></tr>
-                      <tr><td style="font-weight:700; padding:3px 0;">Modality</td><td>: ${caseItem.modality}</td></tr>
-                      <tr><td style="font-weight:700; padding:3px 0;">Priority</td><td>: ${caseItem.priority}</td></tr>
-                      <tr><td style="font-weight:700; padding:3px 0;">Uploaded</td><td>: ${caseItem.uploadedAt}</td></tr>
-                      <tr><td style="font-weight:700; padding:3px 0;">Completed</td><td>: ${caseItem.completedAt}</td></tr>
-                      <tr><td style="font-weight:700; padding:3px 0;">Radiologist</td><td>: ${caseItem.assignedTo}</td></tr>
-                    </table>
-                    <div style="margin-top:16px; font-weight:700; background:#e8f2ff; border:1px solid #bfdbfe; padding:6px 8px; border-radius:6px; font-size:13px;">Technique</div>
-                    <p style="font-size:12px; line-height:1.5; white-space:pre-wrap;">${rep.technique || rep.ai_technique || "—"}</p>
-                    <div style="margin-top:10px; font-weight:700; background:#e8f2ff; border:1px solid #bfdbfe; padding:6px 8px; border-radius:6px; font-size:13px;">Findings</div>
-                    <p style="font-size:12px; line-height:1.5; white-space:pre-wrap;">${rep.findings || rep.ai_findings || "—"}</p>
-                    <div style="margin-top:10px; font-weight:700; background:#e8f2ff; border:1px solid #bfdbfe; padding:6px 8px; border-radius:6px; font-size:13px;">Impression</div>
-                    <p style="font-size:12px; line-height:1.5; white-space:pre-wrap;">${rep.impression || rep.ai_impression || "—"}</p>
-                    <div style="margin-top:10px; font-weight:700; background:#e8f2ff; border:1px solid #bfdbfe; padding:6px 8px; border-radius:6px; font-size:13px;">Opinions</div>
-                    <p style="font-size:12px; line-height:1.5; white-space:pre-wrap;">${rep.opinions || rep.ai_opinions || "—"}</p>
-                    <div style="margin-top:28px;">
-                      ${signatureImgHtml}
-                      <p style="font-size:12px; margin:0;">Electronically signed by ${caseItem.assignedTo}${qualification ? ` (${qualification})` : ""}${designation ? `, ${designation}` : ""}<br/>Completed: ${caseItem.completedAt}</p>
-                    </div>
-                  </div>
-                `;
+                const bodyHtml = buildSavedReportHtml({
+                  rep,
+                  caseItem,
+                  profile: { name: profName, dmcNo, qualification, designation, signatureUrl: sigUrl },
+                });
                 await downloadReportPdfFromHtml({ bodyHtml, caseId: caseItem.caseId, fileName: reportFileName(caseItem, "pdf") });
                 setDownloadingCase(null);
                 return;
@@ -212,6 +197,11 @@ export function makeReportDownloaders({ setDownloadingCase, setDownloadingFmt, s
         `${API_BASE_DASH}/radiology/reports/${encodeURIComponent(caseItem.caseId)}/ai-cache`,
       );
       const rep = (await cacheRes.json().catch(() => null))?.data;
+      // Build marker + raw saved values, to tell which build is running and what the server returned.
+      console.info("[word-export] build 2026-11-05-b", {
+        impression: rep?.impression, opinions: rep?.opinions,
+        ai_impression: rep?.ai_impression, ai_opinions: rep?.ai_opinions,
+      });
       if (!rep || !(rep.technique || rep.findings || rep.impression || rep.opinions ||
                     rep.ai_technique || rep.ai_findings || rep.ai_impression || rep.ai_opinions)) {
         throw new Error("No report content available yet for this case.");
@@ -222,6 +212,7 @@ export function makeReportDownloaders({ setDownloadingCase, setDownloadingFmt, s
       let designation = "";
       let radName = "";
       let dmcNo = "";
+      let regNo = "";
       let sigData = null;   // { data: ArrayBuffer, type: "png"|"jpg"|"gif", width, height }
       if (rep.user_id) {
         try {
@@ -231,6 +222,7 @@ export function makeReportDownloaders({ setDownloadingCase, setDownloadingFmt, s
           designation = prof?.designation || "";
           radName = `${prof?.first_name || ""} ${prof?.last_name || ""}`.trim();
           dmcNo = prof?.dmc_no || "";
+          regNo = prof?.reg_no || "";
           if (prof?.signature_path) {
             // Directory part of signature_path isn't reliable — rebuild from the filename.
             const fname = String(prof.signature_path).split(/[\\/]/).pop();
@@ -270,7 +262,9 @@ export function makeReportDownloaders({ setDownloadingCase, setDownloadingFmt, s
         const src = String(raw ?? "").trim();
         if (!src) return [new Paragraph({ children: [new TextRun("—")] })];
         if (!/<[a-z][\s\S]*>/i.test(src)) {
-          return src.split(/\r?\n/).map((line) =>
+          // a **bold** run that wraps over a line break stays one run (no stray asterisks)
+          const joined = src.replace(/\*\*([\s\S]+?)\*\*/g, (m) => m.replace(/\s*\r?\n\s*/g, " "));
+          return joined.split(/\r?\n/).map((line) =>
             new Paragraph({
               spacing: { after: 80 },
               // render **bold** markers instead of showing the asterisks
@@ -373,10 +367,12 @@ export function makeReportDownloaders({ setDownloadingCase, setDownloadingFmt, s
       // Bordered two-column header grid (same layout as the PDF report).
       const thin = { style: BorderStyle.SINGLE, size: 6, color: "222222" };
       const cellBorders = { top: thin, bottom: thin, left: thin, right: thin };
-      const infoCell = (label, value) =>
+      // `full` = the cell spans both columns (used when its row-mate is left out).
+      const infoCell = (label, value, full = false) =>
         new TableCell({
           borders: cellBorders,
-          width: { size: 4853, type: WidthType.DXA },
+          columnSpan: full ? 2 : 1,
+          width: { size: full ? 9706 : 4853, type: WidthType.DXA },
           margins: { top: 100, bottom: 100, left: 140, right: 140 },
           children: [new Paragraph({
             children: [
@@ -389,7 +385,9 @@ export function makeReportDownloaders({ setDownloadingCase, setDownloadingFmt, s
         new Table({
           width: { size: 9706, type: WidthType.DXA },
           columnWidths: [4853, 4853],
-          rows: rows.map(([l, r]) => new TableRow({ children: [infoCell(...l), infoCell(...r)] })),
+          rows: rows.map(([l, r]) => new TableRow({
+            children: r ? [infoCell(...l), infoCell(...r)] : [infoCell(...l, true)],
+          })),
         });
 
       const sectionTitle = (text) =>
@@ -410,7 +408,11 @@ export function makeReportDownloaders({ setDownloadingCase, setDownloadingFmt, s
       const sigLine = (text, bold = false) =>
         new Paragraph({ spacing: { after: 20 }, children: [new TextRun({ text, bold })] });
 
-      const signature = [sectionTitle("Signature")];
+      // BRAHM SHAKTI SANJIVANI SUPER SPECIALITY HOSPITAL only: signature, name,
+      // qualification, designation, Reg.No, report (submit) date and disclaimer.
+      const isBrahmShakti = isBrahmShaktiOrg(rep.organization_name);
+      const signature = isBrahmShakti ? [] : [sectionTitle("Signature")];
+      if (isBrahmShakti) signature.push(new Paragraph({ spacing: { before: 240 }, children: [] }));
       if (sigData) {
         signature.push(new Paragraph({
           spacing: { after: 60 },
@@ -421,10 +423,27 @@ export function makeReportDownloaders({ setDownloadingCase, setDownloadingFmt, s
           })],
         }));
       }
-      signature.push(sigLine(displayName, true));
-      if (dmcNo) signature.push(sigLine(`DMC No: ${dmcNo}`, true));
-      if (qualification) signature.push(sigLine(qualification));
-      if (designation) signature.push(sigLine(designation));
+      if (isBrahmShakti) {
+        signature.push(sigLine(displayName.toUpperCase()));
+        if (qualification) signature.push(sigLine(qualification));
+        if (designation) signature.push(sigLine(designation));
+        if (regNo) signature.push(sigLine(`Reg.No:${regNo}`));
+        signature.push(new Paragraph({ children: [] }));
+        const submittedAt = submittedRaw ? new Date(submittedRaw) : null;
+        signature.push(sigLine(`Report Date : ${submittedAt && !isNaN(submittedAt) ? formatSignReportDate(submittedAt) : reportSubmit}`));
+        signature.push(new Paragraph({
+          spacing: { before: 60 },
+          children: [
+            new TextRun({ text: "Disclaimer-", bold: true, size: 18 }),
+            new TextRun({ text: BRAHM_SHAKTI_DISCLAIMER, size: 18 }),
+          ],
+        }));
+      } else {
+        signature.push(sigLine(displayName, true));
+        if (dmcNo) signature.push(sigLine(`DMC No: ${dmcNo}`, true));
+        if (qualification) signature.push(sigLine(qualification));
+        if (designation) signature.push(sigLine(designation));
+      }
 
       const docx = new Document({
         creator: "ONIX",
@@ -440,7 +459,9 @@ export function makeReportDownloaders({ setDownloadingCase, setDownloadingFmt, s
             }),
             infoGrid([
               [["Patient Id", caseItem.patientId && caseItem.patientId !== "—" ? caseItem.patientId : caseItem.caseId], ["Study Date & Time", studyDate]],
-              [["Patient Name", rep.patient_name || caseItem.patientName], ["Referring Doctor", rep.referring_doctor]],
+              // Referring Doctor is left out of the table when it is empty.
+              [["Patient Name", rep.patient_name || caseItem.patientName],
+                /[^\s\-—–]/.test(String(rep.referring_doctor ?? "")) ? ["Referring Doctor", rep.referring_doctor] : null],
               [["Age / Sex", ageSex], ["Report Submit", reportSubmit]],
             ]),
             // Technique is left out entirely when the radiologist didn't fill it in.

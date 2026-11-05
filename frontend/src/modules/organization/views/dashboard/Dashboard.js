@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { getCurrentLang } from "../../../../shared/components/GoogleTranslateSwitcher";
-import { downloadReportPdfFromHtml } from "../../../radiologist/pages/DicomViewer/services/reportService";
+import { downloadReportPdfFromHtml, buildSavedReportHtml } from "../../../radiologist/pages/DicomViewer/services/reportService";
 
 const GLOBAL_CSS = `
   @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap');
@@ -559,6 +559,81 @@ export default function Dashboard() {
   const API_BASE_DASH =
     (typeof import.meta !== "undefined" && import.meta.env &&
       (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE)) || "";
+
+  // ── Patient share links (Completed Cases modal) ──────────────────────────
+  const [patientLinks, setPatientLinks] = useState({}); // case_id -> { url, password, expires_at }
+  const [linkNow, setLinkNow] = useState(Date.now());
+  const [linkCopied, setLinkCopied] = useState(null);   // case_id whose link was just copied
+  const [linkCreating, setLinkCreating] = useState(null); // case_id being generated
+
+  const linkApi = async (path, options = {}) => {
+    const tok = readToken();
+    const r = await fetch(`${API_BASE_DASH}${path}`, {
+      ...options,
+      headers: { ...(tok ? { Authorization: `Bearer ${tok}` } : {}), ...(options.headers || {}) },
+    });
+    const j = await r.json().catch(() => null);
+    if (!r.ok) {
+      const d = j?.detail;
+      throw new Error(typeof d === "string" ? d : `HTTP ${r.status}`);
+    }
+    return j;
+  };
+
+  const completedIdsKey = (dashData && Array.isArray(dashData.completed) ? dashData.completed : [])
+    .map((c) => c.case_id).filter(Boolean).join(",");
+  useEffect(() => {
+    if (!completedCasesModal || !completedIdsKey) return undefined;
+    let alive = true;
+    linkApi(`/organization/patient-links?case_ids=${encodeURIComponent(completedIdsKey)}`)
+      .then((j) => alive && setPatientLinks(j.data || {}))
+      .catch(() => {});
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [completedCasesModal, completedIdsKey, dashData]);
+  useEffect(() => {
+    const id = setInterval(() => setLinkNow(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  const linkExpiresIn = (expiresAt) => {
+    const ms = new Date(expiresAt).getTime() - linkNow;
+    if (!(ms > 0)) return null;
+    const mins = Math.floor(ms / 60000);
+    return mins >= 60 ? `Expires in ${Math.floor(mins / 60)}h` : `Expires in ${Math.max(mins, 1)}m`;
+  };
+
+  const copyPatientLink = async (caseId, text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+    setLinkCopied(caseId);
+    setTimeout(() => setLinkCopied((c) => (c === caseId ? null : c)), 2000);
+  };
+
+  // New link + new password for the same case (24h from now). The previous link stops working.
+  const generatePatientLink = async (caseId, hasActive) => {
+    if (hasActive && !window.confirm("Create a new link and password? The current link will stop working.")) return;
+    setLinkCreating(caseId);
+    try {
+      const j = await linkApi(`/organization/patient-links/${encodeURIComponent(caseId)}`, { method: "POST" });
+      setPatientLinks((prev) => ({ ...prev, [caseId]: j.data }));
+      setLinkNow(Date.now());
+      setDashToast({ kind: "success", text: "New patient link created. Share the link and the password with the patient." });
+    } catch (e) {
+      setDashToast({ kind: "error", text: e.message || "Could not create the link" });
+    } finally {
+      setLinkCreating(null);
+      setTimeout(() => setDashToast(null), 5000);
+    }
+  };
 
   useEffect(() => {
     const tok = readToken();
@@ -1118,9 +1193,11 @@ export default function Dashboard() {
                 // valid id works), and signature_path's directory portion isn't
                 // reliable (same issue fixed elsewhere this session), so rebuild the
                 // URL from just the filename against the known-correct uploads layout.
-                let signatureImgHtml = "";
+                let sigUrl = "";
                 let qualification = "";
                 let designation = "";
+                let profName = "";
+                let dmcNo = "";
                 if (rep.user_id) {
                   try {
                     const profRes = await fetch(`${API_BASE_DASH}/radiology/profile/${encodeURIComponent(rep.user_id)}`);
@@ -1128,43 +1205,21 @@ export default function Dashboard() {
                     const prof = profJson?.data;
                     qualification = prof?.qualification || "";
                     designation = prof?.designation || "";
+                    profName = `${prof?.first_name || ""} ${prof?.last_name || ""}`.trim();
+                    dmcNo = prof?.dmc_no || "";
                     if (prof?.signature_path) {
-                      const fname = String(prof.signature_path).split("/").pop();
-                      if (fname) {
-                        const sigUrl = `/uploads/radiologist/signature/${encodeURIComponent(fname)}`;
-                        signatureImgHtml = `<img src="${sigUrl}" style="max-height:52px; max-width:220px; display:block; margin-bottom:4px;" />`;
-                      }
+                      const fname = String(prof.signature_path).split(/[\/]/).pop();
+                      if (fname) sigUrl = `/uploads/radiologist/signature/${encodeURIComponent(fname)}`;
                     }
                   } catch (_e) {
                     // no signature image available — text-only sign-off below still renders
                   }
                 }
-                const bodyHtml = `
-                  <div style="font-family:Arial, sans-serif; color:#111827;">
-                    <h2 style="margin:0 0 12px; font-size:16px;">Radiology Report</h2>
-                    <table style="width:100%; border-collapse:collapse; font-size:12px;">
-                      <tr><td style="font-weight:700; width:150px; padding:3px 0;">Patient ID</td><td>: ${caseItem.patientId && caseItem.patientId !== "—" ? caseItem.patientId : caseItem.caseId}</td></tr>
-                      <tr><td style="font-weight:700; padding:3px 0;">Study Type</td><td>: ${caseItem.studyType}</td></tr>
-                      <tr><td style="font-weight:700; padding:3px 0;">Modality</td><td>: ${caseItem.modality}</td></tr>
-                      <tr><td style="font-weight:700; padding:3px 0;">Priority</td><td>: ${caseItem.priority}</td></tr>
-                      <tr><td style="font-weight:700; padding:3px 0;">Uploaded</td><td>: ${caseItem.uploadedAt}</td></tr>
-                      <tr><td style="font-weight:700; padding:3px 0;">Completed</td><td>: ${caseItem.completedAt}</td></tr>
-                      <tr><td style="font-weight:700; padding:3px 0;">Radiologist</td><td>: ${caseItem.assignedTo}</td></tr>
-                    </table>
-                    <div style="margin-top:16px; font-weight:700; background:#e8f2ff; border:1px solid #bfdbfe; padding:6px 8px; border-radius:6px; font-size:13px;">Technique</div>
-                    <p style="font-size:12px; line-height:1.5; white-space:pre-wrap;">${rep.technique || rep.ai_technique || "—"}</p>
-                    <div style="margin-top:10px; font-weight:700; background:#e8f2ff; border:1px solid #bfdbfe; padding:6px 8px; border-radius:6px; font-size:13px;">Findings</div>
-                    <p style="font-size:12px; line-height:1.5; white-space:pre-wrap;">${rep.findings || rep.ai_findings || "—"}</p>
-                    <div style="margin-top:10px; font-weight:700; background:#e8f2ff; border:1px solid #bfdbfe; padding:6px 8px; border-radius:6px; font-size:13px;">Impression</div>
-                    <p style="font-size:12px; line-height:1.5; white-space:pre-wrap;">${rep.impression || rep.ai_impression || "—"}</p>
-                    <div style="margin-top:10px; font-weight:700; background:#e8f2ff; border:1px solid #bfdbfe; padding:6px 8px; border-radius:6px; font-size:13px;">Opinions</div>
-                    <p style="font-size:12px; line-height:1.5; white-space:pre-wrap;">${rep.opinions || rep.ai_opinions || "—"}</p>
-                    <div style="margin-top:28px;">
-                      ${signatureImgHtml}
-                      <p style="font-size:12px; margin:0;">Electronically signed by ${caseItem.assignedTo}${qualification ? ` (${qualification})` : ""}${designation ? `, ${designation}` : ""}<br/>Completed: ${caseItem.completedAt}</p>
-                    </div>
-                  </div>
-                `;
+                const bodyHtml = buildSavedReportHtml({
+                  rep,
+                  caseItem,
+                  profile: { name: profName, dmcNo, qualification, designation, signatureUrl: sigUrl },
+                });
                 await downloadReportPdfFromHtml({ bodyHtml, caseId: caseItem.caseId, fileName: reportFileName(caseItem, "pdf") });
                 setDownloadingCase(null);
                 return;
@@ -1247,6 +1302,11 @@ export default function Dashboard() {
         `${API_BASE_DASH}/radiology/reports/${encodeURIComponent(caseItem.caseId)}/ai-cache`,
       );
       const rep = (await cacheRes.json().catch(() => null))?.data;
+      // Build marker + raw saved values, to tell which build is running and what the server returned.
+      console.info("[word-export] build 2026-11-05-b", {
+        impression: rep?.impression, opinions: rep?.opinions,
+        ai_impression: rep?.ai_impression, ai_opinions: rep?.ai_opinions,
+      });
       if (!rep || !(rep.technique || rep.findings || rep.impression || rep.opinions ||
                     rep.ai_technique || rep.ai_findings || rep.ai_impression || rep.ai_opinions)) {
         throw new Error("No report content available yet for this case.");
@@ -1305,7 +1365,9 @@ export default function Dashboard() {
         const src = String(raw ?? "").trim();
         if (!src) return [new Paragraph({ children: [new TextRun("—")] })];
         if (!/<[a-z][\s\S]*>/i.test(src)) {
-          return src.split(/\r?\n/).map((line) =>
+          // a **bold** run that wraps over a line break stays one run (no stray asterisks)
+          const joined = src.replace(/\*\*([\s\S]+?)\*\*/g, (m) => m.replace(/\s*\r?\n\s*/g, " "));
+          return joined.split(/\r?\n/).map((line) =>
             new Paragraph({
               spacing: { after: 80 },
               // render **bold** markers instead of showing the asterisks
@@ -1408,10 +1470,12 @@ export default function Dashboard() {
       // Bordered two-column header grid (same layout as the PDF report).
       const thin = { style: BorderStyle.SINGLE, size: 6, color: "222222" };
       const cellBorders = { top: thin, bottom: thin, left: thin, right: thin };
-      const infoCell = (label, value) =>
+      // `full` = the cell spans both columns (used when its row-mate is left out).
+      const infoCell = (label, value, full = false) =>
         new TableCell({
           borders: cellBorders,
-          width: { size: 4853, type: WidthType.DXA },
+          columnSpan: full ? 2 : 1,
+          width: { size: full ? 9706 : 4853, type: WidthType.DXA },
           margins: { top: 100, bottom: 100, left: 140, right: 140 },
           children: [new Paragraph({
             children: [
@@ -1424,7 +1488,9 @@ export default function Dashboard() {
         new Table({
           width: { size: 9706, type: WidthType.DXA },
           columnWidths: [4853, 4853],
-          rows: rows.map(([l, r]) => new TableRow({ children: [infoCell(...l), infoCell(...r)] })),
+          rows: rows.map(([l, r]) => new TableRow({
+            children: r ? [infoCell(...l), infoCell(...r)] : [infoCell(...l, true)],
+          })),
         });
 
       const sectionTitle = (text) =>
@@ -1475,7 +1541,9 @@ export default function Dashboard() {
             }),
             infoGrid([
               [["Patient Id", caseItem.patientId && caseItem.patientId !== "—" ? caseItem.patientId : caseItem.caseId], ["Study Date & Time", studyDate]],
-              [["Patient Name", rep.patient_name || caseItem.patientName], ["Referring Doctor", rep.referring_doctor]],
+              // Referring Doctor is left out of the table when it is empty.
+              [["Patient Name", rep.patient_name || caseItem.patientName],
+                /[^\s\-—–]/.test(String(rep.referring_doctor ?? "")) ? ["Referring Doctor", rep.referring_doctor] : null],
               [["Age / Sex", ageSex], ["Report Submit", reportSubmit]],
             ]),
             // Technique is left out entirely when the radiologist didn't fill it in.
@@ -3414,11 +3482,11 @@ export default function Dashboard() {
             </div>
 
             {/* Table */}
-            <div className="modal-scroll-green" style={{ overflowY: "scroll", overflowX: "hidden", flex: 1 }}>
+            <div className="modal-scroll-green" style={{ overflowY: "scroll", overflowX: "auto", flex: 1 }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead style={{ position: "sticky", top: 0, zIndex: 1 }}>
                   <tr style={{ background: isDark ? "rgba(15,23,42,0.98)" : "#f8fafc" }}>
-                    {["Patient ID", "Patient Name", "Uploaded", "Modality", "Study Type", "Priority", "Completed", "Assigned To", "Download"].map(h => (
+                    {["Patient ID", "Patient Name", "Uploaded", "Modality", "Study Type", "Priority", "Completed", "Assigned To", "Link", "Password", "Download"].map(h => (
                       <th key={h} style={{
                         ...sg,
                         fontSize: 11, letterSpacing: "1.2px", fontWeight: 700,
@@ -3433,7 +3501,7 @@ export default function Dashboard() {
                 <tbody>
                   {completedSearch.trim() && completedFiltered.length === 0 && (
                     <tr>
-                      <td colSpan={9} style={{ padding: 40, textAlign: "center", color: textMuted, fontSize: 14 }}>
+                      <td colSpan={11} style={{ padding: 40, textAlign: "center", color: textMuted, fontSize: 14 }}>
                         No completed cases match "{completedSearch.trim()}"
                       </td>
                     </tr>
@@ -3492,6 +3560,76 @@ export default function Dashboard() {
                       <td style={{ padding: "12px 16px", fontSize: 13, color: textPri, fontWeight: 500, whiteSpace: "nowrap" }}>
                         {c.assignedTo}
                       </td>
+                      {/* Link + Password — patient share link (24h) */}
+                      {(() => {
+                        const l = patientLinks[c.caseId];
+                        const left = l ? linkExpiresIn(l.expires_at) : null;   // null = none / expired
+                        const creating = linkCreating === c.caseId;
+                        // one copy puts both on the clipboard, ready to paste to the patient
+                        const shareText = l ? `Link: ${l.url}${l.password ? `\nPassword: ${l.password}` : ""}` : "";
+                        const smallBtn = {
+                          padding: "5px 10px", borderRadius: 8, fontWeight: 700, fontSize: 12, whiteSpace: "nowrap",
+                          cursor: creating ? "wait" : "pointer",
+                          border: "1px solid #bfdbfe", background: "#eff6ff", color: "#1d4ed8",
+                        };
+                        const genBtn = (
+                          <button
+                            type="button"
+                            onClick={() => generatePatientLink(c.caseId, false)}
+                            disabled={creating}
+                            title="Create a patient link and password"
+                            style={smallBtn}
+                          >
+                            {creating ? "Creating…" : "Generate link"}
+                          </button>
+                        );
+                        return (
+                          <>
+                            <td style={{ padding: "12px 16px" }}>
+                              {left ? (
+                                <div style={{ display: "inline-flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => copyPatientLink(c.caseId, shareText)}
+                                    title="Copy the patient link and password"
+                                    style={smallBtn}
+                                  >
+                                    {linkCopied === c.caseId ? "Copied ✓" : "Copy"}
+                                  </button>
+                                  <span style={{ fontSize: 11, color: textMuted }}>{left}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => generatePatientLink(c.caseId, true)}
+                                    disabled={creating}
+                                    style={{ background: "none", border: "none", padding: 0, fontSize: 11, color: textMuted, textDecoration: "underline", cursor: "pointer" }}
+                                  >
+                                    New link
+                                  </button>
+                                </div>
+                              ) : l ? (
+                                <div style={{ display: "inline-flex", flexDirection: "column", gap: 6, alignItems: "flex-start" }}>
+                                  <span
+                                    title="This link has expired"
+                                    style={{ fontSize: 12, fontWeight: 700, color: "#94a3b8", background: "#f1f5f9", padding: "3px 10px", borderRadius: 999, cursor: "not-allowed" }}
+                                  >Expired</span>
+                                  {genBtn}
+                                </div>
+                              ) : (
+                                genBtn
+                              )}
+                            </td>
+                            <td style={{ padding: "12px 16px" }}>
+                              {left && l.password ? (
+                                <code style={{ ...mono, fontWeight: 800, fontSize: 13, letterSpacing: 1.5, color: "#0f172a", background: "#f1f5f9", border: "1px solid #e2e8f0", borderRadius: 6, padding: "3px 7px", userSelect: "all", whiteSpace: "nowrap" }}>
+                                  {l.password}
+                                </code>
+                              ) : (
+                                <span style={{ color: "#94a3b8" }}>—</span>
+                              )}
+                            </td>
+                          </>
+                        );
+                      })()}
                       {/* Download — PDF / Word */}
                       <td style={{ padding: "12px 16px" }}>
                         {(() => {

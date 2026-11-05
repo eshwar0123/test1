@@ -33,6 +33,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from passlib.context import CryptContext
 from pydantic import BaseModel, Field
 
+from assignment_mail import notify_cases_assigned
 from auth.dependencies import get_current_user
 from database import get_conn
 from organization import crud as org_crud
@@ -612,4 +613,5 @@ def technician_assign_case(case_id: str, payload: TechnicianAssignIn, user=Depen
     finally:
         conn.close()
 
+    notify_cases_assigned(rad_user_id, [case_id])
     return {"success": True, "data": {"case_id": case_id, "assigned_rad_id": rad_id, "radiologist": rad_name}}

@@ -7,6 +7,7 @@ as organization/crud.py (via the shared _one/_all/_exec helpers).
 import json
 from typing import Dict, Any, List, Optional
 from psycopg2.extras import RealDictCursor
+from assignment_mail import notify_cases_assigned
 from database import get_conn
 
 
@@ -406,6 +407,100 @@ def org_assigns_by_technician(org_id) -> bool:
 UNASSIGNED = {"unassigned": True}
 
 
+# Organizations whose cases always go to one fixed radiologist: every new case
+# is assigned to Dr. Varun Kumar by default (the technician can still reassign).
+DEFAULT_RAD_ORG_NAME_PATTERN = "%brahm shakti sanjivani%"
+DEFAULT_RAD_USER_ID = "3dc3eca6-5cee-4c93-a22e-03c6105d06a0"
+
+
+def org_default_radiologist(org_id) -> Optional[Dict[str, Any]]:
+    """The fixed default radiologist for this org (BRAHM SHAKTI SANJIVANI SUPER
+    SPECIALITY HOSPITAL), shaped like find_available_radiologist()'s result;
+    None for every other organization."""
+    if not org_id:
+        return None
+    return _one(
+        """
+        SELECT r.rad_id,
+               r.rad_id                                  AS availability_rad_id,
+               r.user_id                                 AS rad_user_id,
+               r.first_name,
+               r.last_name,
+               CONCAT(r.first_name, ' ', r.last_name)    AS radiologist_name,
+               COALESCE(r.designation, r.department, '') AS specialization_name
+          FROM radiology_schema.radiologists r
+         WHERE r.user_id = %s
+           AND r.rad_id IS NOT NULL
+           AND r.is_active
+           AND EXISTS (SELECT 1 FROM organization_schema.org_profile op
+                        WHERE op.org_id = %s
+                          AND LOWER(op.org_name) LIKE %s)
+         LIMIT 1
+        """,
+        (DEFAULT_RAD_USER_ID, str(org_id), DEFAULT_RAD_ORG_NAME_PATTERN),
+    )
+
+
+def backfill_default_radiologist(org_id) -> int:
+    """Assign this org's still-unassigned, not-completed cases to the default
+    radiologist. No-op (returns 0) for organizations without one."""
+    rad = org_default_radiologist(org_id)
+    if not rad:
+        return 0
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            # The org's cases, found through BOTH tables: rad_scans' org columns
+            # and case_workflow.org_id (rad_scans rows don't always carry the
+            # org columns, and case_workflow may already be marked assigned
+            # while rad_scans.assigned_rad_id is still empty).
+            cur.execute(
+                """
+                SELECT case_id FROM radiology_schema.rad_scans
+                 WHERE id_organisation = %s OR ref_organisation = %s
+                UNION
+                SELECT case_id FROM admin_schema.case_workflow
+                 WHERE org_id = %s
+                """,
+                (str(org_id), str(org_id), str(org_id)),
+            )
+            org_case_ids = [r[0] for r in cur.fetchall() if r[0]]
+            case_ids = []
+            if org_case_ids:
+                cur.execute(
+                    """
+                    UPDATE radiology_schema.rad_scans
+                       SET assigned_rad_id = %s, assigned_at = NOW()
+                     WHERE case_id = ANY(%s)
+                       AND COALESCE(assigned_rad_id, '') = ''
+                       AND LOWER(COALESCE(status, '')) NOT IN ('complete', 'completed', 'done')
+                    RETURNING case_id
+                    """,
+                    (rad["rad_id"], org_case_ids),
+                )
+                case_ids = [r[0] for r in cur.fetchall()]
+                cur.execute(
+                    """
+                    UPDATE admin_schema.case_workflow
+                       SET radiologist_user_id = %s, radiologist_name = %s,
+                           specialization_name = %s, rad_id = %s,
+                           assignment_status = 'assigned', assigned_at = NOW()
+                     WHERE case_id = ANY(%s)
+                       AND COALESCE(rad_id, '') = ''
+                    """,
+                    (str(rad["rad_user_id"]), rad["radiologist_name"],
+                     rad["specialization_name"], rad["rad_id"], org_case_ids),
+                )
+        conn.commit()
+        notify_cases_assigned(rad["rad_user_id"], case_ids)
+        return len(case_ids)
+    except Exception:
+        conn.rollback()
+        return 0
+    finally:
+        conn.close()
+
+
 def find_available_radiologist(org_id=None) -> Optional[Dict[str, Any]]:
     """Find the best available radiologist using admin_schema.radiologist_availability.
 
@@ -425,6 +520,9 @@ def find_available_radiologist(org_id=None) -> Optional[Dict[str, Any]]:
     Returns a dict with keys: rad_id, rad_user_id, first_name, last_name,
     radiologist_name, specialization_name.
     """
+    default_rad = org_default_radiologist(org_id)
+    if default_rad:
+        return default_rad
     if org_assigns_by_technician(org_id):
         return dict(UNASSIGNED)
     ensure_assign_schema()
@@ -638,6 +736,7 @@ def insert_case_workflow_with_rad(
             )
         except Exception as e:
             print(f"[notifications] failed to create notification: {e}")
+        notify_cases_assigned(rad_user_id, [src_row.get("case_id")])
 
     return int(row["id"]) if row else None
 
