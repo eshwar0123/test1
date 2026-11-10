@@ -736,3 +736,467 @@ def admin_qc_summary(user=Depends(require_admin)):
     finally:
         cursor.close()
         conn.close()
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  Admin dashboard — REAL data from admin_schema.case_workflow (read-only)
+#
+#  GET /admin/dashboard/overview     -> the number cards
+#  GET /admin/dashboard/assignments  -> Live Assignments table + History popup
+#
+#  Both accept ?range=overall|today|custom (&date_from=YYYY-MM-DD&date_to=...).
+#  Times in case_workflow are naive UTC (DB timezone is Etc/UTC); "today" and
+#  the custom range are evaluated in India time (Asia/Kolkata).
+#  Failures raise 500 on purpose: the page must never show made-up zeros.
+# ═════════════════════════════════════════════════════════════════════════════
+from datetime import date as _date
+from typing import Optional
+
+from fastapi import Query
+
+# In-time of a case = when it was assigned (falls back to when it was created).
+_DASH_IN_TIME = "COALESCE(assigned_at, created_at)"
+_DASH_IN_DAY_IST = f"((({_DASH_IN_TIME}) AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata')::date"
+_DASH_TODAY_IST = "(now() AT TIME ZONE 'Asia/Kolkata')::date"
+
+
+def _dash_range(range_: str, date_from: Optional[str], date_to: Optional[str]):
+    """Return (sql_fragment, params) that limits case_workflow rows by in-time."""
+    r = (range_ or "overall").lower()
+    if r == "today":
+        return f" AND {_DASH_IN_DAY_IST} = {_DASH_TODAY_IST}", ()
+    if r == "custom":
+        try:
+            d_from = _date.fromisoformat(date_from) if date_from else None
+            d_to = _date.fromisoformat(date_to) if date_to else None
+        except ValueError:
+            raise HTTPException(status_code=400, detail="date_from/date_to must be YYYY-MM-DD")
+        frag, params = "", []
+        if d_from:
+            frag += f" AND {_DASH_IN_DAY_IST} >= %s"
+            params.append(d_from)
+        if d_to:
+            frag += f" AND {_DASH_IN_DAY_IST} <= %s"
+            params.append(d_to)
+        return frag, tuple(params)
+    return "", ()
+
+
+@router.get("/dashboard/overview")
+def admin_dashboard_overview(
+    range_: str = Query("overall", alias="range"),
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    user=Depends(require_admin),
+):
+    """Counts for the dashboard cards. Definitions:
+       critical  = priority STAT (or 'Critical');  urgent = 'Urgent';  regular = everything else
+       completed = current_status 'completed'
+       assigned_pending = assigned to a radiologist and not completed yet
+       unassigned = not assigned to a radiologist
+    """
+    frag, params = _dash_range(range_, date_from, date_to)
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            f"""
+            SELECT
+                count(*),
+                count(*) FILTER (WHERE upper(coalesce(priority_type,'')) IN ('STAT','CRITICAL')),
+                count(*) FILTER (WHERE upper(coalesce(priority_type,'')) = 'URGENT'),
+                count(*) FILTER (WHERE upper(coalesce(priority_type,'')) NOT IN ('STAT','CRITICAL','URGENT')),
+                count(*) FILTER (WHERE lower(coalesce(current_status,'')) = 'completed'),
+                count(*) FILTER (WHERE lower(coalesce(current_status,'')) <> 'completed'
+                                   AND lower(coalesce(assignment_status,'')) = 'assigned'),
+                count(*) FILTER (WHERE lower(coalesce(assignment_status,'')) <> 'assigned')
+              FROM admin_schema.case_workflow
+             WHERE true {frag}
+            """,
+            params,
+        )
+        total, critical, urgent, regular, completed, assigned_pending, unassigned = cur.fetchone()
+        return {
+            "range": (range_ or "overall").lower(),
+            "total": total,
+            "critical": critical,
+            "urgent": urgent,
+            "regular": regular,
+            "completed": completed,
+            "completion_pct": round(100.0 * completed / total, 1) if total else 0.0,
+            "assigned_pending": assigned_pending,
+            "unassigned": unassigned,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"[admin/dashboard/overview] failed: {e}")
+        traceback.print_exc()
+        conn.rollback()
+        raise HTTPException(status_code=500, detail="Could not load dashboard overview")
+    finally:
+        conn.close()
+
+
+@router.get("/dashboard/assignments")
+def admin_dashboard_assignments(
+    range_: str = Query("overall", alias="range"),
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    limit: int = Query(300, ge=1, le=1000),
+    user=Depends(require_admin),
+):
+    """Newest-first assignments in the exact shape the dashboard table expects.
+       No patient names are returned. Times are epoch milliseconds (UTC).
+       status is 'completed' or 'pending' ('working' is not recorded by the app).
+       receivedTime = accepted_at (when the radiologist picked the case up);
+       case_workflow.received_at is NOT used: it just equals the assignment time.
+    """
+    frag, params = _dash_range(range_, date_from, date_to)
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            f"""
+            SELECT workflow_id::text,
+                   case_id,
+                   organization_name,
+                   priority_type,
+                   modality_type,
+                   radiologist_name,
+                   specialization_name,
+                   current_status,
+                   (EXTRACT(EPOCH FROM {_DASH_IN_TIME}) * 1000)::bigint,
+                   (EXTRACT(EPOCH FROM accepted_at)     * 1000)::bigint,
+                   (EXTRACT(EPOCH FROM completed_at)    * 1000)::bigint
+              FROM admin_schema.case_workflow
+             WHERE true {frag}
+             ORDER BY {_DASH_IN_TIME} DESC NULLS LAST, id DESC
+             LIMIT %s
+            """,
+            params + (limit,),
+        )
+        rows = []
+        for (wf_id, case_id, org, prio, modality, rad_name, spec, status,
+             in_ms, recv_ms, done_ms) in cur.fetchall():
+            p = (prio or "").upper()
+            m = (modality or "").upper().replace("-", "").replace(" ", "")
+            rows.append({
+                "id": wf_id,
+                "caseId": case_id,
+                "org": org or "—",
+                "priority": "critical" if p in ("STAT", "CRITICAL") else "urgent" if p == "URGENT" else "regular",
+                "type": {"XRAY": "X-Ray", "CT": "CT", "MRI": "MRI"}.get(m, "Others"),
+                "inTime": in_ms,
+                "radiologist": rad_name or "Unassigned",
+                "specialisation": spec or "",
+                "status": "completed" if (status or "").lower() == "completed" else "pending",
+                "receivedTime": recv_ms,
+                "completedTime": done_ms,
+            })
+        return {"range": (range_ or "overall").lower(), "count": len(rows), "rows": rows}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"[admin/dashboard/assignments] failed: {e}")
+        traceback.print_exc()
+        conn.rollback()
+        raise HTTPException(status_code=500, detail="Could not load dashboard assignments")
+    finally:
+        conn.close()
+
+
+
+# ─── GET /admin/assignable-radiologists ──────────────────────────────────────
+# Every radiologist (active or not) for the admin's manual assign / reassign picker.
+
+@router.get("/assignable-radiologists")
+def assignable_radiologists(user=Depends(require_admin)):
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT r.rad_id,
+                       TRIM(COALESCE(r.first_name,'') || ' ' || COALESCE(r.last_name,'')) AS name,
+                       COALESCE(to_jsonb(r)->>'specialization',
+                                to_jsonb(r)->>'specialisation',
+                                to_jsonb(r)->>'qualification', '') AS specialization,
+                       COALESCE(r.is_active, TRUE) AS is_active
+                  FROM radiology_schema.radiologists r
+                 ORDER BY COALESCE(r.is_active, TRUE) DESC, name
+            """)
+            return [
+                {"rad_id": str(a), "name": b or str(a), "specialization": c or "", "is_active": bool(d)}
+                for a, b, c, d in cur.fetchall()
+            ]
+    finally:
+        conn.close()
+
+
+# ─── POST /admin/cases/{case_id}/assign ──────────────────────────────────────
+# Manual assign / reassign by the admin. Same effect as the technician assign: updates the
+# scan and case_workflow (which the dashboard reads), then notifies the radiologist.
+
+class AdminAssignIn(BaseModel):
+    rad_id: str
+
+
+@router.post("/cases/{case_id}/assign")
+def admin_assign_case(case_id: str, payload: AdminAssignIn, user=Depends(require_admin)):
+    rad_id = (payload.rad_id or "").strip()
+    if not rad_id:
+        raise HTTPException(status_code=400, detail="rad_id is required")
+
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT user_id, first_name, last_name, is_active "
+                "FROM radiology_schema.radiologists WHERE rad_id = %s",
+                (rad_id,),
+            )
+            rad = cur.fetchone()
+            if not rad:
+                raise HTTPException(status_code=404, detail="Radiologist not found")
+            if rad[3] is False:
+                raise HTTPException(status_code=409, detail="This radiologist is deactivated")
+            rad_user_id = str(rad[0])
+            rad_name = f"{rad[1] or ''} {rad[2] or ''}".strip()
+
+            cur.execute(
+                "SELECT status FROM radiology_schema.rad_scans WHERE case_id = %s LIMIT 1",
+                (case_id,),
+            )
+            scan = cur.fetchone()
+            if not scan:
+                raise HTTPException(status_code=404, detail="Scan not found for this case")
+            if str(scan[0] or "").lower() in ("complete", "completed", "done"):
+                raise HTTPException(status_code=409, detail="This case is already completed")
+
+            cur.execute(
+                "UPDATE radiology_schema.rad_scans SET assigned_rad_id = %s, assigned_at = NOW() "
+                "WHERE case_id = %s",
+                (rad_id, case_id),
+            )
+            cur.execute(
+                """
+                UPDATE admin_schema.case_workflow
+                   SET radiologist_user_id = %s, radiologist_name = %s, rad_id = %s,
+                       assignment_status = 'assigned', assigned_at = NOW()
+                 WHERE case_id = %s
+                """,
+                (rad_user_id, rad_name, rad_id, case_id),
+            )
+            from radiologist.router import _create_notification
+            _create_notification(
+                cur, rad_user_id, case_id,
+                "New Case Assigned",
+                f"Case {case_id} has been assigned to you",
+            )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+    try:
+        from assignment_mail import notify_cases_assigned
+        notify_cases_assigned(rad_user_id, [case_id])
+    except Exception as e:
+        print(f"[admin assign] email failed: {e}")
+
+    return {"success": True, "data": {"case_id": case_id, "assigned_rad_id": rad_id, "radiologist": rad_name}}
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  Admin directory — REAL organisations and radiologists (read-only)
+#
+#  GET /admin/directory/organizations  <- organization_schema.org_profile
+#                                         (+ core_schema.users for the username,
+#                                          + admin_schema.case_workflow for case counts)
+#  GET /admin/directory/radiologists   <- radiology_schema.radiologists
+#                                         (+ core_schema.users, + rad_scans for case counts,
+#                                          + admin_schema.new_user_radiologist only for a phone number)
+#
+#  These replace the invite lists (admin_schema.new_user_organization /
+#  new_user_radiologist) on the admin pages. The invite routes and tables are untouched.
+#  Failures raise 500 on purpose: the pages must never show made-up rows.
+#
+#  "profile_completed" definitions (shown as Complete / Incomplete):
+#    organisation: organisation type, a phone number and an address are all filled in
+#    radiologist:  qualification and designation are both filled in
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+@router.get("/directory/organizations")
+def admin_directory_organizations(user=Depends(require_admin)):
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT p.org_id,
+                   p.user_id::text,
+                   COALESCE(u.username, ''),
+                   p.email,
+                   p.org_name,
+                   NULLIF(p.org_type, ''),
+                   NULLIF(p.npi, ''),
+                   NULLIF(p.ein, ''),
+                   COALESCE(NULLIF(p.org_admin_email, ''), p.email),
+                   COALESCE(NULLIF(p.contact_number, ''), NULLIF(p.org_admin_contact, '')),
+                   NULLIF(p.org_admin_name, ''),
+                   COALESCE(NULLIF(p.address, ''),
+                            NULLIF(concat_ws(', ', NULLIF(p.street, ''), NULLIF(p.city, ''),
+                                             NULLIF(p.state, ''), NULLIF(p.zip, '')), '')),
+                   CASE WHEN NULLIF(p.logo_path, '') IS NULL THEN NULL
+                        ELSE '/' || ltrim(p.logo_path, '/') END,
+                   COALESCE(c.n, 0)
+              FROM organization_schema.org_profile p
+              LEFT JOIN core_schema.users u ON u.user_id = p.user_id
+              LEFT JOIN (SELECT org_id, count(*) AS n
+                           FROM admin_schema.case_workflow
+                          GROUP BY org_id) c ON c.org_id = p.org_id
+             ORDER BY COALESCE(c.n, 0) DESC, p.created_at DESC
+            """
+        )
+        out = []
+        for (org_id, uid, username, email, name, otype, npi, ein, contact_email, phone,
+             admin_name, address, logo_url, cases) in cur.fetchall():
+            out.append({
+                "id": org_id,
+                "user_id": uid,
+                "username": username,
+                "email": email,
+                "organization_name": name,
+                "organization_type": otype,
+                "npi_number": npi,
+                "ein_tax_id": ein,
+                "contact_email": contact_email,
+                "contact_phone": phone,
+                "admin_name": admin_name,
+                "address": address,
+                "logo_url": logo_url,
+                "cases": cases,
+                "profile_completed": bool(otype and phone and address),
+            })
+        return out
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"[admin/directory/organizations] failed: {e}")
+        traceback.print_exc()
+        conn.rollback()
+        raise HTTPException(status_code=500, detail="Could not load organisations")
+    finally:
+        conn.close()
+
+
+@router.get("/directory/radiologists")
+def admin_directory_radiologists(user=Depends(require_admin)):
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT r.user_id::text,
+                   r.rad_id,
+                   COALESCE(u.username, ''),
+                   r.first_name,
+                   r.last_name,
+                   COALESCE(NULLIF(r.email, ''), u.email),
+                   (SELECT n.contact_phone
+                      FROM admin_schema.new_user_radiologist n
+                     WHERE lower(n.contact_email) = lower(COALESCE(NULLIF(r.email, ''), u.email))
+                       AND NULLIF(n.contact_phone, '') IS NOT NULL
+                     ORDER BY n.id DESC LIMIT 1),
+                   NULLIF(r.user_lab_name, ''),
+                   NULLIF(r.qualification, ''),
+                   NULLIF(r.designation, ''),
+                   NULLIF(r.lab_address, ''),
+                   CASE WHEN NULLIF(r.profile_image_path, '') IS NULL THEN NULL
+                        ELSE '/uploads/' || ltrim(r.profile_image_path, '/') END,
+                   r.is_active,
+                   r.verification_status,
+                   COALESCE(c.n, 0)
+              FROM radiology_schema.radiologists r
+              LEFT JOIN core_schema.users u ON u.user_id = r.user_id
+              LEFT JOIN (SELECT user_id, count(*) AS n
+                           FROM radiology_schema.rad_scans
+                          GROUP BY user_id) c ON c.user_id = r.user_id
+             ORDER BY COALESCE(c.n, 0) DESC, r.created_at DESC
+            """
+        )
+        out = []
+        for (uid, rad_id, username, first, last, email, phone, workplace, qual, desig,
+             location, photo, active, verification, cases) in cur.fetchall():
+            out.append({
+                "id": uid,
+                "user_id": uid,
+                "rad_id": rad_id,
+                "username": username,
+                "first_name": first,
+                "last_name": last,
+                "contact_email": email,
+                "contact_phone": phone,
+                "workplace": workplace,
+                "qualification": qual,
+                "designation": desig,
+                "location": location,
+                "profile_image_url": photo,
+                "is_active": bool(active),
+                "verification_status": verification,
+                "cases": cases,
+                "profile_completed": bool(qual and desig),
+            })
+        return out
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"[admin/directory/radiologists] failed: {e}")
+        traceback.print_exc()
+        conn.rollback()
+        raise HTTPException(status_code=500, detail="Could not load radiologists")
+    finally:
+        conn.close()
+
+
+
+# ─── GET /admin/availability ─────────────────────────────────────────────────
+# Every radiologist's availability slots from today (India time) for the next `days` days.
+
+@router.get("/availability")
+def admin_availability(days: int = 14, user=Depends(require_admin)):
+    days = max(1, min(int(days), 60))
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT user_id::text,
+                       COALESCE(radiologist_name, ''),
+                       COALESCE(specialization_name, ''),
+                       available_date::text,
+                       to_char(from_time, 'HH24:MI'),
+                       to_char(to_time, 'HH24:MI'),
+                       COALESCE(availability_status, 'available'),
+                       COALESCE(slot_type, ''),
+                       COALESCE(notes, '')
+                  FROM admin_schema.radiologist_availability
+                 WHERE available_date >= (NOW() AT TIME ZONE 'Asia/Kolkata')::date
+                   AND available_date <= (NOW() AT TIME ZONE 'Asia/Kolkata')::date + %s
+                 ORDER BY available_date, from_time
+            """, (days,))
+            return [
+                {
+                    "user_id": r[0], "radiologist_name": r[1], "specialization": r[2],
+                    "available_date": r[3], "from_time": r[4], "to_time": r[5],
+                    "status": r[6], "slot_type": r[7], "notes": r[8],
+                }
+                for r in cur.fetchall()
+            ]
+    finally:
+        conn.close()

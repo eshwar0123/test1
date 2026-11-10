@@ -1316,6 +1316,55 @@ def run_report_qc_endpoint(case_id: str, user_id: str):
         conn.close()
 
 
+def _refresh_case_submission(conn, case_id: str, uid, *, resubmitted: bool = False) -> int:
+    """Bring the already-submitted case_submission row(s) of this case up to date with the
+    radiologist's current report (text + latest exported PDF), so what the organization and
+    technician dashboards show / download is the edited report, not the first submission.
+
+    No-op (returns 0) when the case has not been submitted yet (no completed submission row), so
+    a first submission still goes through the normal insert. `resubmitted=True` also moves the
+    completed time to now. Commits when it changed something."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT technique, findings, impression, opinions, report_file_path
+              FROM radiology_schema.reports
+             WHERE case_id = %s AND user_id = %s
+             LIMIT 1
+            """,
+            (case_id, str(uid)),
+        )
+        r = cur.fetchone()
+        if not r:
+            return 0
+        technique, findings, impression, opinions, report_path = r
+        parts = []
+        if technique:  parts.append(f"TECHNIQUE:\n{technique}")
+        if findings:   parts.append(f"FINDINGS:\n{findings}")
+        if impression: parts.append(f"IMPRESSION:\n{impression}")
+        if opinions:   parts.append(f"OPINIONS:\n{opinions}")
+        report_text = "\n\n".join(parts) if parts else None
+
+        cur.execute(
+            f"""
+            UPDATE admin_schema.case_submission
+               SET findings       = %s,
+                   impression     = %s,
+                   recommendation = %s,
+                   report_text    = %s,
+                   report_path    = COALESCE(%s, report_path),
+                   {"completed_at = (NOW() AT TIME ZONE 'Asia/Kolkata')," if resubmitted else ""}
+                   updated_at     = NOW()
+             WHERE case_id = %s
+               AND completed_at IS NOT NULL   -- only a report that was already submitted
+            """,
+            (findings, impression, opinions, report_text, report_path, case_id),
+        )
+        changed = cur.rowcount
+    conn.commit()
+    return changed
+
+
 @router.post("/reports/{case_id}/mark-completed")
 def mark_report_completed_endpoint(case_id: str, user_id: str):
     """Finalize report (promote ai_* to main columns), flip case_workflow to
@@ -1342,6 +1391,17 @@ def mark_report_completed_endpoint(case_id: str, user_id: str):
             data = crud.mark_report_completed(conn, case_id, uid)
         except ValueError as ve:
             raise HTTPException(status_code=400, detail=str(ve))
+
+        # A report that was edited after it was submitted: update the existing submission
+        # (text + latest PDF) instead of inserting a second one, and keep the patient link
+        # the organization may already have shared (editing text does not change the images).
+        try:
+            if _refresh_case_submission(conn, case_id, uid, resubmitted=True):
+                print(f"[case_submission] refreshed existing row for edited report {case_id}")
+                return {"success": True, "data": data}
+        except Exception as _re_err:
+            conn.rollback()
+            print(f"[case_submission] refresh ERROR: {_re_err}")
 
         try:
             import uuid as _uuid_mod
@@ -1559,6 +1619,12 @@ def export_report(case_id: str, user_id: str, payload: ReportExportIn = Body(...
             report_file_path=report_file_path,
             report_format="pdf",
         )
+        # If this case was already submitted, the dashboards must download this new PDF too.
+        try:
+            _refresh_case_submission(conn, case_id, uid)
+        except Exception as _sync_err:
+            conn.rollback()
+            print(f"[export] could not refresh submitted report for {case_id}: {_sync_err}")
         return {"success": True, "data": data}
     finally:
         conn.close()
@@ -3138,11 +3204,12 @@ EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
 def _ensure_push_tokens_table(cur):
     cur.execute("""
         CREATE TABLE IF NOT EXISTS admin_schema.push_tokens (
-            user_id    TEXT NOT NULL,
+            push_token_id BIGSERIAL PRIMARY KEY,
+            user_id    UUID NOT NULL,
             push_token TEXT NOT NULL,
             platform   TEXT,
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            PRIMARY KEY (user_id, push_token)
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE (user_id, push_token)
         )
     """)
 
@@ -3153,6 +3220,11 @@ class PushTokenIn(BaseModel):
     platform: str = "android"
 
 
+class PushTokenRemoveIn(BaseModel):
+    user_id: str
+    push_token: str
+
+
 @router.post("/push-token")
 def register_push_token(payload: PushTokenIn):
     if not payload.push_token.startswith("ExponentPushToken["):
@@ -3161,6 +3233,7 @@ def register_push_token(payload: PushTokenIn):
     try:
         with conn.cursor() as cur:
             _ensure_push_tokens_table(cur)
+            # a phone belongs to one user at a time
             cur.execute(
                 "DELETE FROM admin_schema.push_tokens WHERE push_token = %s AND user_id <> %s",
                 (payload.push_token, payload.user_id),
@@ -3178,11 +3251,6 @@ def register_push_token(payload: PushTokenIn):
         return {"success": True}
     finally:
         conn.close()
-
-
-class PushTokenRemoveIn(BaseModel):
-    user_id: str
-    push_token: str
 
 
 @router.post("/push-token/remove")
@@ -3204,6 +3272,7 @@ def remove_push_token(payload: PushTokenRemoveIn):
 def _send_expo_push(tokens, title, message, case_id):
     """Background send; logs Expo's reply and removes dead tokens."""
     if not tokens:
+        print(f"[push] no push tokens for this user - nothing sent for case {case_id}")
         return
     msgs = [{
         "to": t,

@@ -914,3 +914,28 @@ def list_returned_cases(user_id: str) -> List[Dict[str, Any]]:
             "resolved_at":            str(r["resolved_at"]) if r.get("resolved_at") else None,
         })
     return out
+
+
+
+# ── Alert admins whenever a new case enters the workflow ─────────────────────
+_insert_case_workflow_with_rad_orig = insert_case_workflow_with_rad
+
+
+def insert_case_workflow_with_rad(*args, **kwargs):
+    result = _insert_case_workflow_with_rad_orig(*args, **kwargs)
+    try:
+        from admin_push import notify_admins_new_case
+        src_row = kwargs.get("src_row") or (args[0] if len(args) > 0 else {}) or {}
+        rad = kwargs.get("rad") or (args[1] if len(args) > 1 else {}) or {}
+        assigned_to = None
+        if not rad.get("unassigned"):
+            assigned_to = (rad.get("radiologist_name")
+                           or f"{rad.get('first_name', '')} {rad.get('last_name', '')}".strip()
+                           or None)
+        notify_admins_new_case(
+            src_row.get("case_id"), src_row.get("org_id"),
+            src_row.get("priority_type"), assigned_to,
+        )
+    except Exception as e:
+        print(f"[admin-push] hook failed: {e}")
+    return result
