@@ -57,7 +57,7 @@ from fastapi.staticfiles import StaticFiles
 
 SECRET_KEY = os.getenv("JWT_SECRET", "dev_secret_change_me")  # ✅ fallback string
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 1 day
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30  # 30 days
 COMPANY_DIR = Path(__file__).parent / "static" / "organization"
 ALLOWED_EXTS = {".png", ".jpg", ".jpeg", ".svg", ".webp"}
 
