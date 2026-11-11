@@ -1170,7 +1170,7 @@ export default function Dashboard() {
         const tok = readToken();
         const r = await fetch(
           `${API_BASE_DASH}/organization/dashboard/report/${encodeURIComponent(caseItem.caseId)}`,
-          { headers: tok ? { Authorization: `Bearer ${tok}` } : {} },
+          { headers: tok ? { Authorization: `Bearer ${tok}` } : {}, cache: "no-store" },
         );
         if (!r.ok) {
           // No exported PDF file on disk (report_path unset) — most commonly
@@ -1183,6 +1183,7 @@ export default function Dashboard() {
             try {
               const cacheRes = await fetch(
                 `${API_BASE_DASH}/radiology/reports/${encodeURIComponent(caseItem.caseId)}/ai-cache`,
+        { cache: "no-store" },
               );
               const cacheJson = await cacheRes.json().catch(() => null);
               const rep = cacheJson?.data;
@@ -1300,13 +1301,9 @@ export default function Dashboard() {
     try {
       const cacheRes = await fetch(
         `${API_BASE_DASH}/radiology/reports/${encodeURIComponent(caseItem.caseId)}/ai-cache`,
+        { cache: "no-store" },
       );
       const rep = (await cacheRes.json().catch(() => null))?.data;
-      // Build marker + raw saved values, to tell which build is running and what the server returned.
-      console.info("[word-export] build 2026-11-05-b", {
-        impression: rep?.impression, opinions: rep?.opinions,
-        ai_impression: rep?.ai_impression, ai_opinions: rep?.ai_opinions,
-      });
       if (!rep || !(rep.technique || rep.findings || rep.impression || rep.opinions ||
                     rep.ai_technique || rep.ai_findings || rep.ai_impression || rep.ai_opinions)) {
         throw new Error("No report content available yet for this case.");

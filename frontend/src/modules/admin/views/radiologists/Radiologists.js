@@ -1,15 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { useTheme } from "../../layout/ThemeContext";
 
-const DUMMY_RADS = [
-  { id: "d1", first_name: "Vivek",  last_name: "Rao",    username: "dr_vivek_rao",    contact_email: "vivek.rao@onixai.com",     contact_phone: "(044) 123-4567", workplace: "SRM Medical Hospital",  qualification: "MD Radiology",  designation: "Senior Radiologist",          location: "Chennai, India",    profile_image_path: "", profile_completed: true  },
-  { id: "d2", first_name: "Suresh", last_name: "Nair",   username: "dr_suresh_nair",  contact_email: "suresh.nair@onixai.com",   contact_phone: "(011) 987-6543", workplace: "Max Hospital",          qualification: "DNB Radiology", designation: "Neuro Radiologist",            location: "Delhi, India",      profile_image_path: "", profile_completed: true  },
-  { id: "d3", first_name: "Priya",  last_name: "Menon",  username: "dr_priya_menon",  contact_email: "priya.menon@onixai.com",   contact_phone: "(022) 456-7890", workplace: "Apollo Diagnostics",    qualification: "DMRD",          designation: "Consultant Radiologist",       location: "Mumbai, India",     profile_image_path: "", profile_completed: true  },
-  { id: "d4", first_name: "Arun",   last_name: "Kumar",  username: "dr_arun_kumar",   contact_email: "arun.kumar@onixai.com",    contact_phone: "(080) 555-0123", workplace: "Fortis Scan Centre",    qualification: "MD Radiology",  designation: "Radiologist",                 location: "Bangalore, India",  profile_image_path: "", profile_completed: false },
-  { id: "d5", first_name: "Meera",  last_name: "Iyer",   username: "dr_meera_iyer",   contact_email: "meera.iyer@onixai.com",    contact_phone: "(0416) 220-1234",workplace: "VCCMC Vellore",         qualification: "DNB Radiology", designation: "Stroke Imaging Specialist",    location: "Vellore, India",    profile_image_path: "", profile_completed: true  },
-  { id: "d6", first_name: "Rajesh", last_name: "Pillai", username: "dr_rajesh_pillai",contact_email: "rajesh.pillai@onixai.com", contact_phone: "(040) 333-4444", workplace: "Care Imaging Centre",   qualification: "FRCR",          designation: "Interventional Radiologist",   location: "Hyderabad, India",  profile_image_path: "", profile_completed: true  },
-  { id: "d7", first_name: "Ananya", last_name: "Das",    username: "dr_ananya_das",   contact_email: "ananya.das@onixai.com",    contact_phone: "(033) 222-1111", workplace: "",                      qualification: "MD Radiology",  designation: "Junior Radiologist",           location: "",                  profile_image_path: "", profile_completed: false },
-];
+// Same relative API address the dashboard uses (VITE_API_BASE_URL = /api in production).
+const API_BASE =
+  (typeof import.meta !== 'undefined' && import.meta.env &&
+    (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE)) || '';
 
 const EMPTY_FORM = {
   first_name: "",
@@ -83,7 +78,7 @@ function AddRadModal({ onClose, onSuccess, isDark }) {
     const token = auth?.token || auth?.access_token;
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/admin/radiologists/invite", {
+      const res = await fetch(`${API_BASE}/admin/radiologists/invite`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(form),
@@ -155,12 +150,13 @@ export default function Radiologists() {
     const token = auth?.token || auth?.access_token;
     if (!token) { setError("Not logged in"); setLoading(false); return; }
 
-    fetch("http://127.0.0.1:8000/admin/radiologists", {
+    // Real radiologists (radiology_schema.radiologists) with their case counts.
+    fetch(`${API_BASE}/admin/directory/radiologists`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => { if (!res.ok) throw new Error(); return res.json(); })
-      .then((data) => { setRads(data.length ? data : DUMMY_RADS); setLoading(false); })
-      .catch(() => { setRads(DUMMY_RADS); setLoading(false); });
+      .then((data) => { setRads(Array.isArray(data) ? data : []); setLoading(false); })
+      .catch(() => { setError("Could not load radiologists from the server."); setLoading(false); });
   };
 
   useEffect(() => { fetchRads(); }, []);
@@ -173,16 +169,6 @@ export default function Radiologists() {
   const theadBg = isDark ? "#1e293b" : "#1e3a5f";
   const theadText = "#ffffff";
   const rowAlt = isDark ? "rgba(255,255,255,0.02)" : "#f0f7ff";
-
-  const handleDelete = (id) => {
-    if (!window.confirm("Delete this radiologist? This cannot be undone.")) return;
-    const auth = (() => { try { return JSON.parse(localStorage.getItem("auth") || "null"); } catch { return null; } })();
-    const token = auth?.token || auth?.access_token;
-    fetch(`http://127.0.0.1:8000/admin/radiologists/${id}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
-    }).then(() => setRads((prev) => prev.filter((r) => r.id !== id)));
-  };
 
   const handleAddSuccess = (newRad) => {
     setShowAddModal(false);
@@ -227,14 +213,14 @@ export default function Radiologists() {
         <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1100 }}>
           <thead>
             <tr style={{ background: theadBg }}>
-              {["#", "Radiologist", "Email", "Phone", "Workplace", "Username", "Qualification", "Designation", "Location", "Profile", "Action"].map((h) => (
+              {["#", "Radiologist", "Email", "Phone", "Workplace", "Username", "Qualification", "Designation", "Location", "Cases", "Status", "Profile"].map((h) => (
                 <th key={h} style={{ padding: "13px 16px", textAlign: "left", fontSize: 12, fontWeight: 700, color: theadText, whiteSpace: "nowrap", letterSpacing: "0.04em", textTransform: "uppercase" }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {rads.length === 0 ? (
-              <tr><td colSpan={11} style={{ padding: 32, textAlign: "center", color: muted }}>No radiologists found</td></tr>
+              <tr><td colSpan={12} style={{ padding: 32, textAlign: "center", color: muted }}>No radiologists found</td></tr>
             ) : rads.map((rad, i) => {
               const initials = (`${rad.first_name || ''} ${rad.last_name || ''}`.trim() || "R").slice(0, 2).toUpperCase();
               return (
@@ -242,8 +228,8 @@ export default function Radiologists() {
                   <td style={{ padding: "14px 16px", color: muted, fontSize: 13, fontWeight: 600 }}>{i + 1}</td>
                   <td style={{ padding: "14px 16px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      {rad.profile_image_path
-                        ? <img src={`http://127.0.0.1:8000/${rad.profile_image_path}`} alt="" style={{ width: 34, height: 34, borderRadius: "50%", objectFit: "cover", border: `1px solid ${border}` }} />
+                      {rad.profile_image_url
+                        ? <img src={rad.profile_image_url} alt="" style={{ width: 34, height: 34, borderRadius: "50%", objectFit: "cover", border: `1px solid ${border}` }} />
                         : <div style={{ width: 34, height: 34, borderRadius: "50%", background: "#7c3aed", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 13, flexShrink: 0 }}>{initials}</div>
                       }
                       <div>
@@ -253,24 +239,22 @@ export default function Radiologists() {
                     </div>
                   </td>
                   <td style={{ padding: "14px 16px", fontSize: 14, color: text }}>{rad.contact_email}</td>
-                  <td style={{ padding: "14px 16px", fontSize: 14, color: text, whiteSpace: "nowrap" }}>{rad.contact_phone}</td>
+                  <td style={{ padding: "14px 16px", fontSize: 14, color: text, whiteSpace: "nowrap" }}>{rad.contact_phone || <span style={{ color: "#f59e0b", fontWeight: 600 }}>NIL</span>}</td>
                   <td style={{ padding: "14px 16px", fontSize: 14, color: text }}>{rad.workplace || <span style={{ color: "#f59e0b", fontWeight: 600 }}>NIL</span>}</td>
                   <td style={{ padding: "14px 16px", fontSize: 14, color: text }}>{rad.username || <span style={{ color: "#f59e0b", fontWeight: 600 }}>NIL</span>}</td>
                   <td style={{ padding: "14px 16px", fontSize: 14, color: text }}>{rad.qualification || <span style={{ color: "#f59e0b", fontWeight: 600 }}>NIL</span>}</td>
                   <td style={{ padding: "14px 16px", fontSize: 14, color: text }}>{rad.designation || <span style={{ color: "#f59e0b", fontWeight: 600 }}>NIL</span>}</td>
                   <td style={{ padding: "14px 16px", fontSize: 14, color: text }}>{rad.location || <span style={{ color: "#f59e0b", fontWeight: 600 }}>NIL</span>}</td>
+                  <td style={{ padding: "14px 16px", fontSize: 14, color: text, fontWeight: 700 }}>{rad.cases ?? 0}</td>
+                  <td style={{ padding: "14px 16px" }}>
+                    <span style={{ padding: "4px 10px", borderRadius: 20, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", background: rad.is_active ? "#dcfce7" : "#fee2e2", color: rad.is_active ? "#15803d" : "#b91c1c" }}>
+                      {rad.is_active ? "Active" : "Inactive"}
+                    </span>
+                  </td>
                   <td style={{ padding: "14px 16px" }}>
                     <span style={{ padding: "4px 10px", borderRadius: 20, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", background: rad.profile_completed ? "#dcfce7" : "#fef3c7", color: rad.profile_completed ? "#15803d" : "#b45309" }}>
                       {rad.profile_completed ? "Complete" : "Incomplete"}
                     </span>
-                  </td>
-                  <td style={{ padding: "14px 16px" }}>
-                    <button
-                      onClick={() => handleDelete(rad.id)}
-                      style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: "#fee2e2", color: "#b91c1c", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
-                    >
-                      Delete
-                    </button>
                   </td>
                 </tr>
               );

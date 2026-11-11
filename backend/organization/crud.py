@@ -789,6 +789,15 @@ def list_submissions_for_org(org_id: str) -> List[Dict[str, Any]]:
              LIMIT 1
         ) rep ON TRUE
         WHERE cs.org_id = %s
+          -- one row per case: the most recently updated submission (a report edited and
+          -- re-submitted must not show up twice, nor serve its old PDF)
+          AND cs.id = (
+              SELECT c2.id
+                FROM admin_schema.case_submission c2
+               WHERE c2.case_id = cs.case_id
+               ORDER BY c2.updated_at DESC NULLS LAST, c2.id DESC
+               LIMIT 1
+          )
         ORDER BY cs.submitted_at DESC NULLS LAST, cs.id DESC
         """,
         (str(org_id),),
@@ -806,10 +815,37 @@ def get_submission_by_case_id(org_id: str, case_id: str) -> Optional[Dict[str, A
             submitted_at, completed_at
         FROM admin_schema.case_submission
         WHERE org_id = %s AND case_id = %s
+        ORDER BY updated_at DESC NULLS LAST, id DESC
         LIMIT 1
         """,
         (str(org_id), str(case_id)),
     )
+
+
+def report_edited_after_submission(case_id: str) -> bool:
+    """True when the radiologist's report was saved again after the latest submission / PDF
+    export of this case (edited but not re-submitted yet). The stored PDF is then out of date.
+    Submitting or exporting again refreshes case_submission.updated_at, which clears this."""
+    row = _one(
+        """
+        SELECT EXISTS (
+            SELECT 1
+              FROM radiology_schema.reports r
+              JOIN admin_schema.case_submission cs ON cs.case_id = r.case_id
+             WHERE r.case_id = %s
+               AND cs.completed_at IS NOT NULL
+               AND cs.id = (
+                   SELECT c2.id FROM admin_schema.case_submission c2
+                    WHERE c2.case_id = cs.case_id
+                    ORDER BY c2.updated_at DESC NULLS LAST, c2.id DESC
+                    LIMIT 1
+               )
+               AND r.updated_at > cs.updated_at + INTERVAL '10 seconds'
+        ) AS edited
+        """,
+        (str(case_id),),
+    )
+    return bool(row and row.get("edited"))
 
 
 def list_active_rad_scans_for_org(org_id: str, org_user_id) -> List[Dict[str, Any]]:

@@ -105,25 +105,27 @@ const CONFIG = {
 const _now = Date.now();
 const mins = (n) => _now - n * 60 * 1000;
 
-const SAMPLE_LIVE = [
-  { id:'L001', caseId:'C-20240101', org:'Apollo Hospitals',   priority:'critical', type:'MRI',   inTime:mins(47),  radiologist:'Dr. Priya Menon',   specialisation:'MRI Expert',          availability:'9:00 AM – 5:00 PM',  status:'working',   receivedTime:mins(30),  completedTime:null },
-  { id:'L002', caseId:'C-20240102', org:'Fortis Healthcare',  priority:'urgent',   type:'CT',    inTime:mins(22),  radiologist:'Dr. Arun Sharma',    specialisation:'CT Expert',           availability:'10:00 AM – 6:00 PM', status:'pending',   receivedTime:null,      completedTime:null },
-  { id:'L003', caseId:'C-20240103', org:'Narayana Health',    priority:'regular',  type:'X-Ray', inTime:mins(90),  radiologist:'Dr. Kavitha Rajan',  specialisation:'General Radiology',   availability:'8:00 AM – 4:00 PM',  status:'completed', receivedTime:mins(75),  completedTime:mins(15) },
-  { id:'L004', caseId:'C-20240104', org:'Max Hospital',       priority:'critical', type:'MRI',   inTime:mins(12),  radiologist:'Dr. Suresh Nair',    specialisation:'Neuro Radiology',     availability:'11:00 AM – 7:00 PM', status:'pending',   receivedTime:null,      completedTime:null },
-  { id:'L005', caseId:'C-20240105', org:'MIOT International', priority:'regular',  type:'Others',inTime:mins(130), radiologist:'Dr. Rekha Pillai',   specialisation:'Musculoskeletal',     availability:'9:00 AM – 3:00 PM',  status:'completed', receivedTime:mins(110), completedTime:mins(40) },
-  { id:'L006', caseId:'C-20240106', org:'Kauvery Hospital',   priority:'urgent',   type:'CT',    inTime:mins(18),  radiologist:'Dr. Nithin Varma',   specialisation:'Emergency Radiology', availability:'2:00 PM – 10:00 PM', status:'working',   receivedTime:mins(10),  completedTime:null },
-  { id:'L007', caseId:'C-20240107', org:'Gleneagles Health',  priority:'regular',  type:'MRI',   inTime:mins(155), radiologist:'Dr. Asha Thomas',    specialisation:'Body Imaging',        availability:'8:00 AM – 2:00 PM',  status:'completed', receivedTime:mins(140), completedTime:mins(70) },
-  { id:'L008', caseId:'C-20240108', org:'SRM Medical',        priority:'critical', type:'CT',    inTime:mins(9),   radiologist:'Dr. Vivek Rao',      specialisation:'Stroke Imaging',      availability:'12:00 PM – 8:00 PM', status:'pending',   receivedTime:null,      completedTime:null },
-];
+// Live Assignments + History now come from GET /admin/dashboard/assignments (real DB rows).
 
-const SAMPLE_HISTORY = [
-  ...SAMPLE_LIVE,
-  { id:'H001', caseId:'C-20240099', org:'Apollo Hospitals',   priority:'urgent',   type:'CT',    inTime:mins(200), radiologist:'Dr. Priya Menon',   specialisation:'MRI Expert',          availability:'9:00 AM – 5:00 PM',  status:'completed', receivedTime:mins(180), completedTime:mins(120) },
-  { id:'H002', caseId:'C-20240098', org:'Fortis Healthcare',  priority:'critical', type:'MRI',   inTime:mins(300), radiologist:'Dr. Arun Sharma',   specialisation:'CT Expert',           availability:'10:00 AM – 6:00 PM', status:'completed', receivedTime:mins(280), completedTime:mins(200) },
-  { id:'H003', caseId:'C-20240097', org:'Care Hospitals',     priority:'regular',  type:'X-Ray', inTime:mins(400), radiologist:'Dr. Kavitha Rajan', specialisation:'General Radiology',   availability:'8:00 AM – 4:00 PM',  status:'completed', receivedTime:mins(380), completedTime:mins(310) },
-  { id:'H004', caseId:'C-20240096', org:'Meenakshi Mission',  priority:'urgent',   type:'CT',    inTime:mins(500), radiologist:'Dr. Suresh Nair',   specialisation:'Neuro Radiology',     availability:'11:00 AM – 7:00 PM', status:'completed', receivedTime:mins(475), completedTime:mins(390) },
-  { id:'H005', caseId:'C-20240095', org:'Kauvery Hospital',   priority:'regular',  type:'MRI',   inTime:mins(600), radiologist:'Dr. Nithin Varma',  specialisation:'Emergency Radiology', availability:'2:00 PM – 10:00 PM', status:'completed', receivedTime:mins(585), completedTime:mins(520) },
-];
+function adminToken() {
+  let tok =
+    localStorage.getItem('token') ||
+    localStorage.getItem('access_token') ||
+    localStorage.getItem('authToken') ||
+    localStorage.getItem('jwt');
+  if (!tok) {
+    for (const k of ['auth', 'user', 'authUser']) {
+      const raw = localStorage.getItem(k);
+      if (!raw) continue;
+      try {
+        const p = JSON.parse(raw);
+        tok = p.token || p.access_token || p.accessToken || p.jwt;
+        if (tok) break;
+      } catch {}
+    }
+  }
+  return tok;
+}
 
 function formatTime(ts) {
   if (!ts) return '—';
@@ -572,14 +574,12 @@ const DRILLDOWN_DATA = {
 
 const CASES_CARD_ITEMS = [
   { key: 'Assigned', label: 'Assigned', accent: CONFIG.colors.info },
-  { key: 'Rejected Cases', label: 'Rejected', accent: CONFIG.colors.critical },
-  { key: 'Reassigned', label: 'Reassigned', accent: CONFIG.colors.urgent },
 ];
 
-function getCasesSummary() {
+function getCasesSummary(overview) {
   return CASES_CARD_ITEMS.map(item => ({
     ...item,
-    value: (DRILLDOWN_DATA[item.key] || []).length,
+    value: overview ? overview.assigned_pending : 0,
   }));
 }
 
@@ -658,7 +658,7 @@ function SummaryListCard({ label, icon, accent, accentBg, rows, totalValue, dark
 }
 
 
-function DrilldownModal({ type, qcLive, onClose }) {
+function DrilldownModal({ type, qcLive, dash, onClose }) {
   const groupedCases = type === 'Cases';
   const groupedQc = type === 'Report QC';
   const isQC = type === 'QC Cases' || groupedQc;
@@ -689,6 +689,16 @@ function DrilldownModal({ type, qcLive, onClose }) {
       }))
     : [];
 
+  // Real rows from /admin/dashboard/assignments, shaped for this modal.
+  const dashRows = (dash && Array.isArray(dash.rows) ? dash.rows : [])
+    .map(r => ({ ...r, assignedAt: r.inTime, completedAt: r.completedTime || null }));
+  const liveRowsFor = (t) => {
+    if (t === 'Total Cases') return dashRows;
+    if (t === 'Scans Completed') return dashRows.filter(r => r.status === 'completed');
+    if (t === 'Assigned') return dashRows.filter(r => r.status === 'pending' && r.radiologist !== 'Unassigned');
+    return [];
+  };
+
   const effectiveType = groupedCases
     ? activeTab
     : groupedQc
@@ -699,7 +709,7 @@ function DrilldownModal({ type, qcLive, onClose }) {
     ? (liveQcRows.length ? liveQcRows.filter(r => r.qcStatus === activeTab) : (DRILLDOWN_DATA['QC Cases'] || []).filter(r => r.qcStatus === activeTab))
     : effectiveType === 'QC Cases'
       ? (liveQcRows.length ? liveQcRows : [])
-      : (DRILLDOWN_DATA[effectiveType] || []);
+      : liveRowsFor(effectiveType);
 
   const rows = (!groupedCases && !groupedQc && effectiveType !== 'QC Cases' && filterValue !== 'all')
     ? allRows.filter(r => r.priority === filterValue)
@@ -766,7 +776,7 @@ function DrilldownModal({ type, qcLive, onClose }) {
             {groupedCases && (
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {caseTabs.map(tab => {
-                  const count = (DRILLDOWN_DATA[tab] || []).length;
+                  const count = liveRowsFor(tab).length;
                   const active = activeTab === tab;
                   return (
                     <button
@@ -842,12 +852,11 @@ function DrilldownModal({ type, qcLive, onClose }) {
                 <th style={thS}>#</th>
                 <th style={thS}>Case ID</th>
                 <th style={thS}>Organisation</th>
-                <th style={thS}>Patient</th>
                 <th style={thS}>Priority</th>
                 <th style={thS}>Type</th>
                 {effectiveType === 'Total Cases' && <><th style={thS}>Radiologist</th><th style={thS}>Specialisation</th><th style={thS}>Status</th></>}
                 {effectiveType === 'QC Cases' && <><th style={thS}>Reason</th><th style={thS}>QC Status</th></>}
-                {effectiveType === 'Scans Completed' && <><th style={thS}>Radiologist</th><th style={thS}>Specialisation</th><th style={thS}>Completed At</th></>}
+                {effectiveType === 'Scans Completed' && <><th style={thS}>Radiologist</th><th style={thS}>Specialisation</th><th style={thS}>Assigned At</th></>}
                 {effectiveType === 'Assigned' && <><th style={thS}>Radiologist</th><th style={thS}>Specialisation</th><th style={thS}>Status</th><th style={thS}>Assigned At</th></>}
                 {effectiveType === 'Rejected Cases' && <><th style={thS}>Radiologist</th><th style={thS}>Rejected At</th><th style={thS}>Reason</th></>}
                 {effectiveType === 'Reassigned' && <><th style={thS}>From</th><th style={thS}>To</th><th style={thS}>Reassigned At</th><th style={thS}>Reason</th></>}
@@ -875,7 +884,6 @@ function DrilldownModal({ type, qcLive, onClose }) {
                   <td style={tdS}><span style={{ width: 28, height: 28, borderRadius: '50%', background: CONFIG.colors.primary, color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: CONFIG.fonts.sm, fontWeight: 700 }}>{idx + 1}</span></td>
                   <td style={tdS}><span style={{ fontFamily: 'monospace', fontWeight: 700, color: CONFIG.colors.primaryLight }}>{row.caseId}</span></td>
                   <td style={tdS}>{row.org}</td>
-                  <td style={tdS}><span style={{ fontWeight: 600 }}>{row.patient}</span></td>
                   <td style={tdS}><PriorityBadge priority={row.priority} /></td>
                   <td style={tdS}><TypeBadge type={row.type} /></td>
                   {effectiveType === 'Total Cases' && (
@@ -909,7 +917,7 @@ function DrilldownModal({ type, qcLive, onClose }) {
                     <>
                       <td style={tdS}><span style={{ fontWeight: 700 }}>{row.radiologist}</span></td>
                       <td style={tdS}><span style={{ fontSize: CONFIG.fonts.sm, color: '#7c3aed', background: '#f5f3ff', padding: '4px 8px', borderRadius: 20, fontWeight: 600, whiteSpace: 'nowrap' }}>{row.specialisation}</span></td>
-                      <td style={tdS}><div style={{ fontWeight: 600 }}>{formatTime(row.completedAt)}</div><div style={{ fontSize: CONFIG.fonts.sm, color: CONFIG.colors.textMuted }}>{formatShortDate(row.completedAt)}</div></td>
+                      <td style={tdS}><div style={{ fontWeight: 600 }}>{formatTime(row.assignedAt)}</div><div style={{ fontSize: CONFIG.fonts.sm, color: CONFIG.colors.textMuted }}>{formatShortDate(row.assignedAt)}</div></td>
                     </>
                   )}
                   {effectiveType === 'Assigned' && (
@@ -1002,6 +1010,33 @@ export default function Dashboard() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [drilldown, setDrilldown] = useState(null);
 
+  // ─── Real dashboard data from the admin backend (case_workflow) ──────────
+  // org / rad = number cards for the Organisation / Radiologist panels,
+  // rows = Live Assignments + History. Nothing here is made up: until the
+  // data arrives the cards show "—", and if a request fails a notice is shown.
+  const [dash, setDash] = useState({ org: null, rad: null, rows: [], error: false });
+  useEffect(() => {
+    const API_BASE =
+      (typeof import.meta !== 'undefined' && import.meta.env &&
+        (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE)) || '';
+    const tok = adminToken();
+    const rangeOf = (label) => (label === CONFIG.labels.today ? 'today' : 'overall');
+    const get = (path) =>
+      fetch(`${API_BASE}${path}`, { headers: tok ? { Authorization: `Bearer ${tok}` } : {} })
+        .then(r => { if (!r.ok) throw new Error(`${path} ${r.status}`); return r.json(); });
+    const load = () =>
+      Promise.all([
+        get(`/admin/dashboard/overview?range=${rangeOf(orgFilter)}`),
+        get(`/admin/dashboard/overview?range=${rangeOf(radioFilter)}`),
+        get('/admin/dashboard/assignments?range=overall&limit=1000'),
+      ])
+        .then(([org, rad, list]) => setDash({ org, rad, rows: list.rows || [], error: false }))
+        .catch(() => setDash(d => ({ ...d, error: true })));
+    load();
+    const id = setInterval(load, 15000);  // refresh every 15s
+    return () => clearInterval(id);
+  }, [orgFilter, radioFilter]);
+
   // ─── Live QC data from admin backend ─────────────────────────────────────
   // Overrides the static QC Cases counts AND the modal rows when available.
   // Falls back to hardcoded numbers silently if the endpoint isn't up.
@@ -1072,16 +1107,16 @@ export default function Dashboard() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, flex: 1, minHeight: CONFIG.layout.organisationInnerMinHeight }}>
                   <div onClick={() => setDrilldown('Total Cases')} style={{ background: isDark ? CONFIG.colors.headerGradient : 'linear-gradient(135deg,#bfdbfe 0%,#93c5fd 100%)', borderRadius: CONFIG.cards.miniCard.radius, padding: CONFIG.cards.miniCard.padding, color: isDark ? '#fff' : '#1e3a5f', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: CONFIG.cards.miniCard.minHeight, cursor: 'pointer' }}>
                     <div style={{ fontSize: CONFIG.fonts.sm, color: isDark ? 'rgba(255,255,255,0.72)' : '#1e40af', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>{CONFIG.labels.totalCases}</div>
-                    <div style={{ fontSize: CONFIG.fonts.bigNumber, fontWeight: 800, lineHeight: 1, letterSpacing: '-0.03em' }}>248</div>
+                    <div style={{ fontSize: CONFIG.fonts.bigNumber, fontWeight: 800, lineHeight: 1, letterSpacing: '-0.03em' }}>{dash.org ? dash.org.total : '—'}</div>
                     <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      {[['Critical', 18, CONFIG.colors.critical], ['Urgent', 54, CONFIG.colors.urgent], ['Regular', 176, '#60a5fa']].map(([lbl, val, c]) => (
+                      {[['Critical', dash.org ? dash.org.critical : 0, CONFIG.colors.critical], ['Urgent', dash.org ? dash.org.urgent : 0, CONFIG.colors.urgent], ['Regular', dash.org ? dash.org.regular : 0, '#60a5fa']].map(([lbl, val, c]) => (
                         <div key={lbl}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                             <span style={{ fontSize: CONFIG.fonts.sm, color: isDark ? 'rgba(255,255,255,0.75)' : '#1e40af' }}>{lbl}</span>
                             <span style={{ fontSize: CONFIG.fonts.sm, color: isDark ? '#fff' : '#1e3a5f', fontWeight: 700 }}>{val}</span>
                           </div>
                           <div style={{ height: 4, background: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(30,58,95,0.15)', borderRadius: 2 }}>
-                            <div style={{ height: '100%', width: `${(val / 248) * 100}%`, background: c, borderRadius: 2 }} />
+                            <div style={{ height: '100%', width: `${(val / Math.max(dash.org ? dash.org.total : 0, 1)) * 100}%`, background: c, borderRadius: 2 }} />
                           </div>
                         </div>
                       ))}
@@ -1135,13 +1170,13 @@ export default function Dashboard() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: CONFIG.cards.statsGap, flex: 1, alignItems: 'stretch', minHeight: CONFIG.layout.radiologistStatsMinHeight }}>
                   <RadioSubCard
                     label={CONFIG.labels.scansCompleted}
-                    value={187}
+                    value={dash.rad ? dash.rad.completed : '—'}
                     icon="✓"
                     accent={CONFIG.colors.success}
                     accentBg={CONFIG.colors.successBadge}
                     dark
                     extraLabel="Completion Rate"
-                    extraValue="75.4%"
+                    extraValue={dash.rad ? `${dash.rad.completion_pct}%` : '—'}
                     onClick={() => setDrilldown('Scans Completed')}
                   />
                   <SummaryListCard
@@ -1149,7 +1184,7 @@ export default function Dashboard() {
                     icon="📚"
                     accent={CONFIG.colors.info}
                     accentBg={CONFIG.colors.infoBadge}
-                    rows={getCasesSummary()}
+                    rows={getCasesSummary(dash.rad)}
                     dark
                     onClick={() => setDrilldown('Cases')}
                   />
@@ -1257,7 +1292,12 @@ export default function Dashboard() {
               Showing newest first · scroll to see remaining assignments
             </div>
 
-            <LiveTable data={SAMPLE_LIVE} />
+            {dash.error && (
+              <div style={{ margin: '0 0 8px', padding: '8px 12px', borderRadius: 8, background: '#fee2e2', color: '#991b1b', fontSize: 13, fontWeight: 600 }}>
+                Could not load live data from the server. The numbers shown may be out of date.
+              </div>
+            )}
+            <LiveTable data={dash.rows} />
           </div>
 
           <div
@@ -1277,8 +1317,8 @@ export default function Dashboard() {
 
 
 
-      <HistoryModal open={historyOpen} onClose={() => setHistoryOpen(false)} data={SAMPLE_HISTORY} />
-      {drilldown && <DrilldownModal type={drilldown} qcLive={qcLive} onClose={() => setDrilldown(null)} />}
+      <HistoryModal open={historyOpen} onClose={() => setHistoryOpen(false)} data={dash.rows} />
+      {drilldown && <DrilldownModal type={drilldown} qcLive={qcLive} dash={dash} onClose={() => setDrilldown(null)} />}
     </>
   );
 }

@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { fetchJson, decorateCase, modalityStyle, priorityColor } from "../utils/caseData";
 import { makeReportDownloaders } from "../utils/reportDownloads";
+import { openCaseInEditor } from "../utils/openCaseInEditor";
 import { th, td, card, pill, EmptyRow } from "./tableStyles";
 
 // Tighter cell padding than the shared styles so every column, Download included, fits on screen.
@@ -10,6 +12,8 @@ const tdC = { ...td, padding: "12px 10px", fontSize: 13 };
 // Same data + downloads as the organization's "Completed Cases" card
 // (GET /organization/dashboard/cases -> completed[]).
 export default function CompletedCases() {
+  const navigate = useNavigate();
+  const [opening, setOpening] = useState(null);   // case_id whose report editor is being opened
   const [dashData, setDashData] = useState(null);
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
@@ -46,6 +50,20 @@ export default function CompletedCases() {
   const k = dashData?.kpis?.completed || {};
   const urgent = rows.filter((r) => r.priority === "Urgent" || r.priority === "STAT").length;
   const routine = rows.filter((r) => r.priority === "Routine").length;
+
+  // Reopen a submitted report in the editor. After the radiologist's report is edited and
+  // submitted again, the PDF / Word downloads below carry the edited report.
+  const edit = async (r) => {
+    setOpening(r.caseId);
+    try {
+      await openCaseInEditor(navigate, r.caseId, { patientName: r.patientName, study: r.studyType, modality: r.modality });
+    } catch (e) {
+      setToast({ kind: "error", text: e.message || "Could not open the report editor" });
+      setTimeout(() => setToast(null), 5000);
+    } finally {
+      setOpening(null);
+    }
+  };
 
   const busy = (r, fmt) => downloadingCase === r.caseId && downloadingFmt === fmt;
 
@@ -97,14 +115,14 @@ export default function CompletedCases() {
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
-              {["Patient ID", "Patient Name", "Uploaded", "Modality", "Study Type", "Priority", "Completed", "Assigned To", "Download"].map((h) => (
+              {["Patient ID", "Patient Name", "Uploaded", "Modality", "Study Type", "Priority", "Completed", "Assigned To", "Edit", "Download"].map((h) => (
                 <th key={h} style={h === "Download" ? { ...thC, position: "sticky", right: 0, zIndex: 1, boxShadow: "-6px 0 8px -6px rgba(15,23,42,0.18)" } : thC}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {!dashData && !error && <EmptyRow cols={9} text="Loading cases…" />}
-            {dashData && rows.length === 0 && <EmptyRow cols={9} text="No completed cases yet" />}
+            {!dashData && !error && <EmptyRow cols={10} text="Loading cases…" />}
+            {dashData && rows.length === 0 && <EmptyRow cols={10} text="No completed cases yet" />}
             {rows.map((r, i) => {
               const ms = modalityStyle(r.modality);
               return (
@@ -117,6 +135,23 @@ export default function CompletedCases() {
                   <td style={tdC}><span style={{ color: priorityColor(r.priority), fontWeight: 700, whiteSpace: "nowrap" }}>● {r.priority}</span></td>
                   <td style={{ ...tdC, fontFamily: "monospace", color: "#059669" }}>{r.completedAt}</td>
                   <td style={{ ...tdC, fontWeight: 600 }}>{r.assignedTo}</td>
+                  <td style={tdC}>
+                    <button
+                      title="Edit report"
+                      aria-label={`Edit report for ${r.caseId}`}
+                      onClick={() => edit(r)}
+                      disabled={opening === r.caseId}
+                      style={{
+                        width: 34, height: 34, borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff",
+                        cursor: opening === r.caseId ? "wait" : "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 20h9" />
+                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                      </svg>
+                    </button>
+                  </td>
                   <td style={{ ...tdC, position: "sticky", right: 0, background: i % 2 ? "#f8fafc" : "#fff", boxShadow: "-6px 0 8px -6px rgba(15,23,42,0.18)" }}>
                     <div style={{ display: "inline-flex", gap: 6 }}>
                       {iconBtn("Download PDF report", () => handleDownloadCase(r), busy(r, "pdf"),

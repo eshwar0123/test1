@@ -1174,12 +1174,6 @@ def dashboard_cases(user=Depends(get_current_user)):
         }
 
     org_id = profile["org_id"]
-    # Orgs with a fixed default radiologist: sweep up any still-unassigned cases.
-    try:
-        from qc import crud as _qc_crud
-        _qc_crud.backfill_default_radiologist(org_id)
-    except Exception as _e:
-        print(f"[dashboard_cases] default-radiologist backfill failed: {_e}")
     rows = crud.list_submissions_for_org(org_id)
 
     # De-duplicate: a case_id can end up with more than one row in
@@ -1478,6 +1472,17 @@ def download_dashboard_report(case_id: str, user=Depends(get_current_user)):
     if not report_rel:
         raise HTTPException(404, f"No report PDF available yet for case '{case_id}'")
 
+    # The report was edited after its PDF was exported and not re-submitted yet: don't serve the
+    # outdated file. A 404 makes the dashboard rebuild the PDF from the current saved report
+    # (the same text the Word download uses), so PDF and Word always show the same content.
+    try:
+        if crud.report_edited_after_submission(case_id):
+            raise HTTPException(404, f"The report for case '{case_id}' was edited after its PDF was exported")
+    except HTTPException:
+        raise
+    except Exception as _stale_err:
+        print(f"[dashboard/report] freshness check failed for {case_id}: {_stale_err}")
+
     # Resolve the absolute path on disk.
     #
     # The radiologist module saves PDFs to
@@ -1536,10 +1541,13 @@ def download_dashboard_report(case_id: str, user=Depends(get_current_user)):
             "under radiologist/uploads/reports/.",
         )
 
+    # no-store: after the report is edited and submitted again this same URL must serve the
+    # new PDF, never a copy the browser kept from the previous submission.
     return FileResponse(
         report_abs,
         media_type="application/pdf",
         filename=f"{case_id}_report.pdf",
+        headers={"Cache-Control": "no-store"},
     )
 
 

@@ -75,6 +75,7 @@
   import useLinkedCrosshair from "./DicomViewer/hooks/useLinkedCrosshair";
   import useLocatorLines from "./DicomViewer/hooks/useLocatorLines";
   import { setSyncMode, setWorldPoint, reset as resetWorldSync } from "./DicomViewer/utils/WorldSyncStore";
+  import { resolvePatientAge } from "./DicomViewer/utils/patientAge";
   import useVolumeMprCrosshair from "./DicomViewer/hooks/useVolumeMprCrosshair";
   import useVolumeMprLoader from "./DicomViewer/hooks/useVolumeMprLoader";
   import useVolumeSliceLoader, { VOL_MIP_VIEWPORT_ID } from "./DicomViewer/dicom/hooks/useVolumeSliceLoader";
@@ -235,10 +236,12 @@
   }
 
   const {
-    fileUrl, filename, seriesFiles, patientName, patientAge, patientSex, caseId, clientId,
+    fileUrl, filename, seriesFiles, patientName, patientAge: storedPatientAge, patientSex, caseId, clientId,
     priority, status, study, modality: caseModality, referredBy, location: caseLocation, waitMins,
     isImage: stateIsImage,
   } = hasRouterState ? location.state : (queryState || {});
+  // Stored age, or - when it is empty / 0 - the age written after the patient name ("NAME 54Y/M").
+  const patientAge = resolvePatientAge(storedPatientAge, patientName);
 
   // Plain 2D images (JPG / JPEG / PNG X-rays) open in this same DICOM viewer (each image is
   // wrapped into an in-memory DICOM). Detected from the worklist flag or the file extension.

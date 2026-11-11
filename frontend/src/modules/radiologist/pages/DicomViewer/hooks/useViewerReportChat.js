@@ -228,6 +228,50 @@ function extractReportFields(reportRoot) {
   };
 }
 
+// Default text of the ADVICE box (matches the box's default in services/reportService.js), and a
+// matcher for it that also accepts the "Clinic correlation ..." / no-full-stop variants.
+const DEFAULT_ADVICE_TEXT = "Clinical correlation for further evaluation.";
+const DEFAULT_ADVICE_PHRASE_RE = /^\s*clinic(?:al)?\s+correlation\s+for\s+further\s+evaluation\s*\.?\s*$/i;
+
+// Which stored field each printed section heading belongs to.
+const SECTION_HEADING_FIELD = {
+  technique: "technique",
+  sequences: "technique",
+  report: "findings",
+  findings: "findings",
+  "study reveals": "findings",
+  impression: "impression",
+  advice: "opinions",
+  "clinical advice": "opinions",
+  opinions: "opinions",
+  recommendation: "opinions",
+  recommendations: "opinions",
+};
+
+// Read the report's sections from the labelled export markup (the same HTML the PDF is
+// printed from): each ".report-sec-title" heading is followed by its ".report-answer" body.
+// Keying on the heading text, not on the position of a box, means the text stored under
+// `impression` / `opinions` is always what the radiologist sees under "Impression" / "ADVICE",
+// whatever editor or template produced the report. Returns null when there are no such headings
+// (e.g. a custom uploaded template), so the caller keeps the positional values.
+function extractLabelledSections(exportHtml) {
+  if (!exportHtml) return null;
+  const holder = document.createElement("div");
+  holder.innerHTML = exportHtml;
+  const out = {};
+  let found = 0;
+  holder.querySelectorAll(".report-sec-title").forEach((h) => {
+    const key = SECTION_HEADING_FIELD[(h.textContent || "").replace(/[:：]/g, "").replace(/\s+/g, " ").trim().toLowerCase()];
+    const body = h.nextElementSibling;
+    if (!key || !body || !body.classList.contains("report-answer")) return;
+    const t = safeText(htmlToMarkdown(body.innerHTML));
+    // "(If any)" style placeholders are not content
+    out[key] = !t || (t.startsWith("(") && t.endsWith(")")) ? null : nonEmptyTemplateText(t);
+    found += 1;
+  });
+  return found ? out : null;
+}
+
 const AVG_BATCH_SEC_KEY = "onix_medgemma_avg_batch_sec";
 const AVG_SECTION_SEC_KEY = "onix_medgemma_avg_section_sec";
 
@@ -369,10 +413,14 @@ export default function useViewerReportChat({
         const root = reportEditorRef.current;
         const blocks = Array.from(root.querySelectorAll(".report-answer.block"));
 
-        const technique = htmlToMarkdown(blocks[0]?.innerHTML || "");
-        const findings = htmlToMarkdown(blocks[1]?.innerHTML || "");
-        const impression = htmlToMarkdown(blocks[2]?.innerHTML || "");
-        const opinions = htmlToMarkdown(blocks[3]?.innerHTML || "");
+        // Read each section by its heading (what the PDF prints), falling back to box order.
+        const byHeading = readSectionsByHeading();
+        const sectionOf = (key, idx) =>
+          byHeading && key in byHeading ? byHeading[key] || "" : htmlToMarkdown(blocks[idx]?.innerHTML || "");
+        const technique = sectionOf("technique", 0);
+        const findings = sectionOf("findings", 1);
+        const impression = sectionOf("impression", 2);
+        const opinions = sectionOf("opinions", 3);
 
         // Only save if something has content
         if (!technique && !findings && !impression && !opinions) return;
@@ -719,10 +767,19 @@ export default function useViewerReportChat({
         impression: reportData?.impression?.slice(0, 80),
         opinions: reportData?.opinions?.slice(0, 80),
       });
+      // "Clinical correlation for further evaluation." belongs in ADVICE only (it is that box's
+      // default). If a saved report carries it under Impression, show it under ADVICE instead.
+      let impressionText = reportData.impression;
+      let adviceText = reportData.opinions;
+      if (DEFAULT_ADVICE_PHRASE_RE.test(String(impressionText || ""))) {
+        if (!adviceText) adviceText = DEFAULT_ADVICE_TEXT;
+        impressionText = "";
+      }
+
       if (reportData.technique && blocks[0]) blocks[0].innerHTML = markdownToHtml(reportData.technique);
       if (reportData.findings && blocks[1]) blocks[1].innerHTML = markdownToHtml(reportData.findings);
-      if (reportData.impression && blocks[2]) blocks[2].innerHTML = markdownToHtml(reportData.impression);
-      if (reportData.opinions && blocks[3]) blocks[3].innerHTML = markdownToHtml(reportData.opinions);
+      if (impressionText && blocks[2]) blocks[2].innerHTML = markdownToHtml(impressionText);
+      if (adviceText && blocks[3]) blocks[3].innerHTML = markdownToHtml(adviceText);
     }, 0);
   };
 
@@ -731,6 +788,19 @@ export default function useViewerReportChat({
       reportRoot: reportEditorRef.current,
       formatDateTime,
     });
+
+  // The report's four sections as printed under their headings (technique / findings /
+  // impression / opinions), or null when the editor has no recognisable headings. Every save
+  // path uses this, so what is stored under impression / opinions always matches the
+  // Impression / ADVICE shown in the report — independent of the order of the boxes.
+  const readSectionsByHeading = () => {
+    try {
+      return extractLabelledSections(buildExportReportHtml());
+    } catch (e) {
+      console.warn("[report] reading sections by heading failed, using box order:", e);
+      return null;
+    }
+  };
 
   // ✅ COLUMN-WISE SAVE (PUT /reports/{case_id})
   const saveReportToDb = async (modeOverride) => {
@@ -763,6 +833,16 @@ export default function useViewerReportChat({
     }
 
     const fields = extractReportFields(reportEditorRef.current) || {};
+    // Take the four sections from the labelled export (same source as the PDF), by heading, so
+    // what is stored under impression / opinions can never differ from the Impression / ADVICE
+    // the radiologist sees. A section the export leaves out (e.g. an empty Impression) keeps the
+    // value read above.
+    const labelled = readSectionsByHeading();
+    if (labelled) {
+      ["technique", "findings", "impression", "opinions"].forEach((k) => {
+        if (k in labelled) fields[k] = labelled[k];
+      });
+    }
     // The header grid no longer has a visible Investigation cell, so the QC's
     // "Clinical indication" check would otherwise see an empty value. Fall back to the
     // saved value, then to the study title (e.g. "CT HEAD" - modality + study).
@@ -1111,6 +1191,16 @@ export default function useViewerReportChat({
         // Detect if report is AI mode (was generated by batch)
         const isAiReport = reportData?.report_mode === "ai";
 
+        // Read the edited sections back by heading (box order only as a fallback), so the
+        // stored impression / opinions are the text under "Impression" / "ADVICE".
+        const byHeading = readSectionsByHeading();
+        const sectionOf = (key) =>
+          byHeading && key in byHeading ? byHeading[key] || "" : updated[key] ?? current[key];
+        const sTechnique = sectionOf("technique");
+        const sFindings = sectionOf("findings");
+        const sImpression = sectionOf("impression");
+        const sOpinions = sectionOf("opinions");
+
         // Save to appropriate columns based on report type
         const savePayload = {
           case_id: caseId,
@@ -1120,15 +1210,15 @@ export default function useViewerReportChat({
           clinical_indication: reportData?.clinical_indication || null,
           // ✅ Save to ai_* columns if AI report, regular columns if manual
           ...(isAiReport ? {
-            ai_technique: updated.technique ?? current.technique,
-            ai_findings: updated.findings ?? current.findings,
-            ai_impression: updated.impression ?? current.impression,
-            ai_opinions: updated.opinions ?? current.opinions,
+            ai_technique: sTechnique,
+            ai_findings: sFindings,
+            ai_impression: sImpression,
+            ai_opinions: sOpinions,
           } : {
-            technique: updated.technique ?? current.technique,
-            findings: updated.findings ?? current.findings,
-            impression: updated.impression ?? current.impression,
-            opinions: updated.opinions ?? current.opinions,
+            technique: sTechnique,
+            findings: sFindings,
+            impression: sImpression,
+            opinions: sOpinions,
           }),
         };
 

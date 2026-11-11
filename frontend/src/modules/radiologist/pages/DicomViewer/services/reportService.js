@@ -280,7 +280,7 @@ export function getReportTemplateHtml({
         <div class="report-answer block" contenteditable="true">(If any)</div>
 
         <div class="report-sec-title">ADVICE</div>
-        <div class="report-answer block report-advice-box" contenteditable="true">(Clear, concise, clinically actionable summary)</div>
+        <div class="report-answer block report-advice-box" contenteditable="true">Clinical correlation for further evaluation.</div>
 
         ${radiologistProfile.isBrahmShakti ? buildBrahmShaktiSignatureHtml(radiologistProfile) : `
         <div class="report-sign-section">
@@ -477,11 +477,11 @@ function templateToStandardHtml(holder) {
     if (next && next.tagName === "DIV") {
       i += 1;
       const key = norm(el);
-      if (key === "signature") continue; // empty signature placeholder
       if (next.querySelector(".report-sign-section") || next.querySelector('img[alt="Radiologist Signature"]')) {
         signCard = next;
         continue;
       }
+      if (key === "signature") continue; // empty signature placeholder
       sections.push({
         name: NAMES[key] || (el.textContent || "").replace(/[:：]\s*$/, "").trim(),
         html: next.innerHTML,
