@@ -586,6 +586,314 @@ def register_radiologist(data: RadRegisterRequest):
         conn.close()
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# DIRECT ACCOUNT CREATION (no invite email)
+# Admin enters the details + a password; the account goes straight into
+# core_schema.users and the person logs in with that email/password, then
+# completes their own profile.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class RadCreateRequest(BaseModel):
+    name: str
+    email: EmailStr
+    phone: str
+    password: str
+
+class OrgCreateRequest(BaseModel):
+    organization_name: str
+    organization_type: str
+    contact_email: EmailStr
+    phone: str
+    password: str
+
+
+def _unique_username(cursor, base: str) -> str:
+    base = (base or "user").strip() or "user"
+    candidate = base
+    n = 1
+    while True:
+        cursor.execute("SELECT 1 FROM core_schema.users WHERE username = %s", (candidate,))
+        if not cursor.fetchone():
+            return candidate
+        n += 1
+        candidate = f"{base} {n}"
+
+
+def _create_user_row(cursor, email: str, username: str, password: str, role: str) -> str:
+    cursor.execute(
+        "SELECT 1 FROM core_schema.users WHERE lower(email) = lower(%s)", (email,)
+    )
+    if cursor.fetchone():
+        raise HTTPException(status_code=400, detail="A user with this email already exists")
+    if len(password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    user_id = str(uuid.uuid4())
+    cursor.execute(
+        """
+        INSERT INTO core_schema.users (user_id, email, username, password, role, is_verified)
+        VALUES (%s, %s, %s, %s, %s, TRUE)
+        """,
+        (user_id, email, _unique_username(cursor, username), pwd_context.hash(password), role),
+    )
+    return user_id
+
+
+@router.post("/radiologists/create")
+def create_radiologist(data: RadCreateRequest, user=Depends(require_admin)):
+    name = data.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+    parts = name.split(None, 1)
+    first_name = parts[0]
+    last_name = parts[1] if len(parts) > 1 else ""
+    email = str(data.email).strip()
+
+    conn = get_conn()
+    cursor = conn.cursor()
+    try:
+        user_id = _create_user_row(cursor, email, name, data.password, "radiologist")
+
+        # Profile row so the radiologist appears in the admin list (a DB trigger may
+        # already have created it from the users insert — then just fix the name).
+        cursor.execute(
+            """
+            INSERT INTO radiology_schema.radiologists (user_id, first_name, last_name, email)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (user_id) DO UPDATE
+               SET first_name = EXCLUDED.first_name,
+                   last_name  = EXCLUDED.last_name,
+                   email      = EXCLUDED.email
+            """,
+            (user_id, first_name, last_name, email),
+        )
+
+        # The admin directory reads the phone number from this table.
+        cursor.execute(
+            """
+            INSERT INTO admin_schema.new_user_radiologist
+            (first_name, last_name, contact_email, contact_phone, workplace,
+             token, expires_at, used, user_id)
+            VALUES (%s, %s, %s, %s, '', %s, NOW(), TRUE, %s)
+            """,
+            (first_name, last_name, email, data.phone.strip(), str(uuid.uuid4()), user_id),
+        )
+        conn.commit()
+        return {"ok": True, "message": f"Radiologist account created for {email}", "user_id": user_id}
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@router.post("/organizations/create")
+def create_organization(data: OrgCreateRequest, user=Depends(require_admin)):
+    org_name = data.organization_name.strip()
+    if not org_name:
+        raise HTTPException(status_code=400, detail="Organisation name is required")
+    email = str(data.contact_email).strip()
+
+    conn = get_conn()
+    cursor = conn.cursor()
+    try:
+        user_id = _create_user_row(cursor, email, org_name, data.password, "organization")
+
+        cursor.execute(
+            """
+            INSERT INTO organization_schema.org_profile
+                (user_id, email, org_name, org_type, contact_number)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (user_id) DO UPDATE
+               SET email = EXCLUDED.email,
+                   org_name = EXCLUDED.org_name,
+                   org_type = EXCLUDED.org_type,
+                   contact_number = EXCLUDED.contact_number
+            """,
+            (user_id, email, org_name, data.organization_type, data.phone.strip()),
+        )
+        conn.commit()
+        return {"ok": True, "message": f"Organisation account created for {email}", "user_id": user_id}
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# ─── Admin edit of an existing radiologist / organisation ───────────────────
+
+class RadUpdateRequest(BaseModel):
+    first_name: str
+    last_name: str = ""
+    email: EmailStr
+    phone: str = ""
+    workplace: str = ""
+    username: str
+    qualification: str = ""
+    designation: str = ""
+    location: str = ""
+    is_active: bool = True
+
+class OrgUpdateRequest(BaseModel):
+    organization_name: str
+    organization_type: str = ""
+    contact_email: EmailStr
+    phone: str = ""
+    admin_name: str = ""
+    npi_number: str = ""
+    ein_tax_id: str = ""
+    username: str
+    address: str = ""
+
+
+def _update_user_identity(cursor, user_id: str, email, username: str):
+    """Update core_schema.users username (and login email when given), rejecting clashes."""
+    if email is not None:
+        cursor.execute(
+            "SELECT 1 FROM core_schema.users WHERE lower(email) = lower(%s) AND user_id::text <> %s",
+            (email, user_id),
+        )
+        if cursor.fetchone():
+            raise HTTPException(status_code=400, detail="Another user already uses this email")
+    cursor.execute(
+        "SELECT 1 FROM core_schema.users WHERE username = %s AND user_id::text <> %s",
+        (username, user_id),
+    )
+    if cursor.fetchone():
+        raise HTTPException(status_code=400, detail="Username already taken")
+    if email is not None:
+        cursor.execute(
+            "UPDATE core_schema.users SET email = %s, username = %s WHERE user_id::text = %s",
+            (email, username, user_id),
+        )
+    else:
+        cursor.execute(
+            "UPDATE core_schema.users SET username = %s WHERE user_id::text = %s",
+            (username, user_id),
+        )
+    if cursor.rowcount == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+
+
+@router.put("/radiologists/{user_id}")
+def update_radiologist(user_id: str, data: RadUpdateRequest, user=Depends(require_admin)):
+    first = data.first_name.strip()
+    if not first:
+        raise HTTPException(status_code=400, detail="First name is required")
+    email = str(data.email).strip()
+    username = data.username.strip()
+    if not username:
+        raise HTTPException(status_code=400, detail="Username is required")
+
+    conn = get_conn()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "SELECT COALESCE(NULLIF(r.email, ''), u.email) FROM radiology_schema.radiologists r "
+            "LEFT JOIN core_schema.users u ON u.user_id = r.user_id WHERE r.user_id::text = %s",
+            (user_id,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Radiologist not found")
+        old_email = row[0] or email
+
+        _update_user_identity(cursor, user_id, email, username)
+        cursor.execute(
+            """
+            UPDATE radiology_schema.radiologists
+               SET first_name = %s, last_name = %s, email = %s,
+                   qualification = %s, designation = %s,
+                   lab_address = %s, is_active = %s
+             WHERE user_id::text = %s
+            """,
+            (first, data.last_name.strip(), email,
+             data.qualification.strip(), data.designation.strip(),
+             data.location.strip(), data.is_active, user_id),
+        )
+        # Phone lives in admin_schema.new_user_radiologist (what the directory reads).
+        cursor.execute(
+            """
+            UPDATE admin_schema.new_user_radiologist
+               SET contact_email = %s, contact_phone = %s
+             WHERE user_id::text = %s OR lower(contact_email) = lower(%s)
+            """,
+            (email, data.phone.strip(), user_id, old_email),
+        )
+        if cursor.rowcount == 0:
+            cursor.execute(
+                """
+                INSERT INTO admin_schema.new_user_radiologist
+                (first_name, last_name, contact_email, contact_phone, workplace,
+                 token, expires_at, used, user_id)
+                VALUES (%s, %s, %s, %s, '', %s, NOW(), TRUE, %s)
+                """,
+                (first, data.last_name.strip(), email, data.phone.strip(),
+                 str(uuid.uuid4()), user_id),
+            )
+        conn.commit()
+        return {"ok": True}
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@router.put("/organizations/{user_id}")
+def update_organization(user_id: str, data: OrgUpdateRequest, user=Depends(require_admin)):
+    name = data.organization_name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Organisation name is required")
+    email = str(data.contact_email).strip()
+    username = data.username.strip()
+    if not username:
+        raise HTTPException(status_code=400, detail="Username is required")
+
+    conn = get_conn()
+    cursor = conn.cursor()
+    try:
+        # Contact email is org_admin_email only; the login email (users.email) is left as is.
+        _update_user_identity(cursor, user_id, None, username)
+        cursor.execute(
+            """
+            UPDATE organization_schema.org_profile
+               SET org_name = %s, org_type = %s, org_admin_email = %s,
+                   contact_number = %s, org_admin_name = %s,
+                   address = %s
+             WHERE user_id::text = %s
+            """,
+            (name, data.organization_type.strip(), email,
+             data.phone.strip(), data.admin_name.strip(),
+             data.address.strip(), user_id),
+        )
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Organisation not found")
+        conn.commit()
+        return {"ok": True}
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        conn.close()
+
+
 # ─── GET /admin/qc/summary ──────────────────────────────────────────────────
 # Admin-wide QC roll-up across ALL organizations.
 # Drives the "QC Cases" mini-card and drill-down modal on the admin dashboard.

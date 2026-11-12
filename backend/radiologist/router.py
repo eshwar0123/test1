@@ -3284,12 +3284,17 @@ def _send_expo_push(tokens, title, message, case_id):
         "data": {"caseId": case_id},
     } for t in tokens]
     try:
-        r = requests.post(
-            EXPO_PUSH_URL, json=msgs, timeout=10,
-            headers={"Accept": "application/json", "Content-Type": "application/json"},
-        )
-        print(f"[push] status={r.status_code} body={r.text[:500]}")
-        items = (r.json() or {}).get("data", [])
+        # One request per message: Expo rejects a whole request when its tokens belong to
+        # different Expo projects (old Play app vs new build).
+        items = []
+        for m_ in msgs:
+            try:
+                r = requests.post(EXPO_PUSH_URL, json=m_, timeout=10, headers={"Accept": "application/json", "Content-Type": "application/json"})
+                print(f"[push] to={m_['to'][:26]} status={r.status_code} body={r.text[:200]}")
+                items.append((r.json() or {}).get("data") or {})
+            except Exception as e:
+                print(f"[push] send failed: {e}")
+                items.append({})
         dead = [
             t for t, it in zip(tokens, items)
             if it.get("status") == "error"
@@ -3305,6 +3310,35 @@ def _send_expo_push(tokens, title, message, case_id):
                 c.close()
     except Exception as e:
         print(f"[push] send failed: {e}")
+
+
+class ReminderAckIn(BaseModel):
+    user_id: str
+
+
+@router.post("/reminders/ack")
+def ack_reminders(payload: ReminderAckIn):
+    """The user tapped the pending-case alarm or opened the app: stop re-sending it."""
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS admin_schema.reminder_nag (
+                    user_id TEXT PRIMARY KEY,
+                    case_id TEXT, title TEXT, body TEXT,
+                    first_sent_at TIMESTAMPTZ, last_sent_at TIMESTAMPTZ,
+                    nag_count INT NOT NULL DEFAULT 0,
+                    acked_at TIMESTAMPTZ
+                )
+            """)
+            cur.execute(
+                "UPDATE admin_schema.reminder_nag SET acked_at = NOW() WHERE user_id = %s AND acked_at IS NULL",
+                (payload.user_id,),
+            )
+        conn.commit()
+        return {"success": True}
+    finally:
+        conn.close()
 
 
 def _create_notification(cur, user_id, case_id, title, message, ntype="case_assigned"):

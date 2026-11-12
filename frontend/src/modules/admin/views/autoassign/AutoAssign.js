@@ -310,6 +310,15 @@ function LeaveManager({ radiologist, onClose, isDark }) {
   )
 }
 
+// Radiologists hidden from the "Radiologists" list on this page only (display filter;
+// nothing is deleted, and the case table / reassign picker are not affected). Lower-case emails.
+const HIDDEN_RADS = new Set([
+  'eshwarram@gmail.com',
+  'rjdk777@gmail.com',
+  'demoradiologist@gmail.com',
+  'johnbaker22@gmail.com',
+])
+
 // ── Main AutoAssign page ────────────────────────────────────────────────────
 // ─── Real data helpers ───────────────────────────────────────────────────────
 // The page reads real cases from /admin/dashboard/assignments, the doctor picker from
@@ -372,7 +381,11 @@ export default function AutoAssign() {
     setLoadingRad(true)
     try {
       const j = await getJson('/admin/directory/radiologists')
-      setRadiologists(Array.isArray(j) ? j : [])
+      setRadiologists(
+        (Array.isArray(j) ? j : []).filter(
+          (r) => !HIDDEN_RADS.has((r.contact_email || '').trim().toLowerCase()),
+        ),
+      )
       setRadError('')
     } catch {
       setRadError('Could not load the radiologists from the server.')

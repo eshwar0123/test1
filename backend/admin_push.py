@@ -62,12 +62,17 @@ def _run(case_id, org_id, priority, assigned_to):
             "sound": "default", "priority": "high", "channelId": "new-cases",
             "data": {"caseId": case_id, "type": "new_case"},
         } for t in tokens]
-        r = requests.post(
-            EXPO_PUSH_URL, json=msgs, timeout=10,
-            headers={"Accept": "application/json", "Content-Type": "application/json"},
-        )
-        print(f"[admin-push] case={case_id} status={r.status_code} body={r.text[:400]}")
-        items = (r.json() or {}).get("data", [])
+        # One request per message: Expo rejects a whole request when its tokens belong to
+        # different Expo projects (old Play app vs new build).
+        items = []
+        for m_ in msgs:
+            try:
+                r = requests.post(EXPO_PUSH_URL, json=m_, timeout=10, headers={"Accept": "application/json", "Content-Type": "application/json"})
+                print(f"[admin-push] to={m_['to'][:26]} status={r.status_code} body={r.text[:200]}")
+                items.append((r.json() or {}).get("data") or {})
+            except Exception as e:
+                print(f"[admin-push] send failed: {e}")
+                items.append({})
         dead = [t for t, it in zip(tokens, items)
                 if it.get("status") == "error"
                 and (it.get("details") or {}).get("error") == "DeviceNotRegistered"]
