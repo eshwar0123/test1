@@ -702,18 +702,35 @@ def create_organization(data: OrgCreateRequest, user=Depends(require_admin)):
     try:
         user_id = _create_user_row(cursor, email, org_name, data.password, "organization")
 
+        # org_id has no DB default (the org's own profile save generates it in
+        # Python), so it must be supplied here — otherwise NOT NULL fails.
+        # Generate a unique GENRAD-ORG-XXXXXXXX; keep the existing one on conflict.
+        import random as _rnd
+        org_id = None
+        for _ in range(20):
+            cand = f"GENRAD-ORG-{_rnd.randint(10000000, 99999999)}"
+            cursor.execute(
+                "SELECT 1 FROM organization_schema.org_profile WHERE org_id = %s", (cand,)
+            )
+            if not cursor.fetchone():
+                org_id = cand
+                break
+        if not org_id:
+            raise HTTPException(status_code=500, detail="Could not generate an organisation ID")
+
         cursor.execute(
             """
             INSERT INTO organization_schema.org_profile
-                (user_id, email, org_name, org_type, contact_number)
-            VALUES (%s, %s, %s, %s, %s)
+                (org_id, user_id, email, org_name, org_type, contact_number)
+            VALUES (%s, %s, %s, %s, %s, %s)
             ON CONFLICT (user_id) DO UPDATE
                SET email = EXCLUDED.email,
                    org_name = EXCLUDED.org_name,
                    org_type = EXCLUDED.org_type,
-                   contact_number = EXCLUDED.contact_number
+                   contact_number = EXCLUDED.contact_number,
+                   org_id = COALESCE(organization_schema.org_profile.org_id, EXCLUDED.org_id)
             """,
-            (user_id, email, org_name, data.organization_type, data.phone.strip()),
+            (org_id, user_id, email, org_name, data.organization_type, data.phone.strip()),
         )
         conn.commit()
         return {"ok": True, "message": f"Organisation account created for {email}", "user_id": user_id}
@@ -1155,7 +1172,7 @@ def admin_dashboard_assignments(
     user=Depends(require_admin),
 ):
     """Newest-first assignments in the exact shape the dashboard table expects.
-       No patient names are returned. Times are epoch milliseconds (UTC).
+       Includes patientName (case_workflow.patient_name). Times are epoch milliseconds (UTC).
        status is 'completed' or 'pending' ('working' is not recorded by the app).
        receivedTime = accepted_at (when the radiologist picked the case up);
        case_workflow.received_at is NOT used: it just equals the assignment time.
@@ -1168,6 +1185,7 @@ def admin_dashboard_assignments(
             f"""
             SELECT workflow_id::text,
                    case_id,
+                   patient_name,
                    organization_name,
                    priority_type,
                    modality_type,
@@ -1185,13 +1203,14 @@ def admin_dashboard_assignments(
             params + (limit,),
         )
         rows = []
-        for (wf_id, case_id, org, prio, modality, rad_name, spec, status,
+        for (wf_id, case_id, patient, org, prio, modality, rad_name, spec, status,
              in_ms, recv_ms, done_ms) in cur.fetchall():
             p = (prio or "").upper()
             m = (modality or "").upper().replace("-", "").replace(" ", "")
             rows.append({
                 "id": wf_id,
                 "caseId": case_id,
+                "patientName": patient or "",
                 "org": org or "—",
                 "priority": "critical" if p in ("STAT", "CRITICAL") else "urgent" if p == "URGENT" else "regular",
                 "type": {"XRAY": "X-Ray", "CT": "CT", "MRI": "MRI"}.get(m, "Others"),
@@ -1476,6 +1495,65 @@ def admin_directory_radiologists(user=Depends(require_admin)):
 
 # ─── GET /admin/availability ─────────────────────────────────────────────────
 # Every radiologist's availability slots from today (India time) for the next `days` days.
+
+@router.get("/availability/day")
+def admin_availability_day(date: str, user=Depends(require_admin)):
+    """One day's schedule for the admin Availability Schedule grid:
+    each radiologist's availability slots plus the cases assigned to them that day (IST)."""
+    try:
+        day = _date.fromisoformat(date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT user_id::text,
+                       COALESCE(radiologist_name, ''),
+                       COALESCE(specialization_name, ''),
+                       to_char(from_time, 'HH24:MI'),
+                       to_char(to_time, 'HH24:MI'),
+                       COALESCE(availability_status, 'available')
+                  FROM admin_schema.radiologist_availability
+                 WHERE available_date = %s
+                 ORDER BY radiologist_name, from_time
+            """, (day,))
+            slots = cur.fetchall()
+            cur.execute(f"""
+                SELECT radiologist_user_id::text,
+                       COALESCE(radiologist_name, ''),
+                       COALESCE(specialization_name, ''),
+                       case_id,
+                       COALESCE(modality_type, ''),
+                       to_char(({_DASH_IN_TIME} AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata', 'HH24:MI'),
+                       to_char((completed_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata', 'HH24:MI'),
+                       COALESCE(current_status, '')
+                  FROM admin_schema.case_workflow
+                 WHERE radiologist_user_id IS NOT NULL
+                   AND {_DASH_IN_DAY_IST} = %s
+                 ORDER BY {_DASH_IN_TIME}
+            """, (day,))
+            cases = cur.fetchall()
+    finally:
+        conn.close()
+
+    doctors = {}
+    def doc(uid, name, spec):
+        d = doctors.setdefault(uid, {"user_id": uid, "name": name, "specialization": spec,
+                                     "slots": [], "cases": []})
+        d["name"] = d["name"] or name
+        d["specialization"] = d["specialization"] or spec
+        return d
+
+    for uid, name, spec, ft, tt, st in slots:
+        doc(uid, name, spec)["slots"].append({"start": ft, "end": tt, "status": st})
+    for uid, name, spec, case_id, modality, start, end, status in cases:
+        doc(uid, name, spec)["cases"].append({
+            "case_id": case_id, "modality": modality, "start": start,
+            "end": end, "status": status,
+        })
+    return list(doctors.values())
+
 
 @router.get("/availability")
 def admin_availability(days: int = 14, user=Depends(require_admin)):
