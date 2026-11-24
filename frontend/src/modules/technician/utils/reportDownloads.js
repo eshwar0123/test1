@@ -93,7 +93,7 @@ export function makeReportDownloaders({ setDownloadingCase, setDownloadingFmt, s
                 let qualification = "";
                 let designation = "";
                 let profName = "";
-                let dmcNo = "";
+                let dmcNo = ""; let dmcLabel = "DMC No";
                 if (rep.user_id) {
                   try {
                     const profRes = await fetch(`${API_BASE_DASH}/radiology/profile/${encodeURIComponent(rep.user_id)}`);
@@ -102,7 +102,7 @@ export function makeReportDownloaders({ setDownloadingCase, setDownloadingFmt, s
                     qualification = prof?.qualification || "";
                     designation = prof?.designation || "";
                     profName = `${prof?.first_name || ""} ${prof?.last_name || ""}`.trim();
-                    dmcNo = prof?.dmc_no || "";
+                    dmcNo = prof?.dmc_no || ""; dmcLabel = dmcNo ? "DMC No" : "Reg No"; if (!dmcNo) dmcNo = prof?.reg_no || "";
                     if (prof?.signature_path) {
                       const fname = String(prof.signature_path).split(/[\/]/).pop();
                       if (fname) sigUrl = `/uploads/radiologist/signature/${encodeURIComponent(fname)}`;
@@ -114,7 +114,7 @@ export function makeReportDownloaders({ setDownloadingCase, setDownloadingFmt, s
                 const bodyHtml = buildSavedReportHtml({
                   rep,
                   caseItem,
-                  profile: { name: profName, dmcNo, qualification, designation, signatureUrl: sigUrl },
+                  profile: { name: profName, dmcNo, dmcLabel, qualification, designation, signatureUrl: sigUrl },
                 });
                 await downloadReportPdfFromHtml({ bodyHtml, caseId: caseItem.caseId, fileName: reportFileName(caseItem, "pdf") });
                 setDownloadingCase(null);
@@ -208,7 +208,7 @@ export function makeReportDownloaders({ setDownloadingCase, setDownloadingFmt, s
       let qualification = "";
       let designation = "";
       let radName = "";
-      let dmcNo = "";
+      let dmcNo = ""; let dmcLabel = "DMC No";
       let regNo = "";
       let sigData = null;   // { data: ArrayBuffer, type: "png"|"jpg"|"gif", width, height }
       if (rep.user_id) {
@@ -218,7 +218,7 @@ export function makeReportDownloaders({ setDownloadingCase, setDownloadingFmt, s
           qualification = prof?.qualification || "";
           designation = prof?.designation || "";
           radName = `${prof?.first_name || ""} ${prof?.last_name || ""}`.trim();
-          dmcNo = prof?.dmc_no || "";
+          dmcNo = prof?.dmc_no || ""; dmcLabel = dmcNo ? "DMC No" : "Reg No"; if (!dmcNo) dmcNo = prof?.reg_no || "";
           regNo = prof?.reg_no || "";
           if (prof?.signature_path) {
             // Directory part of signature_path isn't reliable — rebuild from the filename.
@@ -437,7 +437,7 @@ export function makeReportDownloaders({ setDownloadingCase, setDownloadingFmt, s
         }));
       } else {
         signature.push(sigLine(displayName, true));
-        if (dmcNo) signature.push(sigLine(`DMC No: ${dmcNo}`, true));
+        if (dmcNo) signature.push(sigLine(`${dmcLabel}: ${dmcNo}`, true));
         if (qualification) signature.push(sigLine(qualification));
         if (designation) signature.push(sigLine(designation));
       }

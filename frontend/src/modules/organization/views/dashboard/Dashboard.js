@@ -1069,6 +1069,7 @@ export default function Dashboard() {
           studyType:        d.modality_study_type || "",
           studyDate:        d.study_date || "",
           referringDoctor: d.referring_doctor || "",
+          referringInstitution: d.referring_institution || "",
           history:          d.history || "",
         },
         historyFileName: d.history_file_name || null,
@@ -1103,6 +1104,7 @@ export default function Dashboard() {
             study_type:        f.studyType || null,
             study_date:        f.studyDate || null,
             referring_doctor: f.referringDoctor || null,
+            referring_institution: f.referringInstitution || null,
             history:           f.history || null,
           }),
         },
@@ -1198,7 +1200,7 @@ export default function Dashboard() {
                 let qualification = "";
                 let designation = "";
                 let profName = "";
-                let dmcNo = "";
+                let dmcNo = ""; let dmcLabel = "DMC No";
                 if (rep.user_id) {
                   try {
                     const profRes = await fetch(`${API_BASE_DASH}/radiology/profile/${encodeURIComponent(rep.user_id)}`);
@@ -1207,7 +1209,7 @@ export default function Dashboard() {
                     qualification = prof?.qualification || "";
                     designation = prof?.designation || "";
                     profName = `${prof?.first_name || ""} ${prof?.last_name || ""}`.trim();
-                    dmcNo = prof?.dmc_no || "";
+                    dmcNo = prof?.dmc_no || ""; dmcLabel = dmcNo ? "DMC No" : "Reg No"; if (!dmcNo) dmcNo = prof?.reg_no || "";
                     if (prof?.signature_path) {
                       const fname = String(prof.signature_path).split(/[\/]/).pop();
                       if (fname) sigUrl = `/uploads/radiologist/signature/${encodeURIComponent(fname)}`;
@@ -1219,7 +1221,7 @@ export default function Dashboard() {
                 const bodyHtml = buildSavedReportHtml({
                   rep,
                   caseItem,
-                  profile: { name: profName, dmcNo, qualification, designation, signatureUrl: sigUrl },
+                  profile: { name: profName, dmcNo, dmcLabel, qualification, designation, signatureUrl: sigUrl },
                 });
                 await downloadReportPdfFromHtml({ bodyHtml, caseId: caseItem.caseId, fileName: reportFileName(caseItem, "pdf") });
                 setDownloadingCase(null);
@@ -1313,7 +1315,7 @@ export default function Dashboard() {
       let qualification = "";
       let designation = "";
       let radName = "";
-      let dmcNo = "";
+      let dmcNo = ""; let dmcLabel = "DMC No";
       let sigData = null;   // { data: ArrayBuffer, type: "png"|"jpg"|"gif", width, height }
       if (rep.user_id) {
         try {
@@ -1322,7 +1324,7 @@ export default function Dashboard() {
           qualification = prof?.qualification || "";
           designation = prof?.designation || "";
           radName = `${prof?.first_name || ""} ${prof?.last_name || ""}`.trim();
-          dmcNo = prof?.dmc_no || "";
+          dmcNo = prof?.dmc_no || ""; dmcLabel = dmcNo ? "DMC No" : "Reg No"; if (!dmcNo) dmcNo = prof?.reg_no || "";
           if (prof?.signature_path) {
             // Directory part of signature_path isn't reliable — rebuild from the filename.
             const fname = String(prof.signature_path).split(/[\\/]/).pop();
@@ -1520,7 +1522,7 @@ export default function Dashboard() {
         }));
       }
       signature.push(sigLine(displayName, true));
-      if (dmcNo) signature.push(sigLine(`DMC No: ${dmcNo}`, true));
+      if (dmcNo) signature.push(sigLine(`${dmcLabel}: ${dmcNo}`, true));
       if (qualification) signature.push(sigLine(qualification));
       if (designation) signature.push(sigLine(designation));
 
@@ -3282,9 +3284,15 @@ export default function Dashboard() {
                         </div>
                       </div>
 
-                      <div style={{ marginBottom: 16 }}>
-                        <label style={fieldLabelStyle}>Referring Doctor</label>
-                        <input style={inputStyle} value={f.referringDoctor} onChange={set("referringDoctor")} placeholder="Enter referring doctor name" />
+                      <div style={row2}>
+                        <div>
+                          <label style={fieldLabelStyle}>Referring Doctor</label>
+                          <input style={inputStyle} value={f.referringDoctor} onChange={set("referringDoctor")} placeholder="Enter referring doctor name" />
+                        </div>
+                        <div>
+                          <label style={fieldLabelStyle}>Referring Institution</label>
+                          <input style={inputStyle} value={f.referringInstitution} onChange={set("referringInstitution")} placeholder="Enter referring institution name" />
+                        </div>
                       </div>
 
                       <div style={{ marginBottom: 4 }}>

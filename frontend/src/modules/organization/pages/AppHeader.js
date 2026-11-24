@@ -6,6 +6,7 @@ import {
 import CIcon from "@coreui/icons-react";
 import { cilUser, cilAccountLogout, cilSettings } from "@coreui/icons";
 import { useNavigate, NavLink } from "react-router-dom";
+import { billingApi } from "../views/payment/paymentConfig";
 import "./AppHeader.css";
 
 /* =========================================================================
@@ -55,6 +56,9 @@ const Header = () => {
   const userName  = [firstName, lastName].filter(Boolean).join(" ").trim()
                     || (auth?.email ? auth.email.split("@")[0] : "");
 
+  const [paymentEnabled, setPaymentEnabled] = useState(false);
+  // Insights is only for selected organizations; the server decides.
+  const [insightsEnabled, setInsightsEnabled] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState(localStorage.getItem("avatarUrl") || "");
 
   // ── Org identity ───────────────────────────────────────────────────────────
@@ -69,6 +73,12 @@ const Header = () => {
   const [orgName,   setOrgName]   = useState(auth?.username || "");
   const [orgLogo,   setOrgLogo]   = useState("");
   const [userEmail, setUserEmail] = useState(auth?.email || "");
+
+  // Payment link is only shown to organizations that have billing enabled.
+  useEffect(() => {
+    billingApi("/status").then((d) => setPaymentEnabled(!!d.enabled)).catch(() => setPaymentEnabled(false));
+    apiFetch("/organization/analytics/status").then((d) => setInsightsEnabled(!!d?.enabled)).catch(() => setInsightsEnabled(false));
+  }, []);
 
   // logo_path is stored relative to the backend cwd (e.g.
   // "uploads/organization/org_profile/<email>.png"); main.py mounts that
@@ -202,6 +212,22 @@ const Header = () => {
             >
               Upload
             </NavLink>
+            {insightsEnabled && (
+              <NavLink
+                to="/organization/insights"
+                className={({ isActive }) => `header-nav-link${isActive ? " active" : ""}`}
+              >
+                Insights
+              </NavLink>
+            )}
+            {paymentEnabled && (
+              <NavLink
+                to="/organization/payment"
+                className={({ isActive }) => `header-nav-link${isActive ? " active" : ""}`}
+              >
+                Payment
+              </NavLink>
+            )}
           </nav>
         </div>
 

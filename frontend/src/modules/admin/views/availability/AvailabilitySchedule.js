@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useTheme } from '../../layout/ThemeContext'
 import {
   CAlert,
@@ -88,40 +88,47 @@ const shiftDateKey = (yyyyMmDd, deltaDays) => {
   return dateKeyLocal(dt)
 }
 
-const ADMIN_DOCTORS = [
-  { id: 'd1', name: 'Dr. James Carter',   specialty: 'Neuroradiology',      status: 'Available', tint: 'success', cases: 0, completedCases: 148, accuracyPct: 97.8 },
-  { id: 'd2', name: 'Dr. Sarah Mitchell', specialty: 'Interventional',      status: 'Assigned',  tint: 'primary', cases: 1, completedCases: 212, accuracyPct: 98.6 },
-  { id: 'd3', name: 'Dr. Robert Hayes',   specialty: 'Musculoskeletal',     status: 'Assigned',  tint: 'danger',  cases: 1, completedCases: 96,  accuracyPct: 96.9 },
-  { id: 'd4', name: 'Dr. Emily Brooks',   specialty: 'Chest & Thoracic',    status: 'Available', tint: 'success', cases: 0, completedCases: 173, accuracyPct: 98.1 },
-]
+const API_BASE =
+  (typeof import.meta !== 'undefined' && import.meta.env &&
+    (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE)) || ''
 
-const ADMIN_ROWS = [
-  {
-    doctorId: 'd1',
-    blocks: [
-      { label: 'Available', start: '08:00', end: '13:20', color: '#6cab78' },
-      { label: 'Assigned a Case', start: '13:30', end: '16:30', color: '#ee4f59', type: 'case', patientName: 'Arun Prakash', modality: 'CT Brain', patientId: '1036' },
-    ],
-  },
-  {
-    doctorId: 'd2',
-    blocks: [
-      { label: 'Assigned a Case', start: '08:00', end: '11:00', color: '#ee4f59', type: 'case', patientName: 'Meena Devi', modality: 'CT Abdomen', patientId: '1124' },
-      { label: 'Available', start: '13:20', end: '17:00', color: '#6cab78' },
-    ],
-  },
-  {
-    doctorId: 'd3',
-    blocks: [
-      { label: 'Assigned a Case', start: '08:00', end: '11:00', color: '#ee4f59', type: 'case', patientName: 'Karthik N', modality: 'MRI Spine', patientId: '1188' },
-      { label: 'Available', start: '16:10', end: '18:10', color: '#6cab78' },
-    ],
-  },
-  {
-    doctorId: 'd4',
-    blocks: [{ label: 'Available', start: '08:00', end: '12:20', color: '#6cab78' }],
-  },
-]
+const addMinutes = (hhmm, mins) => {
+  const t = Math.min(24 * 60 - 1, timeToMin(hhmm) + mins)
+  return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`
+}
+
+// Turn the /admin/availability/day payload into the doctors + timeline rows the grid renders.
+const buildAdminSchedule = (apiDoctors) => {
+  const doctors = []
+  const rows = []
+  apiDoctors.forEach((d) => {
+    doctors.push({
+      id: d.user_id,
+      name: d.name || 'Radiologist',
+      specialty: d.specialization || '-',
+      status: d.cases.length ? 'Assigned' : 'Available',
+      cases: d.cases.filter((c) => String(c.status).toLowerCase() !== 'completed').length,
+      completedCases: d.cases.filter((c) => String(c.status).toLowerCase() === 'completed').length,
+    })
+    const blocks = [
+      ...d.slots
+        .filter((s) => String(s.status).toLowerCase() === 'available')
+        .map((s) => ({ label: 'Available', start: s.start, end: s.end, color: '#6cab78' })),
+      ...d.cases.map((c) => ({
+        label: 'Assigned a Case',
+        start: c.start,
+        end: c.end && c.end > c.start ? c.end : addMinutes(c.start, 30),
+        color: '#ee4f59',
+        type: 'case',
+        modality: c.modality || '-',
+        patientId: c.case_id,
+        status: c.status,
+      })),
+    ].sort((a, b) => a.start.localeCompare(b.start))
+    rows.push({ doctorId: d.user_id, blocks })
+  })
+  return { doctors, rows }
+}
 
 const sortByStart = (list) =>
   [...list].sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
@@ -190,6 +197,31 @@ export default function AvailabilitySchedule({
   const [showSlotModal, setShowSlotModal] = useState(false)
   const [slots, setSlots] = useState(() => sortByStart(loadAvailabilitySlots()))
   const adminDateInputRef = useRef(null)
+  const [adminData, setAdminData] = useState({ doctors: [], rows: [] })
+  const [adminLoading, setAdminLoading] = useState(false)
+  const [adminError, setAdminError] = useState('')
+  const [adminReload, setAdminReload] = useState(0)
+
+  useEffect(() => {
+    if (viewMode !== 'admin') return undefined
+    const token = auth?.token || auth?.access_token
+    if (!token) { setAdminError('Not logged in'); return undefined }
+    let cancelled = false
+    setAdminLoading(true)
+    setAdminError('')
+    fetch(`${API_BASE}/admin/availability/day?date=${adminDate}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => { if (!res.ok) throw new Error(); return res.json() })
+      .then((data) => { if (!cancelled) setAdminData(buildAdminSchedule(Array.isArray(data) ? data : [])) })
+      .catch(() => { if (!cancelled) setAdminError('Could not load the availability schedule from the server.') })
+      .finally(() => { if (!cancelled) setAdminLoading(false) })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminDate, adminReload, viewMode])
+
+  const ADMIN_DOCTORS = adminData.doctors
+  const ADMIN_ROWS = adminData.rows
 
   const mySlots = slots.filter((s) => s.userId === userId)
   const days = getMonthDays(month)
@@ -402,7 +434,7 @@ export default function AvailabilitySchedule({
                       <CButton size="sm" color="secondary" variant="outline" onClick={() => setAdminDate((d) => shiftDateKey(d, -1))}>{'<'}</CButton>
                       <CBadge color="dark" className="px-3 py-2" style={{ fontSize: '0.95rem', cursor: 'pointer' }} onClick={openAdminDatePicker}>{formatLongDate(adminDate)}</CBadge>
                       <CButton size="sm" color="secondary" variant="outline" onClick={() => setAdminDate((d) => shiftDateKey(d, 1))}>{'>'}</CButton>
-                      <CButton size="sm" color="secondary" variant="outline" onClick={() => setAdminDate((d) => d)}>
+                      <CButton size="sm" color="secondary" variant="outline" onClick={() => setAdminReload((n) => n + 1)}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v6h-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
                       </CButton>
                       <CFormInput ref={adminDateInputRef} type="date" value={adminDate} onChange={(e) => setAdminDate(e.target.value)} style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }} />
@@ -454,10 +486,9 @@ export default function AvailabilitySchedule({
                                     {`${displayLabel} (${block.start}-${block.end})`}
                                     {block.type === 'case' ? (
                                       <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: '0', minWidth: '220px', background: T.bg, color: T.text, border: `1px solid ${T.border}`, borderRadius: '10px', padding: '10px 12px', boxShadow: '0 8px 24px rgba(0,0,0,0.18)', display: 'none', zIndex: 999, whiteSpace: 'normal' }} className="case-hover-card">
-                                        <div className="small mb-1"><span className="fw-semibold">Patient Name:</span> {block.patientName}</div>
+                                        <div className="small mb-1"><span className="fw-semibold">Case ID:</span> {block.patientId}</div>
                                         <div className="small mb-1"><span className="fw-semibold">Modality:</span> {block.modality}</div>
-                                        <div className="small mb-1"><span className="fw-semibold">Patient ID:</span> {block.patientId}</div>
-                                        {isHistoryView ? <div className="small mb-1 text-success"><span className="fw-semibold">Status:</span> Completed</div> : null}
+                                        <div className="small mb-1"><span className="fw-semibold">Status:</span> {block.status || '-'}</div>
                                         <div className="small text-muted"><span className="fw-semibold">Time:</span> {block.start} - {block.end}</div>
                                       </div>
                                     ) : null}
@@ -469,7 +500,11 @@ export default function AvailabilitySchedule({
                         )
                       })}
                       {filteredAdminRows.length === 0 ? (
-                        <div className="p-3"><CAlert color="warning" className="mb-0">No doctors matched your search.</CAlert></div>
+                        <div className="p-3">
+                          <CAlert color={adminError ? 'danger' : 'warning'} className="mb-0">
+                            {adminError || (adminLoading ? 'Loading schedule…' : ADMIN_DOCTORS.length === 0 ? 'No radiologists have availability or cases on this date.' : 'No doctors matched your search.')}
+                          </CAlert>
+                        </div>
                       ) : null}
                     </div>
                   </div>

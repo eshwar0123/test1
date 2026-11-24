@@ -834,6 +834,7 @@ def update_upload_by_case(
         study_type_text  = body.study_type,
         study_date_str   = body.study_date,
         referring_doctor = body.referring_doctor,
+        referring_institution = body.referring_institution,
         history          = body.history,
     )
     if not updated:
@@ -1446,6 +1447,206 @@ def dashboard_cases(user=Depends(get_current_user)):
         "pending_overdue": pending,
         "worklist":        worklist,
         "worklist_error":  worklist_error,   # null when worklist query succeeded
+    }
+
+
+# =============================================================================
+# ANALYTICS — GET /organization/analytics?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
+# One response powers the whole Analytics page: KPIs, modality / study-type /
+# priority splits, trend, referring institution & doctor, radiologists,
+# demographics and turnaround. "Completed" = a completed submission exists (or
+# the scan status says so); everything else is "queue".
+# =============================================================================
+_ANALYTICS_TOP_N = 10
+
+# Only these organizations have the Insights page. To roll it out to another
+# organization, add its org_id here.
+INSIGHTS_ORG_IDS = {
+    "GENRAD-ORG-16835271",   # Radisure Imaging Centre
+}
+
+
+def _insights_org(user) -> Optional[str]:
+    """org_id of the logged-in user's organization, or None if Insights isn't enabled for it."""
+    user_id = user.get("user_id")
+    if not user_id:
+        raise HTTPException(401, "Invalid token payload (user_id missing)")
+    profile = crud.get_org_profile_basics(UUID(crud.resolve_org_user_id(user_id)))
+    org_id = (profile or {}).get("org_id")
+    return org_id if org_id in INSIGHTS_ORG_IDS else None
+
+
+@router.get("/analytics/status")
+def org_analytics_status(user=Depends(get_current_user)):
+    return {"enabled": _insights_org(user) is not None}
+
+
+def _analytics_is_done(r: dict) -> bool:
+    return bool(r.get("completed_at")) or str(r.get("status") or "").strip().lower() in (
+        "complete", "completed", "done",
+    )
+
+
+def _analytics_split(counter: dict, top_n: Optional[int] = None) -> List[dict]:
+    """counter: name -> [completed, queue]. Sorted by total desc; the tail past
+    top_n folds into 'Other' so a long list never becomes a wall of bars."""
+    items = sorted(counter.items(), key=lambda kv: (-(kv[1][0] + kv[1][1]), kv[0]))
+    if top_n and len(items) > top_n:
+        tail = items[top_n:]
+        items = items[:top_n]
+        items.append(("Other", [sum(v[0] for _, v in tail), sum(v[1] for _, v in tail)]))
+    return [{"name": n, "completed": c, "queue": q, "total": c + q} for n, (c, q) in items]
+
+
+def _analytics_bump(counter: dict, key: str, done: bool) -> None:
+    cell = counter.setdefault(key, [0, 0])
+    cell[0 if done else 1] += 1
+
+
+@router.get("/analytics")
+def org_analytics(date_from: str, date_to: str, user=Depends(get_current_user)):
+    import re
+    from datetime import date, timedelta
+
+    user_id = user.get("user_id")
+    if not user_id:
+        raise HTTPException(401, "Invalid token payload (user_id missing)")
+    if _insights_org(user) is None:
+        raise HTTPException(403, "Insights is not enabled for this organization.")
+
+    try:
+        d_from = datetime.strptime(date_from, "%Y-%m-%d").date()
+        d_to = datetime.strptime(date_to, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(400, "date_from / date_to must be YYYY-MM-DD")
+    if d_from > d_to:
+        d_from, d_to = d_to, d_from
+    if (d_to - d_from).days > 366 * 5:
+        raise HTTPException(400, "Date range too large (max 5 years)")
+
+    profile = crud.get_org_profile_basics(UUID(crud.resolve_org_user_id(user_id)))
+    org_id = (profile or {}).get("org_id")
+    rows = []
+    bounds = {}
+    if org_id:
+        rows = crud.list_cases_for_analytics(org_id, user_id, d_from, d_to)
+        bounds = crud.analytics_case_date_bounds(org_id, user_id)
+
+    # one row per case (an upload can join to more than one row)
+    seen, cases = set(), []
+    for r in rows:
+        cid = r.get("case_id")
+        if cid in seen:
+            continue
+        seen.add(cid)
+        cases.append(r)
+
+    modality, study, priority = {}, {}, {}
+    ref_inst, ref_doc, rads = {}, {}, {}
+    gender, age_band = {}, {}
+    tat_by_priority: dict = {}
+    trend_idx: dict = {}
+    total = completed = urgent_stat = 0
+    tat_sum = tat_n = 0
+
+    span_days = (d_to - d_from).days + 1
+    granularity = "day" if span_days <= 62 else "month"
+
+    def bucket_key(d):
+        return d.isoformat() if granularity == "day" else d.strftime("%Y-%m")
+
+    # pre-fill every bucket so the trend has no gaps
+    if granularity == "day":
+        cur = d_from
+        while cur <= d_to:
+            trend_idx[bucket_key(cur)] = {"label": cur.strftime("%d %b"), "completed": 0, "queue": 0}
+            cur += timedelta(days=1)
+    else:
+        cur = date(d_from.year, d_from.month, 1)
+        while cur <= d_to:
+            trend_idx[bucket_key(cur)] = {"label": cur.strftime("%b %Y"), "completed": 0, "queue": 0}
+            cur = date(cur.year + (cur.month // 12), (cur.month % 12) + 1, 1)
+
+    for r in cases:
+        done = _analytics_is_done(r)
+        total += 1
+        completed += 1 if done else 0
+
+        mod = _norm_modality(r.get("scan_type"))
+        _analytics_bump(modality, _MODALITY_DISPLAY_NAME.get(mod, "Other"), done)
+
+        st = (r.get("modality_study_type") or "").strip()
+        _analytics_bump(study, st.title() if st else "Unspecified", done)
+
+        pr = _norm_priority(r.get("priority_type"))
+        _analytics_bump(priority, pr, done)
+        if pr in ("STAT", "Urgent"):
+            urgent_stat += 1
+
+        _analytics_bump(ref_inst, (r.get("referring_institution") or "").strip() or "Not specified", done)
+        _analytics_bump(ref_doc, (r.get("referring_doctor") or "").strip() or "Not specified", done)
+
+        first = (r.get("first_name") or "").strip()
+        last = (r.get("last_name") or "").strip()
+        full = f"{first} {last}".strip()
+        rad_name = (full if full.lower().startswith("dr") else f"Dr. {full}") if full else "Unassigned"
+        _analytics_bump(rads, rad_name, done)
+
+        sex = str(r.get("patient_sex") or "").strip().upper()
+        _analytics_bump(gender, "Male" if sex in ("M", "MALE") else "Female" if sex in ("F", "FEMALE") else "Other / unknown", done)
+
+        m = re.search(r"\d+", str(r.get("patient_age") or ""))
+        age = int(m.group()) if m else None
+        band = ("Unknown" if age is None else "0-17" if age < 18 else "18-39" if age < 40
+                else "40-59" if age < 60 else "60+")
+        _analytics_bump(age_band, band, done)
+
+        if done:
+            ts = r.get("turnaround_seconds") or 0
+            if ts > 0:
+                tat_sum += ts
+                tat_n += 1
+                cell = tat_by_priority.setdefault(pr, [0, 0])
+                cell[0] += ts
+                cell[1] += 1
+
+        d = r.get("case_date")
+        if d:
+            b = trend_idx.get(bucket_key(d))
+            if b:
+                b["completed" if done else "queue"] += 1
+
+    age_order = ["0-17", "18-39", "40-59", "60+", "Unknown"]
+    first_date, last_date = bounds.get("first_date"), bounds.get("last_date")
+    return {
+        "ok": True,
+        "org_name": (profile or {}).get("org_name"),
+        "range": {"from": d_from.isoformat(), "to": d_to.isoformat(), "granularity": granularity},
+        "case_dates": {
+            "first": first_date.isoformat() if first_date else None,
+            "last": last_date.isoformat() if last_date else None,
+        },
+        "kpis": {
+            "total": total,
+            "completed": completed,
+            "queue": total - completed,
+            "completion_rate": round(completed * 100.0 / total, 1) if total else None,
+            "urgent_stat": urgent_stat,
+            "avg_tat_hours": round(tat_sum / tat_n / 3600.0, 1) if tat_n else None,
+        },
+        "modality": _analytics_split(modality),
+        "study_type": _analytics_split(study, _ANALYTICS_TOP_N),
+        "priority": _analytics_split(priority),
+        "trend": list(trend_idx.values()),
+        "ref_institution": _analytics_split(ref_inst, _ANALYTICS_TOP_N),
+        "ref_doctor": _analytics_split(ref_doc, _ANALYTICS_TOP_N),
+        "radiologist": _analytics_split(rads, _ANALYTICS_TOP_N),
+        "gender": _analytics_split(gender),
+        "age_band": sorted(_analytics_split(age_band), key=lambda x: age_order.index(x["name"])),
+        "tat_by_priority": [
+            {"name": k, "avg_hours": round(v[0] / v[1] / 3600.0, 1), "cases": v[1]}
+            for k, v in sorted(tat_by_priority.items(), key=lambda kv: ["STAT", "Urgent", "Routine"].index(kv[0]))
+        ],
     }
 
 

@@ -1,0 +1,35 @@
+.bill-wrap { max-width: 1200px; margin: 0 auto; padding: 8px 0 24px; }
+.bill-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.bill-title { font-size: 24px; font-weight: 700; margin: 0 0 14px; color: #0b1f5c; }
+.bill-sub { font-size: 17px; font-weight: 700; margin: 0 0 12px; color: #0b1f5c; }
+.bill-select { padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #111827; font-size: 14px; }
+
+.bill-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 14px; }
+.bill-card { background: rgba(255, 255, 255, 0.92); border-radius: 14px; padding: 18px 20px; box-shadow: 0 4px 14px rgba(11, 31, 92, 0.08); margin-bottom: 14px; }
+.bill-grid .bill-card { margin-bottom: 0; }
+.bill-earn { background: linear-gradient(135deg, #0b1f5c, #1d4ed8); color: #fff; }
+.bill-earn .bill-label, .bill-earn .bill-muted { color: rgba(255, 255, 255, 0.8); }
+.bill-label { display: block; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: #6b7280; }
+.bill-amount { font-size: 34px; font-weight: 800; margin: 6px 0 2px; }
+.bill-amount--sm { font-size: 24px; color: #0b1f5c; }
+.bill-muted { color: #6b7280; font-size: 13px; }
+
+.bill-warn { background: #fef3c7; color: #92400e; border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; font-size: 14px; }
+.bill-error { background: #fee2e2; color: #991b1b; border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; font-size: 14px; }
+
+.bill-table-wrap { overflow-x: auto; }
+.bill-table { width: 100%; border-collapse: collapse; font-size: 14px; color: #111827; }
+.bill-table th { background: #0b1f5c; color: #fff; text-align: left; padding: 10px 12px; white-space: nowrap; }
+.bill-table th:first-child { border-top-left-radius: 8px; }
+.bill-table th:last-child { border-top-right-radius: 8px; }
+.bill-table td { padding: 10px 12px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+.bill-table .num { text-align: right; white-space: nowrap; font-weight: 600; }
+.bill-time { color: #6b7280; font-size: 12px; }
+.bill-empty { text-align: center; color: #6b7280; padding: 22px; }
+.bill-tag { margin-left: 8px; font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #e0e7ff; color: #3730a3; }
+.bill-tag--none { background: #fee2e2; color: #991b1b; }
+
+.radiology-app.dark .bill-title, .radiology-app.dark .bill-sub { color: #e5e7eb; }
+.radiology-app.dark .bill-card:not(.bill-earn) { background: rgba(17, 24, 39, 0.9); }
+.radiology-app.dark .bill-amount--sm, .radiology-app.dark .bill-table { color: #e5e7eb; }
+.radiology-app.dark .bill-table td { border-bottom-color: #374151; }

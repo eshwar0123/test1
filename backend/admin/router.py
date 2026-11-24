@@ -769,6 +769,7 @@ class OrgUpdateRequest(BaseModel):
     ein_tax_id: str = ""
     username: str
     address: str = ""
+    is_active: bool = True
 
 
 def _update_user_identity(cursor, user_id: str, email, username: str):
@@ -780,12 +781,17 @@ def _update_user_identity(cursor, user_id: str, email, username: str):
         )
         if cursor.fetchone():
             raise HTTPException(status_code=400, detail="Another user already uses this email")
-    cursor.execute(
-        "SELECT 1 FROM core_schema.users WHERE username = %s AND user_id::text <> %s",
-        (username, user_id),
-    )
-    if cursor.fetchone():
-        raise HTTPException(status_code=400, detail="Username already taken")
+    cursor.execute("SELECT username FROM core_schema.users WHERE user_id::text = %s", (user_id,))
+    cur_row = cursor.fetchone()
+    # Only enforce uniqueness when the username is actually being changed, so saving
+    # other fields (e.g. Active/Inactive) never fails on a pre-existing duplicate.
+    if not cur_row or (cur_row[0] or "") != username:
+        cursor.execute(
+            "SELECT 1 FROM core_schema.users WHERE username = %s AND user_id::text <> %s",
+            (username, user_id),
+        )
+        if cursor.fetchone():
+            raise HTTPException(status_code=400, detail="Username already taken")
     if email is not None:
         cursor.execute(
             "UPDATE core_schema.users SET email = %s, username = %s WHERE user_id::text = %s",
@@ -889,12 +895,12 @@ def update_organization(user_id: str, data: OrgUpdateRequest, user=Depends(requi
             UPDATE organization_schema.org_profile
                SET org_name = %s, org_type = %s, org_admin_email = %s,
                    contact_number = %s, org_admin_name = %s,
-                   address = %s
+                   address = %s, is_active = %s
              WHERE user_id::text = %s
             """,
             (name, data.organization_type.strip(), email,
              data.phone.strip(), data.admin_name.strip(),
-             data.address.strip(), user_id),
+             data.address.strip(), data.is_active, user_id),
         )
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="Organisation not found")
@@ -1380,7 +1386,8 @@ def admin_directory_organizations(user=Depends(require_admin)):
                                              NULLIF(p.state, ''), NULLIF(p.zip, '')), '')),
                    CASE WHEN NULLIF(p.logo_path, '') IS NULL THEN NULL
                         ELSE '/' || ltrim(p.logo_path, '/') END,
-                   COALESCE(c.n, 0)
+                   COALESCE(c.n, 0),
+                   COALESCE(p.is_active, TRUE)
               FROM organization_schema.org_profile p
               LEFT JOIN core_schema.users u ON u.user_id = p.user_id
               LEFT JOIN (SELECT org_id, count(*) AS n
@@ -1391,7 +1398,7 @@ def admin_directory_organizations(user=Depends(require_admin)):
         )
         out = []
         for (org_id, uid, username, email, name, otype, npi, ein, contact_email, phone,
-             admin_name, address, logo_url, cases) in cur.fetchall():
+             admin_name, address, logo_url, cases, active) in cur.fetchall():
             out.append({
                 "id": org_id,
                 "user_id": uid,
@@ -1407,6 +1414,7 @@ def admin_directory_organizations(user=Depends(require_admin)):
                 "address": address,
                 "logo_url": logo_url,
                 "cases": cases,
+                "is_active": bool(active),
                 "profile_completed": bool(otype and phone and address),
             })
         return out

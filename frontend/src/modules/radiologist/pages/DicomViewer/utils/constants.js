@@ -91,7 +91,9 @@ export const RADIOLOGIST_PROFILE = (reportData) => ({
   name: stripDrPrefix(reportData?.radiologist_name),
   qualification: reportData?.qualification || "",
   designation: reportData?.designation || "",
-  registrationNumber: reportData?.dmc_no || "",
+  // Signature shows the DMC No; if it's empty, fall back to the Reg No.
+  registrationNumber: reportData?.dmc_no || reportData?.reg_no || "",
+  registrationLabel: reportData?.dmc_no ? "DMC No" : "Reg No",
   regNo: reportData?.reg_no || "",
   organizationName: reportData?.organization_name || "",
   isBrahmShakti: isBrahmShaktiOrg(reportData?.organization_name),

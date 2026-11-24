@@ -13,6 +13,7 @@ import PrivacyPage from "./pages/PrivacyPage";
 import TermsPage from "./pages/TermsPage";
 import DocsPage from "./pages/DocsPage";
 import Accounts from "./pages/Accounts";
+import Billing from "./pages/Billing";
 import Repository1 from "./pages/repository_1";
 import Settings from "./views/Settings";
 
@@ -82,6 +83,7 @@ export default function RadiologyApp() {
                 <Route path="terms" element={<TermsPage />} />
                 <Route path="docs" element={<DocsPage />} />
                 <Route path="accounts" element={<Accounts />} />
+                <Route path="billing" element={<Billing />} />
                 <Route path="repository1" element={<Repository1 />} />
                 <Route path="*" element={<Navigate to="/radiologist/repository1" replace />} />
               </Routes>

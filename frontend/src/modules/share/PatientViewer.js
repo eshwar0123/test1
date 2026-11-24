@@ -315,6 +315,22 @@ export default function PatientViewer() {
         <div style={{ position: "absolute", left: 12, bottom: 10, fontSize: 12, color: "#cbd5e1", pointerEvents: "none", textShadow: "0 1px 2px #000" }}>
           {total > 0 ? `Image ${Math.min(idx + 1, total)} / ${total}` : ""}
         </div>
+        {total > 1 && (
+          <div style={{ position: "absolute", left: "50%", bottom: 14, transform: "translateX(-50%)", zIndex: 6, display: "flex", alignItems: "center", gap: 10 }}>
+            {[{ label: "Previous slice", delta: -1, icon: "◀", disabled: idx <= 0 }, { label: "Next slice", delta: 1, icon: "▶", disabled: idx >= total - 1 }].map((b) => (
+              <button
+                key={b.delta} type="button" aria-label={b.label} title={b.label}
+                disabled={b.disabled} onClick={() => step(b.delta)}
+                style={{
+                  width: 44, height: 44, borderRadius: "50%", border: "1px solid #475569", background: "rgba(15,23,42,0.85)",
+                  color: "#fff", fontSize: 16, cursor: b.disabled ? "not-allowed" : "pointer", opacity: b.disabled ? 0.4 : 1,
+                }}
+              >
+                {b.icon}
+              </button>
+            ))}
+          </div>
+        )}
         {viewerError && (
           <div style={{ position: "absolute", top: 12, left: 12, right: 12, padding: "8px 12px", borderRadius: 8, background: "#7f1d1d", color: "#fecaca", fontSize: 13 }}>
             {viewerError}
@@ -324,3 +340,4 @@ export default function PatientViewer() {
     </div>
   );
 }
+

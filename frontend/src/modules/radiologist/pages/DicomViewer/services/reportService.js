@@ -290,7 +290,7 @@ export function getReportTemplateHtml({
             <img class="report-sign" src="${radiologistProfile.signatureUrl}" alt="Radiologist Signature" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
             <div class="report-sign-text" style="display:none;">Signature image not found</div>
             <div class="report-sign-name">Dr. ${radiologistProfile.name}</div>
-            ${radiologistProfile.registrationNumber ? `<div class="report-sign-reg">DMC No: ${radiologistProfile.registrationNumber}</div>` : ""}
+            ${radiologistProfile.registrationNumber ? `<div class="report-sign-reg">${radiologistProfile.registrationLabel || "DMC No"}: ${radiologistProfile.registrationNumber}</div>` : ""}
             <div class="report-sign-meta">${radiologistProfile.qualification}</div>
             <div class="report-sign-meta">${radiologistProfile.designation || ""}</div>
           </div>
@@ -343,7 +343,7 @@ export function buildStandardGridHtml(rows) {
   );
 }
 
-export function buildStandardSignatureHtml({ imgHtml = "", name = "", reg = "", qualification = "", designation = "" }) {
+export function buildStandardSignatureHtml({ imgHtml = "", name = "", reg = "", regLabel = "DMC No", qualification = "", designation = "" }) {
   return (
     `<div class="report-sign-section">` +
       `<div class="report-sec-title" style="${STD_STYLE.sec}">Signature</div>` +
@@ -351,7 +351,7 @@ export function buildStandardSignatureHtml({ imgHtml = "", name = "", reg = "", 
         `<div style="min-width:260px;text-align:center;display:flex;flex-direction:column;align-items:center;">` +
           imgHtml +
           (name ? `<div style="font-size:12px;font-weight:700;">${escHtml(name)}</div>` : "") +
-          (reg ? `<div style="font-size:11px;font-weight:700;">DMC No: ${escHtml(reg)}</div>` : "") +
+          (reg ? `<div style="font-size:11px;font-weight:700;">${escHtml(regLabel)}: ${escHtml(reg)}</div>` : "") +
           (qualification ? `<div style="font-size:11px;line-height:1.35;">${escHtml(qualification)}</div>` : "") +
           (designation ? `<div style="font-size:11px;line-height:1.35;">${escHtml(designation)}</div>` : "") +
         `</div>` +
@@ -424,6 +424,7 @@ export function buildSavedReportHtml({ rep, caseItem, profile = {} }) {
       : "",
     name: displayName,
     reg: profile.dmcNo || "",
+    regLabel: profile.dmcLabel || "DMC No",
     qualification: profile.qualification || "",
     designation: profile.designation || "",
   });

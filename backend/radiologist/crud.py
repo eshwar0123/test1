@@ -986,6 +986,23 @@ def get_or_create_report(conn: connection, case_id: str, user_id: UUID) -> Dict[
 
 # ✅ UPDATED: Added ai_* parameters for edit persistence
 #             + infrastructure (auto-detected) + eta_report (from frontend)
+_STOCK_ADVICE_RE = re.compile(r"^\s*clinic(?:al)?\s+correlation\s+for\s+further\s+evaluation\s*\.?\s*$", re.I)
+
+
+def _fix_swapped_impression_advice(impression, opinions):
+    """'Clinical correlation for further evaluation' is the default text of the ADVICE box.
+    When it arrives under Impression while ADVICE holds something else, the two were swapped:
+    put them back. If ADVICE is empty, the stock sentence just moves to ADVICE."""
+    if impression is None or not _STOCK_ADVICE_RE.match(str(impression)):
+        return impression, opinions
+    adv = (opinions or "").strip()
+    if not adv:
+        return None, impression
+    if _STOCK_ADVICE_RE.match(adv):
+        return impression, opinions
+    return opinions, impression
+
+
 def upsert_report(
     conn: connection,
     case_id: str,
@@ -1006,6 +1023,10 @@ def upsert_report(
     eta_report: Optional[float] = None,
 ) -> Dict[str, Any]:
     _ensure_reports_sync_trigger(conn)
+
+    # Impression / ADVICE arriving swapped (stock advice sentence under Impression) -> put right.
+    impression, opinions = _fix_swapped_impression_advice(impression, opinions)
+    ai_impression, ai_opinions = _fix_swapped_impression_advice(ai_impression, ai_opinions)
 
     # Always re-detect infrastructure on save — reflects the machine handling this save
     infra = _detect_infrastructure()

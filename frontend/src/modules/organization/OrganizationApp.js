@@ -17,9 +17,19 @@ export default function OrganizationApp() {
             key={idx}
             path={route.path}
             element={route.element}
-          />
+          >
+            {(route.children || []).map((child, cidx) => (
+              <Route
+                key={cidx}
+                index={child.index}
+                path={child.path}
+                element={child.element}
+              />
+            ))}
+          </Route>
         ))}
       </Route>
     </Routes>
   );
 }
+

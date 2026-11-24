@@ -9,7 +9,7 @@ import {
   CButton,
 } from "@coreui/react";
 import CIcon from "@coreui/icons-react";
-import { cilUser, cilAccountLogout, cilBell, cilSpeedometer, cilFolder, cilSettings } from "@coreui/icons";
+import { cilUser, cilAccountLogout, cilBell, cilSpeedometer, cilFolder, cilSettings, cilWallet } from "@coreui/icons";
 import { useNavigate, NavLink } from "react-router-dom";
 import GoogleTranslateSwitcher from "../../../shared/components/GoogleTranslateSwitcher";
 import api from "../../../shared/api/axios";
@@ -63,6 +63,18 @@ const Header = ({ darkMode, toggleDarkMode, onViewerExit }) => {
   const notifRef = useRef(null);
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
+
+  // The Billing page is only for selected radiologists; the server decides.
+  const [billingEnabled, setBillingEnabled] = useState(false);
+  useEffect(() => {
+    if (!auth?.userId) return;
+    let cancelled = false;
+    api.get("/radiology/earnings/status")
+      .then((res) => { if (!cancelled) setBillingEnabled(!!res.data?.enabled); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth?.userId]);
 
   const fetchNotifications = async () => {
     if (!auth?.userId) return;
@@ -181,6 +193,15 @@ const Header = ({ darkMode, toggleDarkMode, onViewerExit }) => {
             >
               <CIcon icon={cilFolder} size="sm" /> Repository
             </NavLink>
+            {billingEnabled && (
+              <NavLink
+                to="/radiologist/billing"
+                className={({ isActive }) => `header-nav-link ${isActive ? "active" : ""}`}
+                onClick={onViewerExit ? (e) => { e.preventDefault(); navTo("/radiologist/billing"); } : undefined}
+              >
+                <CIcon icon={cilWallet} size="sm" /> Billing
+              </NavLink>
+            )}
             {/* ✅ Settings removed from nav — moved to avatar dropdown */}
           </nav>
         </div>

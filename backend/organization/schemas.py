@@ -207,4 +207,5 @@ class CaseEditByCaseIdIn(BaseModel):
     study_type:       Optional[str] = None
     study_date:       Optional[str] = None
     referring_doctor: Optional[str] = None
+    referring_institution: Optional[str] = None
     history:          Optional[str] = None

@@ -4,7 +4,7 @@ import { actingReportUserId } from "../utils/actingReportUserId";
 import { CButton } from "@coreui/react";
 import { BACKEND_URL, RADIOLOGIST_PROFILE, buildBrahmShaktiSignatureHtml, formatSignReportDate } from "../utils/constants";
 import onixIcon from "/icon.png";
-import ReportRewriteOverlayRe from "./ReportRewriteOverlay";
+import ReportRewriteOverlay from "./ReportRewriteOverlay";
 import useReportGhostAutocomplete from "../hooks/useReportGhostAutocomplete";
 import { regionFromStudy } from "../utils/radiologyPhrases";
 import { readReportFileToText } from "../utils/reportFileReader";
@@ -700,7 +700,7 @@ export default function ViewerSidePanel({
                 ? `<img src="${esc(rp.signatureUrl)}" alt="Radiologist Signature" style="max-height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 4px;" onerror="this.style.display='none'" />`
                 : "") +
               (rp.name ? `<div style="font-size:12px;font-weight:700;">Dr. ${esc(rp.name)}</div>` : "") +
-              (rp.registrationNumber ? `<div style="font-size:11px;font-weight:700;">DMC No: ${esc(rp.registrationNumber)}</div>` : "") +
+              (rp.registrationNumber ? `<div style="font-size:11px;font-weight:700;">${esc(rp.registrationLabel || "DMC No")}: ${esc(rp.registrationNumber)}</div>` : "") +
               (rp.qualification ? `<div style="font-size:11px;line-height:1.35;">${esc(rp.qualification)}</div>` : "") +
               (rp.designation ? `<div style="font-size:11px;line-height:1.35;">${esc(rp.designation)}</div>` : "") +
             `</div>` +

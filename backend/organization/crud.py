@@ -382,10 +382,17 @@ def set_history_path(case_id: str, user_id, history_path: Optional[str]) -> Opti
     )
 
 
+def _ensure_referring_institution_column() -> None:
+    """Lazily adds bulk_uploads.referring_institution (Active Worklist Edit form),
+    same self-healing pattern as _ensure_gst_column — no separate migration needed."""
+    _exec("ALTER TABLE organization_schema.bulk_uploads ADD COLUMN IF NOT EXISTS referring_institution TEXT")
+
+
 def get_upload_by_case_id(case_id: str, user_id) -> Optional[Dict[str, Any]]:
     """Used by the Active Worklist "Edit" form — that table only carries
     case_id (it's sourced from rad_scans, not bulk_uploads), so lookups
     for the edit form go by case_id rather than the bulk_uploads row id."""
+    _ensure_referring_institution_column()
     row = _one(
         """
         SELECT * FROM organization_schema.bulk_uploads
@@ -406,6 +413,7 @@ def get_upload_by_case_id(case_id: str, user_id) -> Optional[Dict[str, Any]]:
         "modality_study_type":    row.get("modality_study_type"),
         "study_date":             str(row["study_date"]) if row.get("study_date") else None,
         "referring_doctor":       row.get("referring_doctor"),
+        "referring_institution":  row.get("referring_institution"),
         "history":                row.get("history"),
         "history_path":           row.get("history_path"),
     }
@@ -552,8 +560,10 @@ def update_upload_by_case_id(
     study_type_text: Optional[str] = None,
     study_date_str: Optional[str] = None,
     referring_doctor: Optional[str] = None,
+    referring_institution: Optional[str] = None,
     history: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
+    _ensure_referring_institution_column()
     sets, params = [], []
 
     def add(col, val):
@@ -574,6 +584,7 @@ def update_upload_by_case_id(
         add("modality_study_type",    study_type_text)
         add("modality_study_type_id", resolve_study_type_id(study_type_text))
     if referring_doctor is not None: add("referring_doctor", referring_doctor)
+    if referring_institution is not None: add("referring_institution", referring_institution)
     if history            is not None: add("history", history)
 
     if not sets:
@@ -1107,3 +1118,65 @@ def get_bulk_upload_by_case_id(org_id: str, case_id: str) -> Optional[Dict[str, 
         """,
         (str(org_id), str(case_id)),
     )
+
+
+# ============================================================
+# ANALYTICS — Organization → Analytics page
+# ============================================================
+# One row per case for the org (rad_scans is the case master, same org match as
+# the Active Worklist), joined with the upload row (referring doctor / institution)
+# and the latest completed submission (completion time + turnaround).
+_ANALYTICS_BASE_SQL = """
+    SELECT
+        rs.case_id,
+        rs.scan_type,
+        rs.modality_study_type,
+        COALESCE(rs.priority_type, 'routine')  AS priority_type,
+        COALESCE(rs.status, 'pending')         AS status,
+        rs.patient_sex,
+        rs.patient_age,
+        COALESCE(NULLIF(TRIM(bu.referring_doctor), ''),
+                 NULLIF(TRIM(rs.referring_doctor), ''))  AS referring_doctor,
+        NULLIF(TRIM(bu.referring_institution), '')       AS referring_institution,
+        COALESCE(bu.uploaded_at, rs.scan_date)::date     AS case_date,
+        rs.assigned_rad_id,
+        r.first_name,
+        r.last_name,
+        cs.completed_at,
+        cs.turnaround_seconds
+    FROM radiology_schema.rad_scans rs
+    LEFT JOIN radiology_schema.radiologists r ON r.rad_id = rs.assigned_rad_id
+    LEFT JOIN organization_schema.bulk_uploads bu ON bu.case_id = rs.case_id
+    LEFT JOIN LATERAL (
+        SELECT c.completed_at, c.turnaround_seconds
+          FROM admin_schema.case_submission c
+         WHERE c.case_id = rs.case_id AND c.completed_at IS NOT NULL
+         ORDER BY c.completed_at DESC
+         LIMIT 1
+    ) cs ON TRUE
+    WHERE (rs.id_organisation  = %(org_id)s
+        OR rs.ref_organisation = %(org_id)s
+        OR rs.id_organisation  = %(user_id)s)
+"""
+
+
+def list_cases_for_analytics(org_id: str, org_user_id, date_from, date_to) -> List[Dict[str, Any]]:
+    """Every case of the org whose case date (upload date, else scan date) falls
+    within [date_from, date_to]."""
+    _ensure_referring_institution_column()
+    return _all(
+        "SELECT * FROM (" + _ANALYTICS_BASE_SQL + ") x "
+        "WHERE x.case_date BETWEEN %(d_from)s AND %(d_to)s",
+        {"org_id": str(org_id), "user_id": str(org_user_id),
+         "d_from": date_from, "d_to": date_to},
+    )
+
+
+def analytics_case_date_bounds(org_id: str, org_user_id) -> Dict[str, Any]:
+    """Earliest / latest case date for the org — drives the year picker."""
+    row = _one(
+        "SELECT MIN(case_date) AS first_date, MAX(case_date) AS last_date FROM ("
+        + _ANALYTICS_BASE_SQL + ") x",
+        {"org_id": str(org_id), "user_id": str(org_user_id)},
+    )
+    return row or {}

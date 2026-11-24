@@ -246,6 +246,7 @@ function EditOrgModal({ item, onClose, onSuccess, isDark }) {
     contact_email: item.contact_email || item.email || "", phone: item.contact_phone || "",
     admin_name: item.admin_name || "",
     username: item.username || "", address: item.address || "",
+    is_active: item.is_active !== false,
   });
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -319,6 +320,9 @@ function EditOrgModal({ item, onClose, onSuccess, isDark }) {
         <Field label="Admin Name" field="admin_name" value={form.admin_name} onChange={handleChange} error={errors.admin_name} isDark={isDark} />
         <Field label="Username" field="username" value={form.username} onChange={handleChange} error={errors.username} isDark={isDark} />
         <Field label="Address" field="address" value={form.address} onChange={handleChange} error={errors.address} isDark={isDark} />
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, color: text, marginBottom: 16, cursor: "pointer" }}>
+          <input type="checkbox" checked={form.is_active} onChange={(e) => handleChange("is_active", e.target.checked)} /> Active
+        </label>
 
         {submitError && (
           <div style={{ background: "#fee2e2", border: "1px solid #fecaca", borderRadius: 8, padding: "10px 14px", marginBottom: 16, color: "#b91c1c", fontSize: 13 }}>{submitError}</div>
@@ -424,14 +428,14 @@ export default function Organizations() {
         <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
           <thead>
             <tr style={{ background: theadBg }}>
-              {["#", "Organisation", "Type", "Contact Email", "Phone", "Admin Name", "Username", "Address", "Cases", "Logo", "Profile", "Action"].map((h) => (
+              {["#", "Organisation", "Type", "Contact Email", "Phone", "Admin Name", "Username", "Address", "Cases", "Logo", "Status", "Profile", "Action"].map((h) => (
                 <th key={h} style={{ padding: "13px 16px", textAlign: "left", fontSize: 12, fontWeight: 700, color: theadText, whiteSpace: "nowrap", letterSpacing: "0.04em", textTransform: "uppercase" }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {orgs.length === 0 ? (
-              <tr><td colSpan={12} style={{ padding: 32, textAlign: "center", color: muted }}>No organisations found</td></tr>
+              <tr><td colSpan={13} style={{ padding: 32, textAlign: "center", color: muted }}>No organisations found</td></tr>
             ) : orgs.map((org, i) => (
               <tr key={org.user_id} style={{ borderBottom: `1px solid ${border}`, background: i % 2 === 0 ? card : rowAlt }}>
                 <td style={{ padding: "14px 16px", color: muted, fontSize: 13, fontWeight: 600 }}>{i + 1}</td>
@@ -458,6 +462,11 @@ export default function Organizations() {
                   {org.logo_url
                     ? <img src={org.logo_url} alt="" style={{ width: 34, height: 34, borderRadius: 8, objectFit: "contain", border: `1px solid ${border}` }} />
                     : <span style={{ color: "#f59e0b", fontWeight: 600 }}>NIL</span>}
+                </td>
+                <td style={{ padding: "14px 16px" }}>
+                  <span style={{ padding: "4px 10px", borderRadius: 20, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", background: org.is_active ? "#dcfce7" : "#fee2e2", color: org.is_active ? "#15803d" : "#b91c1c" }}>
+                    {org.is_active ? "Active" : "Inactive"}
+                  </span>
                 </td>
                 <td style={{ padding: "14px 16px" }}>
                   <span style={{ padding: "4px 10px", borderRadius: 20, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", background: org.profile_completed ? "#dcfce7" : "#fef3c7", color: org.profile_completed ? "#15803d" : "#b45309" }}>
